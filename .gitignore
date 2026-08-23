@@ -9,6 +9,7 @@ data/main_run.log
 data/skills/
 data/todos/
 data/drive/
+data/mail/
 .DS_Store
 *.egg-info/
 dist/

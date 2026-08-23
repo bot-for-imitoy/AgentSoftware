@@ -138,7 +138,8 @@
 | task | create_task / list_tasks / edit_task / delete_task | 定时任务（Tick 提醒，持久化到电脑 tasks/） |
 | computer | run_command / computer_status / lan_devices / reboot | 个人电脑操作 |
 | mcp_manager | mcp_search / mcp_list / mcp_add / mcp_remove / mcp_my_tools | MCP 自助管理 |
-| talk / list_roles | 角色间通信 | pool.start() 自动注入 |
+| talk / list_roles | 角色间通信（仅同组成员可互发，跨组走邮件） | pool.start() 自动注入 |
+| email | send_email / read_mail / open_mail / mail_address_book | 员工邮件（虚拟邮箱，配 SMTP 后真实发送） |
 | MCP file_ops | read_file / write_file / edit_file / ... | 默认 MCP 组，自动安装到电脑 |
 
 专属工具：CEO 有 `talk_to_client`（甲方交流），HR 有 `post_job_posting` / `list_candidates`。
@@ -176,6 +177,42 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 ### 12. 动态角色工厂 (`src/core/role_factory.py`)
 
 用人需求 → LLM 生成角色配置 → 新 AgentRole → 入职上岗。自动分配不重名人名（24 人名字库）。
+
+### 13. 员工分组 + 公司邮件 (`src/core/role_templates.py` + `src/core/mail_service.py` + `src/python_tools/email_toolkit.py`)
+
+**分组**：每位成员都有一个分组（`AgentRole.group`），默认团队划分如下 ——
+
+| 分组 | 成员 |
+|------|------|
+| 领导组 | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 |
+| 前端开发组 | frontend_lead 陈思远 + frontend_dev_1~3 |
+| 后端开发组 | backend_lead 王宇轩 + backend_dev_1~3 |
+| 移动开发组 | mobile_lead 张雅婷 + mobile_dev_1~3 |
+| 全栈开发组 | fullstack_lead 李俊杰 + fullstack_dev_1~3 |
+| 测试组 | test_lead 刘子涵 + tester_1~20 |
+| 安全组 | attacker_1~3（红蓝对抗/审计） |
+| 架构与版本组 | architect 王建国 + release_manager 方谨言 |
+| 运维组 / 市场组 / 数据组 / 客服组 | ops_engineer 赵强 / content_marketer 陈静 / data_analyst 孙晓 / support_agent 周梅 |
+
+- **talk 工具仅限同组成员之间交流**：跨组发送会被拒绝，并提示改用邮件
+  （招聘入职的新人未分组，不受限制，可与任何人 talk）。
+- 分组会显示在 `list_roles` 花名册、`mail_address_book` 通讯录和系统提示词中。
+
+**公司邮箱**：每位成员一个邮箱 `username@<后缀>`（后缀由用户定义，见下方环境变量），
+例如 郭晓东 → `guoxiaodong@company.com`；角色显式 `email` 字段可覆盖。
+
+**员工邮件工具**（每个角色自动装配）：
+
+| 工具 | 说明 |
+|------|------|
+| send_email | 发邮件给同事（人名/邮箱均可，支持多人、抄送）——跨组沟通的首选 |
+| read_mail | 查看收件箱（新到优先，未读标记，可只看未读） |
+| open_mail | 打开一封邮件全文（自动标记已读） |
+| mail_address_book | 公司通讯录（按分组列出成员姓名/邮箱/职位） |
+
+**虚拟实现（默认）**：邮件投递到内部邮箱，持久化在 `data/mail/mailboxes.json`
+（重启后可恢复，已 gitignore）。**配置 SMTP 后自动切换真实发送**：通过 smtplib
+发出真实邮件，同时仍把副本投递到内部收件人邮箱（模拟内网阅读）。
 
 ---
 
@@ -290,6 +327,27 @@ coo.talk_to("HR", "请发布招聘: 需要一位精通 Rust 的后端工程师",
 # → HR 队列收到: [FROM COO(陈总)] 请发布招聘...
 ```
 
+> talk 仅限同组成员；CEO/COO/HR 同属「领导组」所以可以互发。跨组沟通请用邮件。
+
+### 员工邮件（虚拟邮箱 / SMTP 真实发送）
+
+```python
+# 发件人: 郭晓东 (测试组) → 收件人: 王建国 (架构与版本组, 跨组)
+tester = pool.get_role("tester_1")
+tester._tools.call_tool("send_email", {
+    "to": "王建国",
+    "subject": "架构问题咨询",
+    "body": "登录模块的权限校验想请教一下最佳实践。",
+})
+# → 邮件已发送给 wangjianguo@company.com, 主题「架构问题咨询」, 虚拟邮箱投递.
+
+# 收件人查看收件箱
+architect = pool.get_role("architect")
+inbox = architect._tools.call_tool("read_mail", {"limit": 5})
+mid = inbox.split("id=")[-1].split(")")[0].strip()
+print(architect._tools.call_tool("open_mail", {"message_id": mid}).content[0].text)
+```
+
 ### HR 招聘即入职
 
 ```python
@@ -324,6 +382,33 @@ print(dev._tools.call_tool("lan_devices", {}))
 | LLM_PROVIDER | deepseek | LLM 后端: `deepseek` (云端) / `ollama` (本地) |
 | OLLAMA_BASE_URL | http://localhost:11434 | Ollama 服务地址 (OpenAI 兼容端点) |
 | OLLAMA_MODEL | gemma4-16k:latest | 本地 Ollama 模型标签 |
+| MAIL_SUFFIX | company.com | 公司邮箱域名后缀（用户自定义，如 `mycorp.com` → `guoxiaodong@mycorp.com`） |
+| SMTP_HOST | (空) | SMTP 服务器地址；**设置后邮件从虚拟实现切换为真实发送** |
+| SMTP_PORT | 587 | SMTP 端口（465 自动走 SSL） |
+| SMTP_USER / SMTP_PASSWORD | (空) | SMTP 登录凭据（可选） |
+| SMTP_FROM | SMTP_USER 或发送者本人 | 真实邮件发件人地址（可选） |
+| SMTP_USE_SSL | 按端口 | `true`/`false` 强制 SSL 或非 SSL 连接 |
+| MAIL_DATA_DIR | data/mail | 内部邮箱数据目录（虚拟模式下邮件持久化位置） |
+
+### 公司邮件：虚拟实现 → SMTP 真实发送
+
+默认**虚拟实现**：邮件只在模拟内部投递（收件人 = 团队成员邮箱），并持久化到
+`data/mail/mailboxes.json`，重启后可恢复。配置 SMTP 后自动切换为**真实发送**
+（smtplib），同时保留内部邮箱副本供角色继续阅读：
+
+```bash
+# 虚拟实现 (默认): 什么都不用配, 员工之间邮件直接投递内部邮箱
+export MAIL_SUFFIX="mycompany.com"
+
+# 真实发送: 补上 SMTP 配置即自动切换
+export SMTP_HOST="smtp.mycompany.com"
+export SMTP_PORT=587
+export SMTP_USER="agent@mycompany.com"
+export SMTP_PASSWORD="********"
+```
+
+> SMTP 发送失败会返回错误（不投递），便于发现配置问题；发送成功的邮件会以
+> 「已通过 SMTP 真实发送」标记投递进内部收件人邮箱。
 
 ### 使用本地 Ollama 模型
 
@@ -384,7 +469,7 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 
 | 文件 | 模块说明 | 主要类 / 函数 |
 |---|---|---|
-| `roles.py` | 角色系统核心: AgentRole(单个角色: 任务队列/状态机/工具装配/talk/WAIT 同步等待/journal) + RolePool(线程池调度, 注册即建日志) | `AgentRole`, `RolePool`, `Task`, `Urgency`, `ToolLoopError` |
+| `roles.py` | 角色系统核心: AgentRole(单个角色: 任务队列/状态机/工具装配/分组 group/邮箱 mail_address/talk/WAIT 同步等待/journal) + RolePool(线程池调度, 注册即建日志) | `AgentRole`, `RolePool`, `Task`, `Urgency`, `ToolLoopError` |
 | `computer.py` | 个人电脑抽象: LocalComputer(本地降级) / PodmanComputer(Ubuntu 容器, 拼音用户 + /mnt/drive 云盘挂载 + Hermes) / SSHComputer; ComputerManager 管理 + 基础镜像 `maf-base` 复制创建 | `Computer`, `LocalComputer`, `PodmanComputer`, `SSHComputer`, `ComputerManager`, `create_computer` |
 | `time_manager.py` | 作息时间引擎 + 事件总线: Tick/天/上下班事件, 定时任务, 全角色空闲才快进 Tick | `TimeEventBus`, `ScheduledTask` |
 | `event_bus.py` | 事件总线基类: 注册/取消/调度事件 | `EventBus` |
@@ -398,6 +483,7 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | `note_store.py` | 笔记 + 每日总结存储 (笔记带 remind_tick = 定时任务) | `NoteStore` |
 | `todo_store.py` | 个人 Todo 清单 (data/todos/<role_id>.json) | `TodoStore` |
 | `state_store.py` | 全量状态持久化 (data/state.json 原子写, 重启恢复) | `StateStore` |
+| `mail_service.py` | 公司邮件核心: 邮箱地址分配 (username@用户后缀) + 虚拟/SMTP 投递 + 邮箱持久化 (data/mail) | `MailService`, `MailConfig`, `MailMessage` |
 | `pinyin_map.py` | 角色中文名 → 汉语拼音映射 (容器用户名, 云盘权限) | `NAME_PINYIN`, `to_pinyin` |
 
 ### 工具类层 `src/python_tools/` — LLM 可调用的工具 (ToolKit)
@@ -414,7 +500,8 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | `mcp_manager.py` | MCP 工具自助管理 | `mcp_search` `mcp_list` `mcp_add` `mcp_remove` `mcp_my_tools` |
 | `mcp_toolkit.py` | MCP 客户端: 服务器连接/工具加载 (mcp-server-filesystem) | `MCPServer`, `MCPToolLoader` |
 | `skill_toolkit.py` | 技能库 (共享 data/skills) | `skill_search` `skill_add` `skill_list` 等 |
-| `talk_toolkit.py` | 角色通信 (人名寻址, wait 同步等待, 死锁检测) | `talk` `list_roles` |
+| `talk_toolkit.py` | 角色通信 (人名寻址, **仅限同组成员**, wait 同步等待, 死锁检测) | `talk` `list_roles` |
+| `email_toolkit.py` | 公司邮件 (员工之间邮件交流, 跨组沟通首选) | `send_email` `read_mail` `open_mail` `mail_address_book` |
 | `client_toolkit.py` | 与甲方交流 | `talk_to_client` |
 | `hr_toolkit.py` | 人事 (招聘) | `hire` 等 |
 
@@ -435,6 +522,8 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | `test_time_manager.py` | Tick 推进/作息事件/定时任务/快进 |
 | `test_journal.py` | 角色活动日志 |
 | `test_talk_wait.py` | talk 通信 / WAIT 同步等待 / 死锁环检测 / 附件 |
+| `test_talk_group.py` | talk 组内交流限制 (同组放行/跨组拒绝/未分组不受限) |
+| `test_mail.py` | 邮箱分配 / 虚拟投递 / SMTP 真实发送 / 持久化 / 通讯录 |
 | `test_state_store.py` | 状态持久化 保存/恢复 |
 | `test_llm_retry.py` | LLM 重试语义 (mock requests) |
 | `test_note_store.py` / `test_note_reminder.py` | 笔记存储 / 笔记提醒 = 定时任务 |

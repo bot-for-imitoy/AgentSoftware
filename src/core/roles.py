@@ -180,6 +180,8 @@ class AgentRole:
     skills: list[str] = field(default_factory=list)        # e.g. ["Python", "Go", "K8s"]
     system_prompt_extra: str = ""                          # appended to base system prompt
     is_default: bool = False                               # marked as a default/critical role
+    group: str = ""                                        # 所属分组 (如 "前端开发组"/"领导组"); 空 = 未分组 (talk 不受组限制)
+    email: str = ""                                        # 显式公司邮箱 (可选; 默认 username@<用户自定义后缀>, 见 mail_service)
     computer_kind: str = "podman"                          # 个人电脑类型: podman(默认) | ssh | local
     computer_kwargs: dict[str, Any] = field(default_factory=dict)  # 电脑构造参数 (ssh 的 host 等)
 
@@ -221,6 +223,19 @@ class AgentRole:
         # uid: 0 = 未分配, 由 RolePool.add_role 注册时分配 (1100 + 注册序号)
         if self.uid <= 0:
             self.uid = 1100
+
+    @property
+    def mail_address(self) -> str:
+        """该员工的公司邮箱地址 (每位成员都有邮箱).
+
+        规则: 显式 email 字段优先; 否则 username@<用户自定义后缀>
+        (MAIL_SUFFIX 环境变量, 默认 company.com), 由 mail_service 统一分配.
+
+        返回:
+            邮箱地址, 如 guoxiaodong@company.com.
+        """
+        from src.core.mail_service import get_mail_service
+        return get_mail_service().email_for(self)
 
     # 任务历史: 已完成/失败的任务留档 (对话/工作记录, StateStore 持久化)
     _task_history: list[Task] = field(default_factory=list, repr=False, init=False)
@@ -358,6 +373,20 @@ class AgentRole:
             "  - 主干分支必须始终保持可用；不要私自强行覆盖别人的代码\n"
             "需要与同事协作的改动，先沟通分工再提交、合并。"
         )
+
+        # 分组 + 公司邮箱 (所有角色生效): 每位员工都有邮箱; talk 限组内交流
+        parts.append(
+            "公司邮箱：每位员工都有一个公司邮箱（如 name@company.com），"
+            "员工之间通过电子邮件交流（send_email 发送 / read_mail 收件）。"
+        )
+        if self.group:
+            parts.append(
+                f"你属于「{self.group}」组，你的公司邮箱是 {self.mail_address}。"
+                "同事沟通规则：talk 工具只能给同组成员发送消息（组内快速沟通）；"
+                "跨组同事（其他小组、版本管理、领导等）沟通必须使用邮件 "
+                "(send_email 发送、read_mail 查看收件箱)，例如向版本管理角色"
+                "方谨言汇报审核结果、与其他小组的同事协作时请发邮件。"
+            )
 
         if self.system_prompt_extra:
             parts.append(self.system_prompt_extra)

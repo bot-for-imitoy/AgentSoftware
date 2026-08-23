@@ -187,6 +187,31 @@ NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 
 ---
 
+## 公司邮件
+
+文件: `src/core/mail_service.py`（核心）+ `src/python_tools/email_toolkit.py`（LLM 工具）。
+
+**邮箱地址**: 每位成员一个邮箱 `username@<后缀>`，后缀由环境变量 `MAIL_SUFFIX` 定义（默认 `company.com`）；角色显式 `email` 字段优先。`AgentRole.mail_address` 与工具类走同一分配规则。
+
+**投递方式**: 默认**虚拟实现**（投递到内部邮箱并持久化 `data/mail/mailboxes.json`）；配置 `SMTP_HOST` 后自动切换 **smtplib 真实发送**，同时保留内部收件人邮箱副本（标记 `via_smtp`）。
+
+```python
+MailService(config=MailConfig.from_env())
+```
+
+| 方法 | 参数 | 返回 | 说明 |
+|------|------|------|------|
+| `email_for(role)` | AgentRole | str | 角色 → 邮箱地址（`username@后缀`，显式 email 优先） |
+| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(摘要) | 发送邮件（虚拟投递 / SMTP 真实发送 + 内部副本） |
+| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | 收件箱（新到优先） |
+| `unread_count(email)` | str | int | 未读邮件数 |
+| `read(email, message_id)` | str,str | Optional[MailMessage] | 打开邮件（标记已读） |
+| `describe()` | — | str | 投递方式描述（虚拟 / SMTP） |
+
+**LLM 工具**（每个角色自动装配，`email` 工具类）: `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`。
+
+---
+
 ## 角色系统
 
 文件: `src/core/roles.py`
@@ -211,6 +236,8 @@ NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 | `personality` | 性格 |
 | `skills` | 技能列表 |
 | `is_default` | 是否默认角色 |
+| `group` | 所属分组（如 前端开发组/领导组；空 = 未分组，talk 不受组限制） |
+| `email` | 显式公司邮箱（可选；默认 `username@<MAIL_SUFFIX>`，见 `mail_address`） |
 | `state` | AgentState（默认 ON_DUTY_IDLE） |
 | `interest_keywords` | 事件过滤关键词 |
 
@@ -220,7 +247,8 @@ NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 **存储与时间**: `note_store` 属性（惰性 NoteStore）、`get_latest_summary(before_day=None)`、`time_manager` 属性、`bind_time_manager(tm)`。
 **活动日志**: `journal(entry)` — 追加一行到 `data/journals/<role_id>.md`（角色上下文更新自动写入：收到任务/执行/工具调用/笔记/消息）。
 **工具**: `add_mcp_tool(name, description, input_schema, handler)`、`add_toolkit(toolkit) -> int`、`mcp_tool_names`。
-**交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
+**交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; **talk 仅限同组成员之间交流**（跨组被拒绝, 提示改用邮件）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
+**邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
 
 ### `RolePool`
 多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（默认 DeepSeekLLM，`llm_provider="ollama"` 时用本地 OllamaLLM）。
@@ -384,7 +412,8 @@ tk.tool_names / tk.tool_count / tk.get_tool(name) / __iter__ / __contains__
 
 | 工具类 | 工具 | 用途 |
 |--------|------|------|
-| `talk_toolkit` | `talk(target, message, urgency)` | 角色间异步通信（投递到对方队列） |
+| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | 角色间异步通信（投递到对方队列；**仅限同组成员**，跨组请用邮件） |
+| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | 公司邮件（员工之间邮件交流；虚拟邮箱默认，配 SMTP 后真实发送；邮箱 = username@用户后缀） |
 | `hr_toolkit` | `post_job_posting(requirement)` / `list_candidates()` | 发布招聘启事 / 列出候选人（后台完成新角色创建与入职登记） |
 | `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | 每日总结（保存后切 OFF_DUTY）+ 笔记（**带 remind_tick = 定时提醒**，已合并原定时任务工具） |
 | `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo 清单（个人待办, id+状态 pending/in_progress/completed, 持久化 data/todos/<role_id>.json） |

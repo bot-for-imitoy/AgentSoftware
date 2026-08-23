@@ -58,6 +58,7 @@ def architect() -> AgentRole:
         system_prompt_extra=(
             "回答必须简洁，不超过3句话。先给结论再给理由。"
         ),
+        group="架构与版本组",
     )
 
 
@@ -83,6 +84,7 @@ def fullstack_dev() -> AgentRole:
             "bug", "fix", "feature", "implement", "debug", "refactor",
             "api", "frontend", "backend", "database", "crash", "error",
         },
+        group="全栈开发组",
     )
 
 
@@ -111,6 +113,7 @@ def reviewer() -> AgentRole:
             "每次审查代码时，必须指出至少一个潜在风险点。"
             "输出格式：风险等级（高/中/低）→ 描述 → 建议修复方案。"
         ),
+        group="安全组",
     )
 
 
@@ -140,6 +143,7 @@ def qa_engineer() -> AgentRole:
             "输出格式：测试范围 → 测试用例列表 → 预期结果。"
             "每个用例标注优先级（P0/P1/P2）。"
         ),
+        group="测试组",
     )
 
 
@@ -170,6 +174,7 @@ def ops_engineer() -> AgentRole:
             "紧急情况先给止损命令，再分析根因。"
             "每步操作标注风险等级。"
         ),
+        group="运维组",
     )
 
 
@@ -194,6 +199,7 @@ def content_marketer() -> AgentRole:
             "blog", "content", "seo", "marketing", "launch", "release",
             "social", "newsletter", "文案", "推广", "发布",
         },
+        group="市场组",
     )
 
 
@@ -224,6 +230,7 @@ def data_analyst() -> AgentRole:
             "先列出数据来源和采样时间段，再给出分析结论。"
             "如数据不足，明确指出需要补充哪些指标。"
         ),
+        group="数据组",
     )
 
 
@@ -253,6 +260,7 @@ def support_agent() -> AgentRole:
             "回复结构：共情（1句）→ 确认问题（1句）→ 解决方案（具体步骤）→ 后续跟进（可选）。"
             "语气友善专业，避免技术黑话。"
         ),
+        group="客服组",
     )
 
 
@@ -283,6 +291,7 @@ def ceo() -> AgentRole:
             "不要直接与基层员工沟通，所有任务通过 COO 下达。"
         ),
         is_default=True,
+        group="领导组",
     )
 
 
@@ -314,6 +323,7 @@ def coo() -> AgentRole:
             "你需要确保最终产物放在公司 Public 云盘中，并附有产品说明文档。"
         ),
         is_default=True,
+        group="领导组",
     )
 
 
@@ -341,6 +351,7 @@ def hr() -> AgentRole:
             "2) 入职完成后通知 COO 新人已加入。"
         ),
         is_default=True,
+        group="领导组",
     )
 
 
@@ -370,6 +381,7 @@ def cfo() -> AgentRole:
             "3) 高风险/高成本工具调用需额外审批。"
         ),
         is_default=True,
+        group="领导组",
     )
 
 
@@ -426,7 +438,7 @@ DEFAULT_ROLES: set[str] = {
 
 def _make_role(name: str, role_id: str, title: str, responsibilities: str,
                personality: str, skills: list[str], keywords: set[str],
-               extra: str = "") -> Callable[[], AgentRole]:
+               extra: str = "", group: str = "") -> Callable[[], AgentRole]:
     """参数化角色工厂 (同类多角色复用).
 
     参数:
@@ -438,6 +450,7 @@ def _make_role(name: str, role_id: str, title: str, responsibilities: str,
         skills: 精准技术栈 (带版本).
         keywords: 事件过滤关键词 (中英混合).
         extra: 系统提示补充 (输出格式/边界/工作流程).
+        group: 所属分组 (如 前端开发组/领导组; 空 = 未分组).
     """
     def factory() -> AgentRole:
         return AgentRole(
@@ -449,6 +462,7 @@ def _make_role(name: str, role_id: str, title: str, responsibilities: str,
             skills=skills,
             interest_keywords=set(keywords),
             system_prompt_extra=extra,
+            group=group,
         )
     return factory
 
@@ -470,6 +484,7 @@ TEMPLATES["frontend_dev_1"] = _make_role(
      "Vite", "Vitest", "Webpack"],
     {"frontend", "react", "component", "ui", "css", "前端", "组件", "页面", "交互"},
     _frontend_base,
+    group="前端开发组",
 )
 
 TEMPLATES["frontend_dev_2"] = _make_role(
@@ -480,6 +495,7 @@ TEMPLATES["frontend_dev_2"] = _make_role(
      "Vite", "Vitest", "SSR"],
     {"vue", "nuxt", "ssr", "admin", "前端", "管理系统", "构建", "工程化"},
     _frontend_base,
+    group="前端开发组",
 )
 
 TEMPLATES["frontend_dev_3"] = _make_role(
@@ -490,6 +506,7 @@ TEMPLATES["frontend_dev_3"] = _make_role(
      "WCAG 2.2", "LCP/CLS", "微交互"],
     {"design", "ui", "ux", "a11y", "responsive", "性能", "设计", "还原", "无障碍"},
     _frontend_base,
+    group="前端开发组",
 )
 
 # ── 后端开发工程师 ×3 ─────────────────────────────────────
@@ -509,6 +526,7 @@ TEMPLATES["backend_dev_1"] = _make_role(
      "Redis", "RabbitMQ", "Docker"],
     {"backend", "java", "spring", "api", "mysql", "后端", "接口", "服务", "数据库"},
     _backend_base,
+    group="后端开发组",
 )
 
 TEMPLATES["backend_dev_2"] = _make_role(
@@ -519,6 +537,7 @@ TEMPLATES["backend_dev_2"] = _make_role(
      "Docker", "Kubernetes"],
     {"golang", "go", "grpc", "concurrency", "highload", "后端", "并发", "性能"},
     _backend_base,
+    group="后端开发组",
 )
 
 TEMPLATES["backend_dev_3"] = _make_role(
@@ -529,6 +548,7 @@ TEMPLATES["backend_dev_3"] = _make_role(
      "Redis", "Celery", "pytest"],
     {"python", "fastapi", "django", "api", "celery", "后端", "异步", "任务"},
     _backend_base,
+    group="后端开发组",
 )
 
 # ── 移动开发工程师 ×3 ─────────────────────────────────────
@@ -548,6 +568,7 @@ TEMPLATES["mobile_dev_1"] = _make_role(
      "协程", "性能优化"],
     {"android", "kotlin", "compose", "移动", "安卓", "apk", "耗电", "crash"},
     _mobile_base,
+    group="移动开发组",
 )
 
 TEMPLATES["mobile_dev_2"] = _make_role(
@@ -558,6 +579,7 @@ TEMPLATES["mobile_dev_2"] = _make_role(
      "App Store 上架"],
     {"ios", "swift", "swiftui", "apple", "移动", "苹果", "上架", "审核"},
     _mobile_base,
+    group="移动开发组",
 )
 
 TEMPLATES["mobile_dev_3"] = _make_role(
@@ -568,6 +590,7 @@ TEMPLATES["mobile_dev_3"] = _make_role(
      "CodePush", "双端发布"],
     {"react native", "rn", "expo", "跨端", "移动", "双端", "bridging"},
     _mobile_base,
+    group="移动开发组",
 )
 
 # ── 全栈开发工程师 ×3 (Flutter 等跨端方向) ────────────────
@@ -587,6 +610,7 @@ TEMPLATES["fullstack_dev_1"] = _make_role(
      "FastAPI", "PostgreSQL", "Docker"],
     {"flutter", "dart", "跨端", "全栈", "mobile", "app", "fullstack"},
     _fullstack_base,
+    group="全栈开发组",
 )
 
 TEMPLATES["fullstack_dev_2"] = _make_role(
@@ -597,6 +621,7 @@ TEMPLATES["fullstack_dev_2"] = _make_role(
      "PostgreSQL", "Redis", "Docker"],
     {"node", "nestjs", "typescript", "全栈", "fullstack", "前后端", "prisma"},
     _fullstack_base,
+    group="全栈开发组",
 )
 
 TEMPLATES["fullstack_dev_3"] = _make_role(
@@ -607,6 +632,7 @@ TEMPLATES["fullstack_dev_3"] = _make_role(
      "Redis", "Docker", "pytest"],
     {"python", "fastapi", "vue", "全栈", "fullstack", "前后端", "数据模型"},
     _fullstack_base,
+    group="全栈开发组",
 )
 
 # ── 测试工程师 ×20 ────────────────────────────────────────
@@ -625,6 +651,7 @@ TEMPLATES["tester_1"] = _make_role(
     ["Test Design", "Manual Testing", "Bug Triage", "TestRail", "JIRA"],
     {"功能", "测试", "用例", "验收", "bug", "defect", "smoke"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_2"] = _make_role(
@@ -634,6 +661,7 @@ TEMPLATES["tester_2"] = _make_role(
     ["pytest", "Selenium", "Python", "CI/CD", "Allure", "Page Object"],
     {"自动化", "pytest", "selenium", "script", "ci", "自动", "框架"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_3"] = _make_role(
@@ -643,6 +671,7 @@ TEMPLATES["tester_3"] = _make_role(
     ["Appium", "真机矩阵", "弱网模拟", "Android/iOS", "埋点验证"],
     {"移动", "app", "弱网", "真机", "兼容", "android", "ios"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_4"] = _make_role(
@@ -652,6 +681,7 @@ TEMPLATES["tester_4"] = _make_role(
     ["Postman", "pytest", "契约测试", "Mock", "OpenAPI", "gRPC 测试"],
     {"接口", "api", "契约", "mock", "集成", "postman", "集成测试"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_5"] = _make_role(
@@ -661,6 +691,7 @@ TEMPLATES["tester_5"] = _make_role(
     ["Regression Testing", "Smoke Suite", "Test Strategy", "Release Validation"],
     {"回归", "冒烟", "发版", "regression", "release", "验证"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_6"] = _make_role(
@@ -670,6 +701,7 @@ TEMPLATES["tester_6"] = _make_role(
     ["JMeter", "k6", "Locust", "Grafana", "容量规划", "瓶颈分析"],
     {"性能", "压测", "吞吐", "延迟", "performance", "load", "benchmark"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_7"] = _make_role(
@@ -679,6 +711,7 @@ TEMPLATES["tester_7"] = _make_role(
     ["Playwright", "TypeScript", "E2E", "UI Automation", "视觉回归"],
     {"e2e", "playwright", "端到端", "ui", "自动化", "主路径"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_8"] = _make_role(
@@ -688,6 +721,7 @@ TEMPLATES["tester_8"] = _make_role(
     ["Boundary Analysis", "Equivalence Partitioning", "Test Data", "Scenario Design"],
     {"用例", "边界", "异常", "数据", "case", "scenario", "设计"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_9"] = _make_role(
@@ -697,6 +731,7 @@ TEMPLATES["tester_9"] = _make_role(
     ["Vitest", "Testing Library", "Playwright", "跨浏览器", "组件测试"],
     {"前端", "组件", "页面", "浏览器", "交互", "frontend", "ui 测试"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_10"] = _make_role(
@@ -706,6 +741,7 @@ TEMPLATES["tester_10"] = _make_role(
     ["pytest", "Unit Testing", "Integration Testing", "数据库测试", "故障注入"],
     {"后端", "单元测试", "集成", "数据库", "一致性", "backend", "unit"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_11"] = _make_role(
@@ -715,6 +751,7 @@ TEMPLATES["tester_11"] = _make_role(
     ["Exploratory Testing", "Charter", "Session Testing", "风险探测"],
     {"探索", "场景", "风险", "exploratory", "session", "探测"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_12"] = _make_role(
@@ -724,6 +761,7 @@ TEMPLATES["tester_12"] = _make_role(
     ["Browser Matrix", "OS Matrix", "Responsive Check", "设备实验室"],
     {"兼容", "浏览器", "分辨率", "矩阵", "compatibility", "cross"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_13"] = _make_role(
@@ -733,6 +771,7 @@ TEMPLATES["tester_13"] = _make_role(
     ["OWASP Top 10", "越权测试", "注入测试", "安全回归", "Burp Suite 基础"],
     {"安全", "越权", "注入", "xss", "sqli", "security", "权限"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_14"] = _make_role(
@@ -742,6 +781,7 @@ TEMPLATES["tester_14"] = _make_role(
     ["Appium", "XCUITest", "UIAutomator", "真机集群", "Python"],
     {"appium", "移动自动化", "自动化", "真机", "automation"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_15"] = _make_role(
@@ -751,6 +791,7 @@ TEMPLATES["tester_15"] = _make_role(
     ["SQL", "数据迁移", "一致性校验", "ETL 测试", "PostgreSQL/MySQL"],
     {"数据库", "迁移", "数据", "sql", "一致性", "etl"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_16"] = _make_role(
@@ -760,6 +801,7 @@ TEMPLATES["tester_16"] = _make_role(
     ["CI/CD", "Docker", "环境管理", "流水线", "测试数据"],
     {"环境", "ci", "流水线", "部署", "环境准备", "pipeline"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_17"] = _make_role(
@@ -769,6 +811,7 @@ TEMPLATES["tester_17"] = _make_role(
     ["Chaos Engineering", "故障注入", "降级验证", "恢复演练"],
     {"混沌", "故障", "降级", "恢复", "chaos", "failover", "熔断"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_18"] = _make_role(
@@ -778,6 +821,7 @@ TEMPLATES["tester_18"] = _make_role(
     ["Test Report", "缺陷分析", "质量度量", "发布门禁", "JIRA"],
     {"报告", "缺陷", "度量", "质量", "report", "quality", "门禁"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_19"] = _make_role(
@@ -787,6 +831,7 @@ TEMPLATES["tester_19"] = _make_role(
     ["Usability Testing", "用户旅程", "原型验证", "体验反馈"],
     {"可用性", "体验", "旅程", "用户", "usability", "ux 测试"},
     _tester_base,
+    group="测试组",
 )
 
 TEMPLATES["tester_20"] = _make_role(
@@ -796,6 +841,7 @@ TEMPLATES["tester_20"] = _make_role(
     ["Full-chain Testing", "联调验证", "Trace 分析", "发布演练"],
     {"全链路", "联调", "trace", "演练", "e2e", "发布"},
     _tester_base,
+    group="测试组",
 )
 
 # ── 攻击者 ×3 (安全测试 / 红蓝对抗) ───────────────────────
@@ -814,6 +860,7 @@ TEMPLATES["attacker_1"] = _make_role(
     ["渗透测试", "OWASP Top 10", "Burp Suite", "漏洞利用", "攻击链", "红队演练"],
     {"渗透", "红队", "漏洞", "攻击", "渗透测试", "xss", "rce", "red team"},
     _attacker_base,
+    group="安全组",
 )
 
 TEMPLATES["attacker_2"] = _make_role(
@@ -823,6 +870,7 @@ TEMPLATES["attacker_2"] = _make_role(
     ["代码审计", "SAST", "供应链安全", "CVE 分析", "Fuzzing", "漏洞挖掘"],
     {"审计", "白盒", "供应链", "cve", "0day", "audit", "sast"},
     _attacker_base,
+    group="安全组",
 )
 
 TEMPLATES["attacker_3"] = _make_role(
@@ -832,6 +880,7 @@ TEMPLATES["attacker_3"] = _make_role(
     ["应急响应", "蓝队防守", "WAF", "日志分析", "威胁溯源", "安全加固"],
     {"蓝队", "应急", "防守", "溯源", "加固", "blue team", "响应"},
     _attacker_base,
+    group="安全组",
 )
 
 # ── 版本管理 (Git 版本与各方沟通) ─────────────────────────
@@ -851,6 +900,7 @@ TEMPLATES["release_manager"] = _make_role(
         "需要创建新项目时,直接在 Public/work/ 下创建 git 仓库"
         "(git init 并初始化主干分支)。"
     ),
+    group="架构与版本组",
 )
 
 
@@ -863,10 +913,12 @@ TEMPLATES["CTO"] = _make_role(
     ["技术战略", "系统架构", "技术选型", "研发管理", "跨团队协调"],
     {"技术", "架构", "选型", "标准", "技术债", "方案", "评审"},
     (
-        "负责公司整体技术方向。✅ 必须: 重大技术决策前与架构师和各领域负责人对齐; "
+        "负责公司整体技术方向。✅ 必须: 重大技术决策前与架构师和各领域负责人对齐 "
+        "(跨组沟通用邮件 send_email); "
         "定期审视各领域技术风险并汇报 CEO。"
         "输出格式: 结论 → 理由 → 行动项。"
     ),
+    group="领导组",
 )
 
 TEMPLATES["frontend_lead"] = _make_role(
@@ -877,10 +929,12 @@ TEMPLATES["frontend_lead"] = _make_role(
     {"前端", "组件", "样式", "性能", "提交", "review", "代码质量"},
     (
         "负责前端团队。✅ 必须: 审核前端成员的 git 提交（用电脑 git 命令检查"
-        "提交内容与质量），将审核结果报告给项目版本管理角色（方谨言）。"
+        "提交内容与质量），将审核结果用邮件报告给项目版本管理角色 方谨言"
+        "（send_email，跨组汇报需用邮件）。"
         "🚫 禁止: 未经审核就合并成员的提交。"
         "输出格式: 提交摘要 → 发现的问题 → 审核结论。"
     ),
+    group="前端开发组",
 )
 
 TEMPLATES["backend_lead"] = _make_role(
@@ -891,10 +945,12 @@ TEMPLATES["backend_lead"] = _make_role(
     {"后端", "接口", "数据库", "安全", "提交", "review", "代码质量"},
     (
         "负责后端团队。✅ 必须: 审核后端成员的 git 提交（用电脑 git 命令检查"
-        "提交内容与质量），将审核结果报告给项目版本管理角色（方谨言）。"
+        "提交内容与质量），将审核结果用邮件报告给项目版本管理角色 方谨言"
+        "（send_email，跨组汇报需用邮件）。"
         "🚫 禁止: 未经审核就合并成员的提交。"
         "输出格式: 提交摘要 → 发现的问题 → 审核结论。"
     ),
+    group="后端开发组",
 )
 
 TEMPLATES["fullstack_lead"] = _make_role(
@@ -905,10 +961,12 @@ TEMPLATES["fullstack_lead"] = _make_role(
     {"全栈", "前后端", "集成", "部署", "提交", "review", "代码质量"},
     (
         "负责全栈团队。✅ 必须: 审核全栈成员的 git 提交（用电脑 git 命令检查"
-        "提交内容与质量），将审核结果报告给项目版本管理角色（方谨言）。"
+        "提交内容与质量），将审核结果用邮件报告给项目版本管理角色 方谨言"
+        "（send_email，跨组汇报需用邮件）。"
         "🚫 禁止: 未经审核就合并成员的提交。"
         "输出格式: 提交摘要 → 发现的问题 → 审核结论。"
     ),
+    group="全栈开发组",
 )
 
 TEMPLATES["mobile_lead"] = _make_role(
@@ -919,10 +977,12 @@ TEMPLATES["mobile_lead"] = _make_role(
     {"移动", "App", "安卓", "iOS", "提交", "review", "代码质量"},
     (
         "负责移动开发团队。✅ 必须: 审核移动端成员的 git 提交（用电脑 git 命令"
-        "检查提交内容与质量），将审核结果报告给项目版本管理角色（方谨言）。"
+        "检查提交内容与质量），将审核结果用邮件报告给项目版本管理角色 方谨言"
+        "（send_email，跨组汇报需用邮件）。"
         "🚫 禁止: 未经审核就合并成员的提交。"
         "输出格式: 提交摘要 → 发现的问题 → 审核结论。"
     ),
+    group="移动开发组",
 )
 
 TEMPLATES["test_lead"] = _make_role(
@@ -933,10 +993,12 @@ TEMPLATES["test_lead"] = _make_role(
     {"测试", "用例", "质量", "回归", "提交", "review", "代码质量"},
     (
         "负责测试团队。✅ 必须: 审核测试成员的 git 提交（用电脑 git 命令检查"
-        "提交内容与质量），将审核结果报告给项目版本管理角色（方谨言）。"
+        "提交内容与质量），将审核结果用邮件报告给项目版本管理角色 方谨言"
+        "（send_email，跨组汇报需用邮件）。"
         "🚫 禁止: 未经审核就合并成员的提交。"
         "输出格式: 提交摘要 → 发现的问题 → 审核结论。"
     ),
+    group="测试组",
 )
 
 

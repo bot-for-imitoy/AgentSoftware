@@ -11,14 +11,15 @@ DEFAULT_TOOLKITS (角色自动装配的工具类):
     - computer: run_command/computer_status/reboot (电脑操作)
     - mcp_manager: mcp_search/list/add/remove (MCP 工具管理)
     - skill_manager: skill 相关 (技能库)
-    - talk: talk/list_roles (角色通信)
+    - talk: talk/list_roles (角色通信, 仅同组成员可互发)
+    - email: send_email/read_mail/open_mail/mail_address_book (员工邮件)
     - client: talk_to_client (与甲方交流)
 
 模块级函数 (每文件一个工具类, 详见各文件头部):
     - create_memory_toolkit / create_time_toolkit / create_todo_toolkit /
       create_task_view_toolkit / create_hermes_toolkit / create_computer_toolkit /
       create_mcp_manager_toolkit / create_skill_manager_toolkit /
-      create_talk_toolkit / create_client_toolkit / create_hr_toolkit"""
+      create_talk_toolkit / create_email_toolkit / create_client_toolkit / create_hr_toolkit"""
 
 from typing import Any, Callable, Optional
 
@@ -30,6 +31,7 @@ from src.python_tools.hermes_toolkit import create_hermes_toolkit
 from src.python_tools.mcp_manager import MCPManager, create_mcp_manager_toolkit
 from src.python_tools.computer_toolkit import create_computer_toolkit
 from src.python_tools.skill_toolkit import SkillManager, create_skill_manager_toolkit
+from src.python_tools.email_toolkit import create_email_toolkit
 
 # 全局共享 MCP 管理器 (懒加载: 首次调用 mcp_* 工具时才连接服务器).
 # 所有角色共享同一份工具池, 但每个角色 add_toolkit 时拿到独立的工具类实例
@@ -52,6 +54,7 @@ DEFAULT_TOOLKITS: dict[str, Callable[[], object]] = {
     "computer": create_computer_toolkit,          # run_command / computer_status / reboot
     "mcp_manager": lambda: create_mcp_manager_toolkit(_MCP_MANAGER),
     "skill_manager": lambda: create_skill_manager_toolkit(_SKILL_MANAGER),
+    "email": create_email_toolkit,   # 公司邮件 (send_email/read_mail/...)
 }
 
 # 默认 MCP 工具组: 角色加入/启动时自动把该组的 MCP 工具安装到个人电脑
@@ -75,6 +78,7 @@ def get_toolkit_binders() -> dict[str, Callable[[Any, Any], None]]:
     global _BINDER_CACHE
     if _BINDER_CACHE is None:
         from src.python_tools.computer_toolkit import bind_computer_to_toolkit
+        from src.python_tools.email_toolkit import bind_email_to_toolkit
         from src.python_tools.hermes_toolkit import bind_hermes_to_toolkit
         from src.python_tools.hr_toolkit import bind_role_to_toolkit as bind_hr
         from src.python_tools.mcp_manager import bind_mcp_manager_to_toolkit
@@ -91,6 +95,7 @@ def get_toolkit_binders() -> dict[str, Callable[[Any, Any], None]]:
             "skill_manager": lambda tk, role: bind_skill(tk, role),
             "hr":            lambda tk, role: bind_hr(tk, role),
             "computer":      lambda tk, role: bind_computer_to_toolkit(tk, role),
+            "email":         lambda tk, role: bind_email_to_toolkit(tk, role),
             "todo":          lambda tk, role: bind_todo_to_toolkit(tk, role.todo_store),
             "task_view":     lambda tk, role: bind_task_view(tk, role),
             "hermes":        lambda tk, role: bind_hermes_to_toolkit(tk, role),

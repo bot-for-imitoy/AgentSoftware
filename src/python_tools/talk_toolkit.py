@@ -34,19 +34,20 @@ def build_team_roster(pool: Any) -> str:
     ⚠️ 只暴露人名: 花名册是给 LLM 看的, 内部 role_id (索引) 一律不出现.
 
     格式:
-        - **姓名** -- 职责  Skills: 技能列表
+        - **姓名** -- 职责  (组: 所属分组)  Skills: 技能列表
 
     参数:
         pool: RolePool 实例.
 
     返回:
-        花名册字符串 (每行一个成员).
+        花名册字符串 (每行一个成员, 含所属分组).
     """
     roster_lines: list[str] = []
     for _rid, r in pool._roles.items():
         resp = r.responsibilities or r.title
+        group = (getattr(r, "group", "") or "").strip() or "未分组"
         roster_lines.append(
-            f"  - **{r.name}** -- {resp}  "
+            f"  - **{r.name}** -- {resp}  (组: {group})  "
             f"Skills: {', '.join(r.skills[:4])}"
         )
     return "\n".join(roster_lines)
@@ -140,6 +141,20 @@ def create_talk_toolkit(pool: Any) -> ToolKit:
         urgency = getattr(Urgency, urgency_str.upper(), Urgency.NORMAL)
         sender = tk.get("role")
         sender_id = sender.role_id if sender is not None else None
+
+        # ── 组内交流限制: talk 只允许发给同组成员 (跨组请用邮件) ──
+        # 空分组 (未分组角色, 如招聘新人) 不受此限制, 兼容旧调用/测试.
+        if sender is not None:
+            s_group = (getattr(sender, "group", "") or "").strip()
+            t_group = (getattr(target_role, "group", "") or "").strip()
+            if s_group and t_group and s_group != t_group:
+                return (
+                    f"错误: talk 工具仅限同组成员之间交流。"
+                    f"{sender.name} 属于「{s_group}」, "
+                    f"{target_role.name} 属于「{t_group}」。"
+                    f"跨组沟通请使用邮件 send_email 发送邮件 "
+                    f"(可用 mail_address_book 查对方邮箱)。"
+                )
 
         # ── 附件校验: 云盘路径必须存在且当前角色可读 (容器内以本人身份判定) ──
         if attachment is not None:
@@ -236,6 +251,8 @@ def create_talk_toolkit(pool: Any) -> ToolKit:
         name="talk",
         description=(
             "给团队成员发送消息或委托任务. "
+            "⚠️ 重要: talk 仅限同组成员之间交流 (花名册里有每个人的分组). "
+            "跨组沟通请使用邮件 send_email (公司邮箱, 可用 mail_address_book 查对方邮箱). "
             "团队当前有哪些成员请先调用 list_roles 获取 (名单是动态的, 可能有新入职). "
             "根据每个人的职责选择合适的人选后, 用 target 发送.\n"
             "target 参数使用成员姓名 (见 list_roles 花名册, 例如 '王建国').\n"
@@ -281,9 +298,9 @@ def create_talk_toolkit(pool: Any) -> ToolKit:
     tk.add_python_tool(
         name="list_roles",
         description=(
-            "获取当前团队都有哪些成员 (姓名/职责/技能). "
+            "获取当前团队都有哪些成员 (姓名/职责/技能/所属分组). "
             "在向同事发消息前, 或不确定该找谁处理某件事时, 先调用此工具查看团队成员, "
-            "然后用 talk 给对应姓名发消息."
+            "然后用 talk 给同组成员发消息, 或用 send_email 给任何同事发邮件."
         ),
         input_schema={"type": "object", "properties": {}},
         handler=_list_roles_handler,
