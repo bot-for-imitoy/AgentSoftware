@@ -108,9 +108,11 @@
 
 ### 6. 个人电脑体系 (`src/core/computer.py`)
 
-每个角色一台独立电脑，默认 **Podman 容器**（镜像 `node:22-alpine`，名 `maf-<role_id>`）：
+每个角色一台独立电脑，默认 **Podman 容器**（镜像 `maf-base:latest`，名 `maf-<role_id>`）：
 
 - 容器挂载宿主机目录 `data/computers/<role>` ↔ 容器内 `/home/agent`（同一份文件，双向可见）
+- 默认镜像 `maf-base:latest` 由项目根 `Containerfile` 定义（阿里源 / apt 标配包 / Hermes / MCP 服务器一次构建）；
+  初始化电脑时若镜像不存在自动 `podman build` 创建，角色容器从该镜像复制，秒建只补员工用户
 - **上班自动开机**（SHIFT_START）、**下班自动关机**（summary 总结后）
 - 同一自定义桥接网络 `maf-net`：电脑间可互相通信（`lan_devices` 工具查人名/电脑名/IP）
 - `ComputerManager`（全局单例）管理分配/销毁
@@ -124,7 +126,7 @@
 
 - **每台电脑一个独立 MCP filesystem 服务器**，通过 `podman exec -i` 在容器内启动，
   授权目录 = `/home/agent`（与 LLM 看到的工作目录字面一致，无路径空间错位）
-- 容器创建时自动 `npm install -g @modelcontextprotocol/server-filesystem` 预装
+- 基础镜像（`Containerfile`）构建时已全局预装 `@modelcontextprotocol/server-filesystem`，容器秒启即用（旧容器由 `_ensure_container` 兜底补装）
 - `DEFAULT_MCP_GROUPS = ("file_ops",)`：角色加入/新入职时自动把文件操作工具装到个人电脑
 - `MCPManager`（全局共享）：`mcp_search/mcp_list/mcp_add/mcp_remove/mcp_my_tools`
   供 LLM 自助安装其它工具组的工具
@@ -470,7 +472,7 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | 文件 | 模块说明 | 主要类 / 函数 |
 |---|---|---|
 | `roles.py` | 角色系统核心: AgentRole(单个角色: 任务队列/状态机/工具装配/分组 group/邮箱 mail_address/talk/WAIT 同步等待/journal) + RolePool(线程池调度, 注册即建日志) | `AgentRole`, `RolePool`, `Task`, `Urgency`, `ToolLoopError` |
-| `computer.py` | 个人电脑抽象: LocalComputer(本地降级) / PodmanComputer(Ubuntu 容器, 拼音用户 + /mnt/drive 云盘挂载 + Hermes) / SSHComputer; ComputerManager 管理 + 基础镜像 `maf-base` 复制创建 | `Computer`, `LocalComputer`, `PodmanComputer`, `SSHComputer`, `ComputerManager`, `create_computer` |
+| `computer.py` | 个人电脑抽象: LocalComputer(本地降级) / PodmanComputer(maf-base 容器: 拼音用户 + /mnt/drive 云盘挂载 + Hermes, 镜像由项目根 Containerfile 构建) / SSHComputer; ComputerManager 管理 + 自定义镜像 `maf-base` 构建/复用 | `Computer`, `LocalComputer`, `PodmanComputer`, `SSHComputer`, `ComputerManager`, `create_computer` |
 | `time_manager.py` | 作息时间引擎 + 事件总线: Tick/天/上下班事件, 定时任务, 全角色空闲才快进 Tick | `TimeEventBus`, `ScheduledTask` |
 | `event_bus.py` | 事件总线基类: 注册/取消/调度事件 | `EventBus` |
 | `dispatcher.py` | 事件分发器: 广播事件到所有角色 | `EventDispatcher` |

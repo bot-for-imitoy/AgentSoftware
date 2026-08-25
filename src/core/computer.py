@@ -82,7 +82,7 @@ create_computer() 工厂按角色 computer_kind 选择实现.
         - delete_file(): 见方法源码
     ComputerManager:
         - ensure_network(): 确保 podman 自定义桥接网络存在 (幂等). 返回网络名.
-        - ensure_base_image(): 确保基础镜像存在 (maf-base:latest). 返回镜像名.
+        - ensure_base_image(): 确保电脑默认镜像存在 (不存在则从项目根 Containerfile 构建 maf-base:latest). 返回镜像名.
         - create(): 创建并注册一台角色电脑 (分配).
         - register(): 注册一台已创建的电脑到管理器.
         - get(): 按角色 ID 获取电脑 (不存在抛 KeyError).
@@ -108,16 +108,14 @@ logger = logging.getLogger(__name__)
 COMPUTERS_ROOT = "./data/computers"   # 角色个人电脑工作目录根
 DRIVE_ROOT = "./data/drive"           # 企业云盘共享目录 (挂载 /mnt/drive)
 
-# 默认 podman 镜像 (ubuntu:24.04: 员工电脑基础, AI 熟悉 Debian 系).
-# 角色容器不从它直接创建, 而是从基础镜像 maf-base 复制 (见 BASE_IMAGE).
-DEFAULT_IMAGE = "ubuntu:24.04"
-
-# 基础镜像: 先创建基础容器 → 系统级初始化 (阿里源/apt 包/hermes/MCP 包)
-# → commit 成 maf-base:latest → 角色容器从该镜像复制 (秒建, 只补员工用户).
-# 避免 40 个角色各自 apt 下载 + hermes 安装 (单容器初始化约 10 分钟).
-BASE_IMAGE = "maf-base:latest"
-BASE_CONTAINER_NAME = "maf-base-init"  # 基础容器临时名 (初始化后删除)
-_BASE_IMAGE_LOCK = threading.Lock()    # 并发保护: 首个调用者建镜像, 其余等待复用
+# 电脑默认容器镜像: 由项目根 Containerfile 定义 (系统层: 阿里源 / apt 标配包 /
+# hermes / MCP filesystem 服务器). 电脑初始化时 ensure_base_image() 判断镜像
+# 是否存在, 不存在则 podman build 从 Containerfile 构建 — 一次构建, 之后
+# 角色容器从该镜像复制 (秒建, 只补员工用户), 避免 40 个角色各自 apt 下载 +
+# hermes 安装 (单镜像构建约 10 分钟).
+DEFAULT_IMAGE = "maf-base:latest"   # 电脑默认容器镜像 (Containerfile 定义)
+CONTAINERFILE = "Containerfile"     # 镜像定义文件 (项目根)
+_BASE_IMAGE_LOCK = threading.Lock() # 并发保护: 首个调用者建镜像, 其余等待复用
 
 # MCP filesystem 服务器包 (容器内全局安装, 避免每次 npx 拉包)
 MCP_FILESYSTEM_PACKAGE = "@modelcontextprotocol/server-filesystem"
@@ -478,7 +476,7 @@ class PodmanComputer(Computer):
 
     参数:
         role_id: 角色标识.
-        image:   容器镜像 (默认 alpine:latest).
+        image:   容器镜像 (默认 maf-base:latest, 由项目根 Containerfile 构建).
     """
 
     def __init__(self, role_id: str, image: str = DEFAULT_IMAGE,
@@ -957,43 +955,11 @@ _DRIVE_HOST = str((Path(DRIVE_ROOT)).resolve())
 _NPM_CACHE_HOST = str((Path("./data/computers") / ".npm-cache").resolve())
 
 
-# ── 基础镜像系统级初始化脚本 (基础容器内 root 执行一次, 然后 commit) ──
-# 内容 = 所有角色共用的系统层: 阿里源 / 员工电脑标配包 / Hermes Agent /
-# MCP filesystem 服务器. 任何一步失败 → 整体失败 (基础镜像必须完整).
-# 员工用户 (拼音 + uid) 不进基础镜像 — 每角色不同, 复制后各自添加.
-_BASE_INIT_SCRIPT = r"""
-set -e
-# 1) 镜像源 → 阿里云 (deb822 格式, 幂等)
-grep -q mirrors.aliyun.com /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null \
-  || sed -i 's|^URIs:.*|URIs: http://mirrors.aliyun.com/ubuntu/|' \
-       /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null
-# 2) 员工电脑标配包 (sudo/git/node/python + hermes 安装依赖)
-apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o DPkg::Lock::Timeout=600 \
-  sudo git nodejs npm python3 python3-pip curl xz-utils libatomic1
-# 3) Hermes Agent (装到 /usr/local/bin 全局, 员工用户可用).
-#    install.sh 用 git clone 从 github.com 拉源码 — 该域名 TLS 常被重置
-#    (gnutls_handshake failed), 实测 ghfast.top 镜像可用: 用 git 全局
-#    url.insteadOf 重写, install.sh 内部 git clone 自动走镜像.
-#    node 26 从 nodejs.org 下载也可能卡顿: curl/install.sh 均加超时,
-#    重试 2 次 — 避免基础镜像初始化被拖到 exec 超时.
-git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/"
-if ! command -v hermes >/dev/null 2>&1; then
-  curl -fsSL --connect-timeout 20 --max-time 240 \
-    https://hermes-agent.nousresearch.com/install.sh \
-    -o /tmp/hermes-install.sh 2>/dev/null
-  for i in 1 2; do
-    timeout 600 bash /tmp/hermes-install.sh >/dev/null 2>&1 && break || sleep 3
-  done
-fi
-command -v hermes >/dev/null 2>&1 || { echo "Hermes 安装失败" >&2; exit 1; }
-# 4) MCP filesystem 服务器 (容器内全局 npm, 角色容器免装)
-npm ls -g --depth=0 2>/dev/null | grep -q 'server-filesystem' \
-  || npm install -g --no-fund --no-audit @modelcontextprotocol/server-filesystem
-# 5) 清理 apt 缓存, 缩小镜像体积
-apt-get clean && rm -rf /var/lib/apt/lists/*
-echo "BASE_INIT_OK"
-"""
+# ── 自定义镜像 (项目根 Containerfile) ─────────────────────────
+# 电脑默认镜像内容 = 所有角色共用的系统层: 阿里源 / 员工电脑标配包 /
+# Hermes Agent / MCP filesystem 服务器 (任何一步失败 → 整体失败,
+# 镜像必须完整). 员工用户 (拼音 + uid) 不进镜像 — 每角色不同,
+# 容器创建时各自添加 (见 PodmanComputer._ensure_container).
 
 
 class ComputerManager:
@@ -1038,57 +1004,35 @@ class ComputerManager:
         return self.network_name
 
     def ensure_base_image(self) -> str:
-        """确保基础镜像存在 (maf-base:latest). 返回镜像名.
+        """确保电脑默认容器镜像存在 (由项目根 Containerfile 定义). 返回镜像名.
 
-        不存在时: 创建临时基础容器 → 系统级初始化 (阿里源/apt 包/hermes/
-        MCP 包, 约 10 分钟, 见 _BASE_INIT_SCRIPT) → podman commit 成镜像
-        → 删除临时容器. 之后角色容器从该镜像秒建, 只补员工用户.
+        不存在时: podman build -f Containerfile -t <DEFAULT_IMAGE> 构建
+        (阿里源/apt 包/hermes/MCP 包, 约 10 分钟, 见项目根 Containerfile),
+        之后角色容器从该镜像秒建, 只补员工用户.
 
         并发保护: 模块级锁 + 双检 — 多角色并行装配时首个调用者完成
-        初始化, 其余等待后直接复用镜像 (不重复初始化).
+        构建, 其余等待后直接复用镜像 (不重复构建).
         """
         if shutil.which("podman") is None:
             return DEFAULT_IMAGE  # 降级环境无 podman, 无所谓镜像
         with _BASE_IMAGE_LOCK:
-            r = subprocess.run(["podman", "image", "exists", BASE_IMAGE],
+            r = subprocess.run(["podman", "image", "exists", DEFAULT_IMAGE],
                                capture_output=True, text=True, timeout=30)
             if r.returncode == 0:
-                return BASE_IMAGE
-            # 清理可能的残留临时容器
-            subprocess.run(["podman", "rm", "-f", BASE_CONTAINER_NAME],
-                           capture_output=True, text=True, timeout=60)
+                return DEFAULT_IMAGE
+            # 镜像不存在 → 从项目根 Containerfile 构建 (context = Containerfile 所在目录)
+            context = str(Path(CONTAINERFILE).resolve().parent)
             r = subprocess.run(
-                ["podman", "run", "-d", "--name", BASE_CONTAINER_NAME,
-                 DEFAULT_IMAGE, "sleep", "infinity"],
-                capture_output=True, text=True, timeout=120)
+                ["podman", "build", "-f", CONTAINERFILE,
+                 "-t", DEFAULT_IMAGE, context],
+                capture_output=True, text=True, timeout=1800)
             if r.returncode != 0:
                 raise RuntimeError(
-                    f"创建基础容器失败 ({r.returncode}): "
+                    f"podman build 创建镜像 {DEFAULT_IMAGE} 失败 ({r.returncode}): "
                     f"{(r.stderr or r.stdout or '').strip()[:300]}")
-            try:
-                # 系统级初始化 (apt 装包 + hermes 安装, 给足超时:
-                # install.sh 单次 600s × 2 次重试 + apt ~200s)
-                r = subprocess.run(
-                    ["podman", "exec", BASE_CONTAINER_NAME, "bash", "-c",
-                     _BASE_INIT_SCRIPT],
-                    capture_output=True, text=True, timeout=1800)
-                if r.returncode != 0 or "BASE_INIT_OK" not in (r.stdout or ""):
-                    raise RuntimeError(
-                        f"基础容器初始化失败 ({r.returncode}): "
-                        f"{(r.stderr or r.stdout or '').strip()[:300]}")
-                # commit 成基础镜像
-                r = subprocess.run(
-                    ["podman", "commit", BASE_CONTAINER_NAME, BASE_IMAGE],
-                    capture_output=True, text=True, timeout=300)
-                if r.returncode != 0:
-                    raise RuntimeError(
-                        f"基础镜像 commit 失败 ({r.returncode}): "
-                        f"{(r.stderr or r.stdout or '').strip()[:300]}")
-                logger.info("基础镜像 %s 已创建 (一次初始化, 角色容器从它复制)", BASE_IMAGE)
-            finally:
-                subprocess.run(["podman", "rm", "-f", BASE_CONTAINER_NAME],
-                               capture_output=True, text=True, timeout=60)
-            return BASE_IMAGE
+            logger.info("自定义镜像 %s 已从 %s 构建 (角色容器从它复制)",
+                        DEFAULT_IMAGE, CONTAINERFILE)
+            return DEFAULT_IMAGE
 
     # ── 分配 / 注册 ───────────────────────────────────────
 

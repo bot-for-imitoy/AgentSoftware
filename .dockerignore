@@ -1,0 +1,16 @@
+# Containerfile 构建上下文排除: 镜像定义不需要携带运行时数据/代码,
+# 保持构建上下文最小 (data/ 是运行时产物, 可能很大)
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+data
+docs
+tests
+.vscode
+.hermes
+dist
+build
