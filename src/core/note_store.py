@@ -28,11 +28,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-from src.core.types import is_failure_text
+from src.core.path_manager import PathManager
+from src.core.time_manager import ScheduledTask, TimeEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -50,95 +50,54 @@ class NoteStore:
                   (笔记与定时任务统一为"笔记"概念, 提醒 = 带时间的笔记).
     """
 
-    def __init__(self, base_dir: str = "./data/notes", role_id: str = "",
-                 computer: Any = None, time_manager: Any = None):
+    def __init__(self, base_dir: str = PathManager().data_dir() / "notes", role_id: str = "",
+                time_manager: TimeEventBus = None):
         self._base = Path(base_dir)
         self.role_id = role_id
-        self._computer = computer
         self._time_manager = time_manager
-        self._local_dir = self._base / (role_id or "shared")
-        self._local_dir.mkdir(parents=True, exist_ok=True)
+        self._dir = self._base / role_id
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+        self.note_path = self._dir / "notes"
+        self.note_path.mkdir(parents=True, exist_ok=True)
+        self.summary_path = self.dir / "summaries"
+        self.summary_path.mkdir(parents=True, exist_ok=True)
 
     # ── 路径工具 ──────────────────────────────────────────
 
     @staticmethod
-    def _sanitize_title(title: str) -> str:
-        """清洗标题为合法文件名. 非法字符替换为下划线.
-
-        除常规文件名非法字符外, 还替换 shell 元字符 (单引号/反引号/$/分号/&):
-        标题会拼进电脑端 shell 命令, 不转义可被 LLM 注入任意命令 (High-3).
-        """
-        # 非 raw 字符串: \\s 是正则空白, \u0060 是反引号, \\\\ 是反斜杠
-        cleaned = re.sub("[\\\\/:*?\"<>|#%\\s'\u0060$;&]+", "_", title.strip())
-        return cleaned or "untitled"
-
-    @property
-    def _dir(self) -> Path:
-        """当前使用的目录 (电脑 workdir/notes 或本地)."""
-        if self._computer is not None:
-            return Path(self._computer.workdir) / "notes"
-        return self._local_dir
-
-    def _note_path(self, title: str) -> str:
-        """笔记路径 (字符串, 供 computer 文件接口使用)."""
-        return str(self._dir / f"{self._sanitize_title(title)}.md")
-
-    def _summary_path(self, day: int) -> str:
-        return str(self._dir / self.summary_filename(day))
+    def _note_filename(title: str) -> str:
+        """笔记文件名 (唯一实现, main.py 等消费方统一引用)."""
+        return f"{title}.md"
 
     @staticmethod
-    def summary_filename(day: int) -> str:
+    def _summary_filename(day: int) -> str:
         """每日总结文件名 (唯一实现, main.py 等消费方统一引用)."""
-        return f"{NoteStore.SUMMARY_PREFIX}{day}.md"
-
-    SUMMARY_PREFIX = "_summary_day_"  # 总结文件前缀 (get_latest_summary 解析用)
+        return f"{day}.md"
 
     # ── 底层读写 (走电脑或本地) ──────────────────────────
 
-    def _write(self, path: str, content: str) -> None:
-        if self._computer is not None:
-            result = self._computer.write_file(path, content)
-            # Medium-6 修复: 电脑写入失败 (电脑未开机/命令失败) 必须显式抛出,
-            # 否则上层会向 LLM 谎报"已保存"而数据实际没落盘
-            if isinstance(result, str) and is_failure_text(result):
-                raise IOError(f"电脑写入失败: {result}")
-        else:
-            p = Path(path)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8")
+    def _write(self, path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
-    def _read(self, path: str) -> Optional[str]:
-        if self._computer is not None:
-            r = self._computer.read_file(path)
-            if is_failure_text(r):
-                return None
-            return r
-        p = Path(path)
-        if not p.exists():
-            return None
-        return p.read_text(encoding="utf-8")
+    def _read(self, path: Path) -> str:
+        if not path.exists():
+            raise FileNotFoundError(f"笔记文件不存在: {path}")
+        return path.read_text(encoding="utf-8")
 
-    def _list_md_files(self) -> list[Path]:
+    def _list_md_files(self, path: Path) -> list[Path]:
         """列出 notes 目录下所有 .md 文件 (仅文件名, 按名排序)."""
-        if self._computer is not None:
-            listing = self._computer.list_dir(str(self._dir))
-            names = []
-            for line in listing.splitlines():
-                # ls 输出取最后一列文件名
-                name = line.split()[-1] if line.split() else ""
-                if name.endswith(".md"):
-                    names.append(Path(name))
-            return sorted(names)
-        if not self._dir.exists():
+        if not path.exists():
             return []
-        return sorted(p for p in self._dir.glob("*.md"))
+        return sorted(p for p in path.glob("*.md"))
 
     # ── 笔记操作 ──────────────────────────────────────────
 
     # ── 提醒 (笔记 = 任务统一概念: 带提醒时间的笔记到点发事件) ──
 
     def _schedule_reminder(self, title: str, tick: int,
-                           day: Optional[int] = None) -> Any:
+                           day: Optional[int] = None) -> ScheduledTask:
         """注册笔记提醒: 到指定 Tick 向本角色发送提醒事件 (复用定时任务机制).
 
         参数:
@@ -193,7 +152,7 @@ class NoteStore:
 
     def write_note(self, title: str, content: str,
                    remind_tick: Optional[int] = None,
-                   remind_day: Optional[int] = None) -> str:
+                   remind_day: Optional[int] = None) -> Path:
         """写笔记. 已存在则覆盖.
 
         笔记与定时任务已统一: 填入 remind_tick (可选) 后, 到指定 Tick 系统
@@ -211,7 +170,7 @@ class NoteStore:
         异常:
             ValueError: 填了 remind_tick 但未绑定 TimeEventBus / tick 超范围.
         """
-        path = self._note_path(title)
+        path = self.note_path / self._note_filename(title)
         self._write(path, content)
         if remind_tick is not None:
             task = self._schedule_reminder(title, remind_tick, remind_day)
@@ -223,7 +182,7 @@ class NoteStore:
 
     def edit_note(self, title: str, content: str,
                   remind_tick: Optional[int] = None,
-                  remind_day: Optional[int] = None) -> str:
+                  remind_day: Optional[int] = None) -> Path:
         """编辑已有笔记 (覆盖内容). 不存在则创建.
 
         提供 remind_tick 时重置提醒 (旧提醒取消, 注册新提醒);
@@ -238,7 +197,7 @@ class NoteStore:
         返回:
             保存路径.
         """
-        path = self._note_path(title)
+        path = self.note_path / self._note_filename(title)
         self._write(path, content)
         if remind_tick is not None:
             self._cancel_reminder(title)
@@ -256,9 +215,7 @@ class NoteStore:
             标题字符串列表.
         """
         titles = []
-        for p in self._list_md_files():
-            if p.name.startswith("_summary_"):
-                continue  # 跳过总结文件
+        for p in self._list_md_files(self.note_path):
             titles.append(p.stem)
         return titles
 
@@ -271,31 +228,27 @@ class NoteStore:
         返回:
             内容字符串, 不存在返回 None.
         """
-        path = self._note_path(title)
+        path = self.note_path / self._note_filename(title)
         return self._read(path)
 
     def delete_note(self, title: str) -> bool:
         """删除笔记 (真实删除文件 + 取消关联提醒). 返回是否删除成功."""
         # 先取消提醒 (笔记与任务统一: 删笔记即取消其定时提醒)
         self._cancel_reminder(title)
-        path = self._note_path(title)
-        if self._read(path) is None:
+        path = self.note_path / self._note_filename(title)
+        try:
+            self._read(path)
+        except FileNotFoundError:
             return False
-        if self._computer is not None:
-            result = self._computer.delete_file(path)
-            if isinstance(result, str) and is_failure_text(result):
-                logger.warning("[%s] 删除笔记失败: %s", self.role_id, result)
-                return False
-        else:
-            p = Path(path)
-            if p.exists():
-                p.unlink()
+        p = Path(path)
+        if p.exists():
+            p.unlink()
         logger.info("[%s] 笔记已删除: %s", self.role_id, Path(path).name)
         return True
 
     # ── 每日总结 (作息系统, 按天序号存储) ─────────────────
 
-    def save_summary(self, content: str, day: Optional[int] = None) -> str:
+    def save_summary(self, content: str, day: Optional[int] = None) -> Path:
         """保存某一天的总结.
 
         参数:
@@ -306,7 +259,7 @@ class NoteStore:
             保存路径.
         """
         d = day or 1
-        path = self._summary_path(d)
+        path = self.summary_path / self.summary_filename(d)
         self._write(path, content)
         logger.info("[%s] 第 %d 天总结已保存: %s", self.role_id, d, Path(path).name)
         return path
@@ -321,7 +274,7 @@ class NoteStore:
             总结内容, 不存在返回 None.
         """
         d = day or 1
-        return self._read(self._summary_path(d))
+        return self._read(self.summary_path / self.summary_filename(d))
 
     def get_latest_summary(self, before_day: Optional[int] = None) -> Optional[str]:
         """读取最近一次总结 (用于下一天冷启动).
@@ -334,18 +287,16 @@ class NoteStore:
         """
         # 按天数值降序 (文件名 _summary_day_<N>.md 字典序会排错: day_9 > day_10)
         candidates = []
-        for p in self._list_md_files():
-            if not p.name.startswith("_summary_day_"):
-                continue
+        for p in self._list_md_files(self.summary_path):
             try:
-                d = int(p.name[len("_summary_day_"):-len(".md")])
+                d = int(p.name[:-len(".md")])
             except ValueError:
                 continue
             candidates.append((d, p))
         candidates.sort(key=lambda x: x[0], reverse=True)
         for d, p in candidates:
             if before_day is None or d < before_day:
-                content = self._read(str(self._dir / p.name))
+                content = self._read(self.summary_path / p.name)
                 if content is not None:
                     return content
         return None

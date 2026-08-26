@@ -731,6 +731,11 @@ class PodmanComputer(Computer):
         except Exception as exc:
             return f"错误: 命令执行失败 - {exc}"
 
+    @property
+    def home_dir(self) -> Path:
+        """容器内家目录路径 (默认 /home/<username>)."""
+        return Path(self.workdir) # TODO: 路径描述全部改为 Path 对象
+
     def read_file(self, path: str) -> str:
         # 路径经 argv 传入 (sh -c 的 $1), 不经 shell 解析 — 任何字符都按字面,
         # 无注入面 (High-3). shlex.quote 方案在 busybox ash 对
