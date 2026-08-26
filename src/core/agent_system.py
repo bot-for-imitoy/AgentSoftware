@@ -41,7 +41,7 @@ import logging
 from typing import Any, Optional
 
 from src.core.dispatcher import EventDispatcher
-from src.core.roles import RolePool
+from src.core.roles import AgentRole, RolePool, Task
 from src.core.role_templates import DEFAULT_ROLES, get_template
 from src.core.time_manager import EVENT_SHIFT_END, EVENT_SHIFT_START, TimeEventBus
 from src.core.types import AgentState, Event
@@ -61,7 +61,7 @@ class AgentSystem:
 
     def __init__(
         self,
-        roles: Optional[list[Any]] = None,
+        roles: Optional[list[AgentRole]] = None,
         role_ids: Optional[list[str]] = None,
         check_interval: int = 30,
         auto_toolkits: bool = True,
@@ -90,7 +90,7 @@ class AgentSystem:
 
     # ── 角色管理 ──────────────────────────────────────────
 
-    def add_roles(self, roles: list[Any]) -> list[Any]:
+    def add_roles(self, roles: list[AgentRole]) -> list[AgentRole]:
         """批量注册角色: 耗时装配 (电脑创建 + MCP 服务器启动) 多线程并行.
 
         每个角色的电脑/工具注册表/MCP 工具都是独立的, 装配互不干扰, 可以
@@ -129,7 +129,7 @@ class AgentSystem:
             logger.info("AgentSystem: 角色已注册 %s (%s)", role.role_id, role.name)
         return roles
 
-    def add_role(self, role: Any) -> Any:
+    def add_role(self, role: AgentRole) -> AgentRole:
         """注册单个角色: 绑定共享 TimeEventBus + 自动注册工具类.
 
         单角色串行装配; 批量场景请用 add_roles (并行, 快).
@@ -142,14 +142,14 @@ class AgentSystem:
         """
         return self.add_roles([role])[0]
 
-    def add_default_roles(self) -> list[Any]:
+    def add_default_roles(self) -> list[AgentRole]:
         """注册全部默认管理角色 (CEO/COO/HR/CFO). 返回角色列表."""
         roles = []
         for rid in DEFAULT_ROLES:
             roles.append(self.add_role(get_template(rid)))
         return roles
 
-    def get_role(self, role_id: str) -> Any:
+    def get_role(self, role_id: str) -> AgentRole:
         """按 role_id 获取角色."""
         return self.pool.get_role(role_id)
 
@@ -216,7 +216,7 @@ class AgentSystem:
         """
         return self.dispatcher.trigger(event)
 
-    def assign_task(self, role_id: str, task: Any) -> None:
+    def assign_task(self, role_id: str, task: Task) -> None:
         """直接给指定角色分配任务.
 
         参数:
