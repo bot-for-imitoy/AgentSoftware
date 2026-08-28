@@ -26,9 +26,11 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import requests
+
+from src.core.config_store import ConfigStore
 
 logger = logging.getLogger(__name__)
 
@@ -100,14 +102,19 @@ class OpenAICompatLLM:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         label: Optional[str] = None,
+        config_store: Optional[ConfigStore] = None,
     ):
-        self.api_key = api_key if api_key is not None else (
-            os.environ.get(self.API_KEY_ENV, "") if self.API_KEY_ENV else ""
+        self._config_store = config_store or ConfigStore()
+        provider = self.API_NAME.lower()
+        self.api_key = api_key if api_key is not None else self._config_value(
+            provider, "api_key", os.environ.get(self.API_KEY_ENV, "")
         )
-        self.base_url = (
-            base_url or os.environ.get(self.BASE_URL_ENV, self.DEFAULT_BASE_URL)
-        ).rstrip("/")
-        self.model = model or os.environ.get(self.MODEL_ENV, self.DEFAULT_MODEL)
+        self.base_url = (base_url or self._config_value(
+            provider, "base_url", os.environ.get(self.BASE_URL_ENV, self.DEFAULT_BASE_URL)
+        )).rstrip("/")
+        self.model = model or self._config_value(
+            provider, "model", os.environ.get(self.MODEL_ENV, self.DEFAULT_MODEL)
+        )
         # 角色标识: DEBUG 日志前缀, 便于多角色并发时区分是谁在调 API
         self.label = label or ""
         # 最近一次请求失败原因 (重试耗尽/不可恢复错误时诊断用)
@@ -118,6 +125,13 @@ class OpenAICompatLLM:
                 f"{self.API_NAME} API key is required. Set {self.API_KEY_ENV} env var "
                 f"or pass api_key= to {self.__class__.__name__}()."
             )
+
+    def _config_value(self, provider: str, field: str, default: Any) -> Any:
+        """读取后端专属配置, 没有时回退到通用配置和传入默认值."""
+        value = self._config_store.get(f"llm.{provider}.{field}")
+        if value is not None:
+            return value
+        return self._config_store.get(f"llm.{field}", default)
 
     # ── 调试日志 (带角色前缀) ─────────────────────────────
 
@@ -449,10 +463,13 @@ class DeepSeekLLM(OpenAICompatLLM):
         model: Optional[str] = None,
         thinking: Optional[bool] = None,
         label: Optional[str] = None,
+        config_store: Optional[ConfigStore] = None,
     ):
-        super().__init__(api_key=api_key, base_url=base_url, model=model, label=label)
-        # 思考模式: 显式传参优先, 否则读环境变量 (默认开)
-        self.thinking = thinking if thinking is not None else DEEPSEEK_THINKING
+        super().__init__(api_key=api_key, base_url=base_url, model=model, label=label,
+                         config_store=config_store)
+        # 思考模式: 显式传参优先, 否则读配置文件和环境变量 (默认开)
+        self.thinking = thinking if thinking is not None else self._config_value(
+            "deepseek", "thinking", DEEPSEEK_THINKING)
 
     def _extra_payload(self, payload: dict, max_tokens: Optional[int]) -> None:
         """DeepSeek: thinking 开启时注入 thinking 参数, 并保证 max_tokens >= 1024.

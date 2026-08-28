@@ -5,6 +5,8 @@ from __future__ import annotations
 import requests
 
 from src.core import llm as llm_mod
+from src.core.config_store import ConfigStore
+from src.core.llm import DeepSeekLLM
 from src.core.llm import OllamaLLM
 
 
@@ -91,3 +93,32 @@ def test_timeout_retries(monkeypatch):
     text, _ = OllamaLLM().chat(system="s", user="u", max_tokens=8)
     assert text == "ok"
     assert len(calls) == 2
+
+
+def test_config_store_precedes_environment(monkeypatch, tmp_path):
+    """OpenAI 兼容客户端优先读取 ConfigStore, 显式参数仍可覆盖配置."""
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://env.example")
+    monkeypatch.setenv("OLLAMA_MODEL", "env-model")
+    config = ConfigStore(tmp_path / "config.json")
+    config.update({
+        "llm.ollama.base_url": "http://config.example/",
+        "llm.ollama.model": "config-model",
+    })
+
+    client = OllamaLLM(config_store=config)
+    assert client.base_url == "http://config.example"
+    assert client.model == "config-model"
+    explicit = OllamaLLM(base_url="http://explicit.example", config_store=config)
+    assert explicit.base_url == "http://explicit.example"
+
+
+def test_deepseek_config_includes_api_key_and_thinking(tmp_path):
+    """DeepSeek 的密钥和 thinking 开关也从后端专属配置读取."""
+    config = ConfigStore(tmp_path / "config.json")
+    config.update({
+        "llm.deepseek.api_key": "config-key",
+        "llm.deepseek.thinking": False,
+    })
+    client = DeepSeekLLM(config_store=config)
+    assert client.api_key == "config-key"
+    assert client.thinking is False
