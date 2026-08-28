@@ -106,6 +106,7 @@ try:  # 进程间文件锁 (Linux/macOS); Windows 无 fcntl, 回退进程内锁
     import fcntl
 except ImportError:  # pragma: no cover - Windows
     fcntl = None  # type: ignore[assignment]
+from src.core.mcp_client import MCPServer
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,7 @@ class Computer(ABC):
         self._on = False
         self._auto_mcp = auto_mcp          # 自动创建的电脑: 创建时自动安装 MCP 服务器
         self._mcp_tools: dict[str, Any] = {}  # 已安装到本电脑的 MCP 工具 (name → ToolDef)
-        self._mcp_server: Any = None       # 本电脑独立的 MCP 服务器连接 (懒创建)
+        self._mcp_server: Optional[MCPServer] = None       # 本电脑独立的 MCP 服务器连接 (懒创建)
         self._connect_error: Optional[str] = None  # 最近一次 MCP 连接失败原因 (诊断用)
 
     # ── MCP 会话存活检测与重连 ───────────────────────────
@@ -1151,7 +1152,19 @@ class ComputerManager:
             # 拿不到锁 → 另一进程正在构建 → 轮询等待镜像出现
             if self._wait_image_appears():
                 return DEFAULT_IMAGE
-            # 单轮等待未出现: 回到抢锁流程 (构建方失败释放锁后由本进程接管)
+            # 镜像不存在 → 从项目根 Containerfile 构建 (context = Containerfile 所在目录)
+            context = str(Path(CONTAINERFILE).resolve().parent)
+            r = subprocess.run(
+                ["podman", "build", "-f", CONTAINERFILE,
+                 "-t", DEFAULT_IMAGE, context],
+                capture_output=False, text=True, timeout=1800)
+            if r.returncode != 0:
+                raise RuntimeError(
+                    f"podman build 创建镜像 {DEFAULT_IMAGE} 失败 ({r.returncode}): "
+                    f"{(r.stderr or r.stdout or '').strip()[:300]}")
+            logger.info("自定义镜像 %s 已从 %s 构建 (角色容器从它复制)",
+                        DEFAULT_IMAGE, CONTAINERFILE)
+            return DEFAULT_IMAGE
 
     # ── 分配 / 注册 ───────────────────────────────────────
 
