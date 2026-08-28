@@ -36,31 +36,14 @@ class EventBus:
     """
 
     def __init__(self) -> None:
-        self._tick_schedule: dict[str, tuple[int, Event]] = {}
+        self._tick_schedule: dict[str, Event] = {}
 
     # ── 事件注册 (时间与事件深度绑定) ────────────────────
 
-    def register_event(self, event: Event, tick: Optional[int] = None) -> str:
-        """向调度表注册一个定时事件.
-
-        参数:
-            event: 要注册的 Event.
-            tick:  触发绝对 Tick (必填; None 已无意义 — 立即触发请用
-                   TimeEventBus.register_event, 它走 _dispatch → EventDispatcher).
-
-        返回:
-            事件 ID.
-
-        异常:
-            ValueError: tick 为 None (裸 EventBus 无发送回调, 无法立即投递).
-        """
-        if tick is None:
-            raise ValueError(
-                "EventBus.register_event 需要显式 tick (立即触发请用 "
-                "TimeEventBus.register_event, 它走 _dispatch → EventDispatcher)"
-            )
+    def register_event(self, event: Event, tick: int) -> str:
+        """Register a timed event to be triggered at a specific tick."""
         event.trigger_tick = tick
-        self._tick_schedule[event.id] = (tick, event)
+        self._tick_schedule[event.id] = event
         logger.info("EventBus 注册定时事件: id=%s type=%s → tick %d",
                     event.id, event.event_type, tick)
         return event.id
@@ -72,10 +55,10 @@ class EventBus:
     def list_scheduled_events(self) -> list[dict[str, Any]]:
         """列出待触发的定时事件 (按触发 Tick 排序)."""
         return [
-            {"event_id": eid, "tick": tk, "type": ev.event_type,
+            {"event_id": eid, "tick": ev.trigger_tick, "type": ev.event_type,
              "target_role": ev.target_role}
-            for eid, (tk, ev) in sorted(self._tick_schedule.items(),
-                                        key=lambda kv: kv[1][0])
+            for eid, ev in sorted(self._tick_schedule.items(),
+                                  key=lambda kv: kv[1].trigger_tick)
         ]
 
     def _check_due_events(self, current_tick: int) -> list[Event]:

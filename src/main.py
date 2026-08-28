@@ -27,7 +27,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.core.agent_system import AgentSystem
-from src.core.note_store import NoteStore
 from src.core.role_templates import DEFAULT_ROLES
 from src.core.state_store import StateStore
 from src.core.types import AgentState, Event, Priority
@@ -218,6 +217,7 @@ def run_one_day(system: AgentSystem, day: int, with_client_task: bool) -> None:
             # data/computers/<rid>, 关机也能读到; SSH 无映射则跳过).
             host_dir = role.computer.host_dir
             if host_dir:
+                
                 host_summary = Path(host_dir) / "notes" / NoteStore.summary_filename(day)
                 if host_summary.exists():
                     summary = host_summary.read_text(encoding="utf-8")

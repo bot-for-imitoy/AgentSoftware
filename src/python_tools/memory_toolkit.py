@@ -26,6 +26,8 @@ import logging
 from typing import Any
 
 from src.core.tools import ToolKit
+from src.core.note_store import NoteStore
+from src.core.roles import AgentRole
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +43,13 @@ def create_memory_toolkit() -> ToolKit:
 
     # 工具类持有 store / role 引用 (由 AgentRole.add_toolkit 注入)
 
-    def _get_store() -> Any:
+    def _get_store() -> NoteStore:
         store = tk.require("store", "笔记存储")
         if store is None:
             raise RuntimeError("记忆工具类尚未绑定 NoteStore, 请通过 role.add_toolkit() 注册")
         return store
 
-    def _get_role() -> Any:
+    def _get_role() -> AgentRole:
         return tk.require("role", "角色")
 
     def _summary(args: dict[str, Any]) -> str:

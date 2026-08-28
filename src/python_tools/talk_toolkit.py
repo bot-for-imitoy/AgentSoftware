@@ -22,16 +22,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from mcp_types import Role
+
+from src.core.roles import RolePool
 from src.core.tools import ToolKit
 from src.core.types import AgentState, is_failure_text
 
 logger = logging.getLogger(__name__)
 
 
-def build_team_roster(pool: Any) -> str:
+def build_team_roster(pool: RolePool) -> str:
     """构建团队花名册 (固定格式, 供 talk 描述与 list_roles 工具复用).
-
-    ⚠️ 只暴露人名: 花名册是给 LLM 看的, 内部 role_id (索引) 一律不出现.
 
     格式:
         - **姓名** -- 职责  (组: 所属分组)  Skills: 技能列表
@@ -53,7 +54,7 @@ def build_team_roster(pool: Any) -> str:
     return "\n".join(roster_lines)
 
 
-def _would_deadlock(pool: Any, start_role: Any, sender_id: str) -> bool:
+def _would_deadlock(pool: RolePool, start_role: Role, sender_id: str) -> bool:
     """沿 WAIT 等待链查环: start_role 的等待链上若绕回 sender_id 则成环 (互等死锁).
 
     例: A wait B, B wait C, C wait A → 任一角色再发起 wait 都会被本检测拒绝.
@@ -81,7 +82,7 @@ def _would_deadlock(pool: Any, start_role: Any, sender_id: str) -> bool:
     return False
 
 
-def create_talk_toolkit(pool: Any) -> ToolKit:
+def create_talk_toolkit(pool: RolePool) -> ToolKit:
     """创建通信工具类 (talk + list_roles).
 
     参数:

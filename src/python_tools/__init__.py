@@ -50,7 +50,7 @@ DEFAULT_TOOLKITS: dict[str, Callable[[], object]] = {
     "time": create_time_toolkit,
     "todo": create_todo_toolkit,       # Todo 清单 (个人待办, id+状态管理)
     "task_view": create_task_view_toolkit,   # 任务列表 (队列+历史视图)
-    "hermes": create_hermes_toolkit,         # Hermes Agent 对话 (电脑上安装)
+    # "hermes": create_hermes_toolkit,         # Hermes Agent 对话 (电脑上安装)
     "computer": create_computer_toolkit,          # run_command / computer_status / reboot
     "mcp_manager": lambda: create_mcp_manager_toolkit(_MCP_MANAGER),
     "skill_manager": lambda: create_skill_manager_toolkit(_SKILL_MANAGER),
@@ -79,7 +79,7 @@ def get_toolkit_binders() -> dict[str, Callable[[Any, Any], None]]:
     if _BINDER_CACHE is None:
         from src.python_tools.computer_toolkit import bind_computer_to_toolkit
         from src.python_tools.email_toolkit import bind_email_to_toolkit
-        from src.python_tools.hermes_toolkit import bind_hermes_to_toolkit
+        # from src.python_tools.hermes_toolkit import bind_hermes_to_toolkit
         from src.python_tools.hr_toolkit import bind_role_to_toolkit as bind_hr
         from src.python_tools.mcp_manager import bind_mcp_manager_to_toolkit
         from src.python_tools.memory_toolkit import bind_store_to_toolkit

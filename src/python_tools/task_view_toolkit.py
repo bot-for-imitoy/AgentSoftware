@@ -21,8 +21,9 @@ my_tasks 是系统/同事派发给角色的任务流 (只读视图).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
+from src.core.roles import AgentRole
 from src.core.tools import ToolKit
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,8 @@ def create_task_view_toolkit() -> ToolKit:
 
     # 工具类持有 role 引用 (由 AgentRole.add_toolkit 注入)
 
-    def _get_role() -> Any:
-        role = tk.get("role")
+    def _get_role() -> AgentRole:
+        role: Optional[AgentRole] = tk.get("role")
         if role is None:
             raise RuntimeError("任务列表工具类尚未绑定角色, 请通过 role.add_toolkit() 注册")
         return role

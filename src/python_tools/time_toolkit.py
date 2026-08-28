@@ -22,6 +22,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.core.roles import AgentRole
+from src.core.time_manager import TimeEventBus
 from src.core.tools import ToolKit
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ def create_time_toolkit() -> ToolKit:
         返回:
             当前 Tick 数与作息状态描述.
         """
-        manager = tk.require("manager", "时间管理器")
+        manager: TimeEventBus = tk.require("manager", "时间管理器")
         if manager is None:
             raise RuntimeError("时间工具类尚未绑定 TimeEventBus, 请通过 role.add_toolkit() 注册")
 
@@ -66,8 +68,8 @@ def create_time_toolkit() -> ToolKit:
         返回:
             休息状态说明.
         """
-        manager = tk.require("manager", "时间管理器")
-        role = tk.require("role", "角色")
+        manager: TimeEventBus = tk.require("manager", "时间管理器")
+        role: AgentRole = tk.require("role", "角色")
         if manager is None:
             raise RuntimeError("时间工具类尚未绑定 TimeEventBus, 请通过 role.add_toolkit() 注册")
 

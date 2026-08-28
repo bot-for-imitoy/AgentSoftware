@@ -65,6 +65,7 @@ from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from src.core.computer import Computer
 from src.core.llm import DeepSeekLLM, OllamaLLM
 from src.core.note_store import NoteStore
 from src.core.types import AgentState, Event, Priority
@@ -679,7 +680,7 @@ class AgentRole:
     # ── 公开访问器 (供工具层/存档层使用, 不直接触碰私有字段) ──
 
     @property
-    def computer_if_created(self) -> Optional[Any]:
+    def computer_if_created(self) -> Optional[Computer]:
         """只读获取个人电脑 (未创建返回 None, 不惰性创建).
 
         与 computer property 不同: 后者首次访问会惰性创建并开机
@@ -694,7 +695,7 @@ class AgentRole:
         return self._waiting_reply_from
 
     @property
-    def pool(self) -> Optional[Any]:
+    def pool(self) -> Optional[RolePool]:
         """只读所在角色池 (RolePool, start 时回填; 未启动为 None)."""
         return self._pool
 
