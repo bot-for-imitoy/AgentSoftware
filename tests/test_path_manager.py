@@ -159,8 +159,11 @@ def test_ensure_parents_for_file(tmp_path: Path):
     assert target.parent.is_dir()
 
 
-# ── 参数校验 ───────────────────────────────────────────────────
+# ── 参数默认值 (upstream 演进: app_name 可省略, 供无参调用) ──
 
-def test_empty_app_name_rejected():
-    with pytest.raises(ValueError):
-        PathManager("  ")
+def test_default_app_name():
+    # upstream 的 config_store/note_store 无参调用 PathManager(),
+    # app_name 有默认值 (AgentScheduler) — 不再抛 ValueError
+    pm = PathManager(platform="linux", env={"HOME": LINUX_HOME})
+    assert pm.app_name == "AgentScheduler"
+    assert pm.config_dir() == Path(f"{LINUX_HOME}/.config/AgentScheduler")
