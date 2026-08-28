@@ -10,6 +10,8 @@ data/skills/
 data/todos/
 data/drive/
 data/mail/
+# 镜像构建进程间锁 (fcntl 文件锁, 运行时产物)
+data/.maf-base-image.lock
 .DS_Store
 *.egg-info/
 dist/
