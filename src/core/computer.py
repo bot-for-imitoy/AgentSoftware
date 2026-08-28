@@ -1032,7 +1032,7 @@ class ComputerManager:
             r = subprocess.run(
                 ["podman", "build", "-f", CONTAINERFILE,
                  "-t", DEFAULT_IMAGE, context],
-                capture_output=True, text=True, timeout=1800)
+                capture_output=False, text=True, timeout=1800)
             if r.returncode != 0:
                 raise RuntimeError(
                     f"podman build 创建镜像 {DEFAULT_IMAGE} 失败 ({r.returncode}): "
