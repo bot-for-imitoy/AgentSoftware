@@ -56,7 +56,7 @@ class NoteStore:
         # base_dir 默认值在运行时解析 (默认参数若在定义时求值,
         # PathManager 的 env 覆盖/测试注入会失效 — 固定死 import 时的路径)
         if base_dir is None:
-            base_dir = PathManager().data_dir() / "notes"
+            base_dir = PathManager().data_dir()
         self._base = Path(base_dir)
         self.role_id = role_id
         self._time_manager = time_manager
@@ -275,7 +275,7 @@ class NoteStore:
             保存路径.
         """
         d = day or 1
-        path = self.summary_path / self._summary_filename(d)
+        path = self.summary_path / self.summary_filename(d)
         self._write(path, content)
         logger.info("[%s] 第 %d 天总结已保存: %s", self.role_id, d, Path(path).name)
         return path
@@ -290,7 +290,7 @@ class NoteStore:
             总结内容, 不存在返回 None.
         """
         d = day or 1
-        return self._read(self.summary_path / self._summary_filename(d))
+        return self._read(self.summary_path / self.summary_filename(d))
 
     def get_latest_summary(self, before_day: Optional[int] = None) -> Optional[str]:
         """读取最近一次总结 (用于下一天冷启动).
