@@ -71,8 +71,8 @@ class EventBus:
             到期的事件列表 (已从调度表移除, 调用方负责投递).
         """
         due = []
-        for eid, (tk, ev) in list(self._tick_schedule.items()):
-            if current_tick >= tk:
+        for eid, ev in list(self._tick_schedule.items()):
+            if current_tick >= ev.trigger_tick:
                 del self._tick_schedule[eid]
                 due.append(ev)
         return due

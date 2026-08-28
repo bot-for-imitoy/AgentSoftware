@@ -1,7 +1,7 @@
 """EventBus 收敛后单元测试 (2026-08 清理: 纯调度表, 无过滤管线).
 
 覆盖:
-  - register_event(tick=None) 必须抛 ValueError (裸 EventBus 无发送回调)
+  - EventBus.register_event 需要显式 tick (裸 EventBus 无发送回调)
   - tick=N 注册 → list_scheduled_events / _check_due_events / cancel_event
   - TimeEventBus 覆写 register_event: tick=None 走 _dispatch → 发送回调
 
@@ -28,8 +28,8 @@ class EventBusScheduleTest(unittest.TestCase):
         self.bus = EventBus()
 
     def test_immediate_register_raises(self) -> None:
-        # tick=None (立即触发) 已无意义: 裸 EventBus 没有发送回调
-        with self.assertRaises(ValueError):
+        # 裸 EventBus 的 register_event 需要显式 tick (无发送回调, 无法立即投递)
+        with self.assertRaises(TypeError):
             self.bus.register_event(_ev())
 
     def test_scheduled_register_and_due(self) -> None:

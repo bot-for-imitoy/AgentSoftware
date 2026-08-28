@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -50,8 +51,12 @@ class NoteStore:
                   (笔记与定时任务统一为"笔记"概念, 提醒 = 带时间的笔记).
     """
 
-    def __init__(self, base_dir: str = PathManager().data_dir() / "notes", role_id: str = "",
+    def __init__(self, base_dir: Optional[str] = None, role_id: str = "",
                 time_manager: TimeEventBus = None):
+        # base_dir 默认值在运行时解析 (默认参数若在定义时求值,
+        # PathManager 的 env 覆盖/测试注入会失效 — 固定死 import 时的路径)
+        if base_dir is None:
+            base_dir = PathManager().data_dir() / "notes"
         self._base = Path(base_dir)
         self.role_id = role_id
         self._time_manager = time_manager
@@ -60,15 +65,26 @@ class NoteStore:
 
         self.note_path = self._dir / "notes"
         self.note_path.mkdir(parents=True, exist_ok=True)
-        self.summary_path = self.dir / "summaries"
+        self.summary_path = self._dir / "summaries"
         self.summary_path.mkdir(parents=True, exist_ok=True)
 
     # ── 路径工具 ──────────────────────────────────────────
 
     @staticmethod
+    def _sanitize_title(title: str) -> str:
+        """清洗标题为合法文件名. 非法字符替换为下划线.
+
+        除常规文件名非法字符外, 还替换 shell 元字符 (单引号/反引号/$/分号/&):
+        标题会拼进电脑端 shell 命令, 不转义可被 LLM 注入任意命令 (High-3).
+        """
+        # 非 raw 字符串: \\s 是正则空白, \u0060 是反引号, \\\\ 是反斜杠
+        cleaned = re.sub("[\\\\/:*?\"<>|#%\\s'\u0060$;&]+", "_", title.strip())
+        return cleaned or "untitled"
+
+    @staticmethod
     def _note_filename(title: str) -> str:
         """笔记文件名 (唯一实现, main.py 等消费方统一引用)."""
-        return f"{title}.md"
+        return f"{NoteStore._sanitize_title(title)}.md"
 
     @staticmethod
     def _summary_filename(day: int) -> str:
@@ -259,7 +275,7 @@ class NoteStore:
             保存路径.
         """
         d = day or 1
-        path = self.summary_path / self.summary_filename(d)
+        path = self.summary_path / self._summary_filename(d)
         self._write(path, content)
         logger.info("[%s] 第 %d 天总结已保存: %s", self.role_id, d, Path(path).name)
         return path
@@ -274,7 +290,7 @@ class NoteStore:
             总结内容, 不存在返回 None.
         """
         d = day or 1
-        return self._read(self.summary_path / self.summary_filename(d))
+        return self._read(self.summary_path / self._summary_filename(d))
 
     def get_latest_summary(self, before_day: Optional[int] = None) -> Optional[str]:
         """读取最近一次总结 (用于下一天冷启动).

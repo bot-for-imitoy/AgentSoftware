@@ -56,6 +56,8 @@ def test_uid_assigned_by_registration_order(tmp_path, monkeypatch):
 def test_system_prompt_mentions_cloud_drive(tmp_path, monkeypatch):
     """系统提示词包含公司云盘与 Git 项目管理说明."""
     monkeypatch.setattr("src.core.roles.JOURNAL_DIR", tmp_path / "journals")
+    # NoteStore 默认 data_dir 落到 tmp (只读沙箱不可写 ~/.local/share)
+    monkeypatch.setenv("AGENTSCHEDULER_DATA_DIR", str(tmp_path / "data"))
     pool = RolePool()
     # local 电脑: build_system_prompt → note_store → computer 会触发开机,
     # podman 会走完整容器初始化 (apt+hermes, 数分钟) — 测试用本地模拟
@@ -77,6 +79,7 @@ def test_system_prompt_mentions_cloud_drive(tmp_path, monkeypatch):
 def test_release_manager_prompt_mentions_project_dir(tmp_path, monkeypatch):
     """版本管理角色提示词: 项目保存在 Public/work/, 新项目直接在其中创建 git 仓库."""
     monkeypatch.setattr("src.core.roles.JOURNAL_DIR", tmp_path / "journals")
+    monkeypatch.setenv("AGENTSCHEDULER_DATA_DIR", str(tmp_path / "data"))
     pool = RolePool()
     r = TEMPLATES["release_manager"]()
     r.computer_kind = "local"  # 避免 build_system_prompt 触发 podman 开机

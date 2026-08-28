@@ -198,7 +198,7 @@ class TimeEventBus(EventBus):
             self._dispatch(event)
         else:
             event.trigger_tick = tick
-            self._tick_schedule[event.id] = (tick, event)
+            self._tick_schedule[event.id] = event
             logger.info("TimeEventBus 注册定时事件: id=%s type=%s → tick %d",
                         event.id, event.event_type, tick)
         return event.id
@@ -309,8 +309,8 @@ class TimeEventBus(EventBus):
         candidates: list[int] = []
 
         # 1) 调度表定时事件
-        for tk, _ in self._tick_schedule.values():
-            candidates.append(tk)
+        for ev in self._tick_schedule.values():
+            candidates.append(ev.trigger_tick)
         # 2) 定时任务
         for task in self._tasks.values():
             candidates.append(task.absolute_fire_tick(self.ticks_per_day))
@@ -595,7 +595,7 @@ class TimeEventBus(EventBus):
 
     def _cancel_task_event(self, task_id: str) -> bool:
         """从事件调度表取消某任务对应的事件 (任务被删除/编辑时)."""
-        for eid, (_, ev) in list(self._tick_schedule.items()):
+        for eid, ev in list(self._tick_schedule.items()):
             if ev.payload.get("task_id") == task_id:
                 del self._tick_schedule[eid]
                 return True

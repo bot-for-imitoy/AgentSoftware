@@ -477,7 +477,6 @@ class AgentRole:
         if self._note_store is None:
             from src.core.note_store import NoteStore
             self._note_store = NoteStore(role_id=self.role_id,
-                                         computer=self.computer,
                                          time_manager=self.time_manager)
         return self._note_store
 
