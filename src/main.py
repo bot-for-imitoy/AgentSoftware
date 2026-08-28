@@ -27,6 +27,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.core.agent_system import AgentSystem
+from src.core.note_store import NoteStore
 from src.core.role_templates import DEFAULT_ROLES
 from src.core.state_store import StateStore
 from src.core.types import AgentState, Event, Priority
@@ -211,16 +212,16 @@ def run_one_day(system: AgentSystem, day: int, with_client_task: bool) -> None:
     for rid in ROLE_IDS:
         role = system.get_role(rid)
         summary = role.note_store.get_summary(day=day)
-        if summary is None:
+        # if summary is None:
             # summary 工具保存后立即关机, 电脑回读路径失效 ("电脑未开机").
             # 直接读宿主机挂载目录 (Podman/Local 的 host_dir 都是
             # data/computers/<rid>, 关机也能读到; SSH 无映射则跳过).
-            host_dir = role.computer.host_dir
-            if host_dir:
-                
-                host_summary = Path(host_dir) / "notes" / NoteStore.summary_filename(day)
-                if host_summary.exists():
-                    summary = host_summary.read_text(encoding="utf-8")
+            # host_dir = role.computer.host_dir
+            # if host_dir:
+                # 新架构: 总结独立目录 summaries/, 文件名 <day>.md (纯本地, 不走电脑)
+            #     host_summary = Path(host_dir) / "summaries" / NoteStore._summary_filename(day)
+            #     if host_summary.exists():
+            #        summary = host_summary.read_text(encoding="utf-8")
         if summary:
             ok(f"[{rid}] 第{day}天总结已保存: {summary[:50]}...")
         else:

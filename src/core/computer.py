@@ -102,6 +102,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
+try:  # 进程间文件锁 (Linux/macOS); Windows 无 fcntl, 回退进程内锁
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None  # type: ignore[assignment]
 from src.core.mcp_client import MCPServer
 
 logger = logging.getLogger(__name__)
@@ -117,7 +121,62 @@ DRIVE_ROOT = "./data/drive"           # 企业云盘共享目录 (挂载 /mnt/dr
 # hermes 安装 (单镜像构建约 10 分钟).
 DEFAULT_IMAGE = "maf-base:latest"   # 电脑默认容器镜像 (Containerfile 定义)
 CONTAINERFILE = "Containerfile"     # 镜像定义文件 (项目根)
-_BASE_IMAGE_LOCK = threading.Lock() # 并发保护: 首个调用者建镜像, 其余等待复用
+
+# 镜像构建互斥锁文件: 项目根 data/ 下 (与运行时数据一致, 已 gitignore).
+# 跨进程串行 build 用文件锁 (fcntl.flock): 多个 main.py/role_demo.py 实例
+# 同时启动时, 只有首个拿到锁的进程真正 podman build, 其余等待方轮询探测
+# 镜像出现后直接复用 — 进程退出/kill 时 fd 关闭, 锁自动释放, 不会死锁.
+_BASE_IMAGE_LOCK_FILE = str(Path(CONTAINERFILE).resolve().parent / "data" / ".maf-base-image.lock")
+
+
+class _BaseImageLock:
+    """镜像构建互斥锁: 进程间文件锁, 回退进程内锁.
+
+    语义与 threading.Lock 相同 (try_acquire / release), 但跨进程生效:
+       - Linux/macOS: fcntl.flock(LOCK_EX | LOCK_NB), 进程崩溃自动释放;
+       - Windows: 无 fcntl, 退化为 threading.Lock (进程内互斥, 保住同进程并发).
+    """
+
+    def __init__(self, path: str = _BASE_IMAGE_LOCK_FILE):
+        self._path = path
+        self._fd: Optional[Any] = None
+        self._thread_lock = threading.Lock()
+
+    def try_acquire(self) -> bool:
+        """非阻塞抢锁. 成功返回 True, 已被占用返回 False.
+
+        注意: open/flock 用线程局部 fd, 成功后才会记录到 self._fd —
+        多线程共享同一实例时, 若把 open 结果先存 self._fd, 后到线程的
+        open 会覆盖持锁线程的 fd 引用 (fd 泄漏 + 释放错 fd, 锁永不解).
+        """
+        if fcntl is None:  # Windows 回退: 进程内锁
+            return self._thread_lock.acquire(blocking=False)
+        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        fd = open(self._path, "w")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:  # 已被其他进程持有 (BlockingIOError 是 OSError 子类)
+            fd.close()
+            return False
+        self._fd = fd  # 抢锁成功后才记录 (之后 release 用)
+        return True
+
+    def release(self) -> None:
+        """释放锁. 未持锁时调用是安全的 (幂等)."""
+        if fcntl is None:  # Windows 回退
+            if self._thread_lock.locked():
+                self._thread_lock.release()
+            return
+        fd = self._fd
+        if fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                fd.close()
+                self._fd = None
+
+
+_BASE_IMAGE_LOCK = _BaseImageLock()  # 模块级单例: 并发保护 (跨进程串行 build)
 
 # MCP filesystem 服务器包 (容器内全局安装, 避免每次 npx 拉包)
 MCP_FILESYSTEM_PACKAGE = "@modelcontextprotocol/server-filesystem"
@@ -998,17 +1057,73 @@ class ComputerManager:
         网络用于让各角色电脑 (容器) 之间可以互相通信.
         本机无 podman 时直接返回网络名 (不实际创建, 降级环境无网络).
         加锁: 多角色并行装配时只有一个线程真正执行创建.
+
+        探测容忍: 镜像 build 进行中 podman storage 锁会让探测命令排队,
+        超时不算失败 (重试), 与 ensure_base_image 的等待语义一致.
         """
         if shutil.which("podman") is None:
             return self.network_name
         with self._network_lock:
-            r = subprocess.run(["podman", "network", "exists", self.network_name],
-                               capture_output=True, text=True, timeout=30)
+            for attempt in range(3):
+                try:
+                    r = subprocess.run(
+                        ["podman", "network", "exists", self.network_name],
+                        capture_output=True, text=True, timeout=30)
+                    break
+                except subprocess.TimeoutExpired:
+                    # build 期间 storage 锁排队: 等待后重试, 最多 3 次
+                    logger.warning("podman network exists 超时 (第 %d 次, 可能镜像构建中)",
+                                   attempt + 1)
+                    time.sleep(2)
+            else:
+                logger.warning("podman network exists 多次超时, 跳过网络探测")
+                return self.network_name
             if r.returncode != 0:
                 subprocess.run(["podman", "network", "create", self.network_name],
                                capture_output=True, text=True, timeout=60)
                 logger.info("podman 自定义桥接网络已创建: %s", self.network_name)
         return self.network_name
+
+    def _image_exists(self, timeout: int = 30) -> bool:
+        """探测默认镜像是否存在 (容忍超时: build 期间 storage 锁排队, 超时≠失败)."""
+        try:
+            r = subprocess.run(["podman", "image", "exists", DEFAULT_IMAGE],
+                               capture_output=True, text=True, timeout=timeout)
+            return r.returncode == 0
+        except subprocess.TimeoutExpired:
+            return False  # 仍在构建/排队: 视为还没出现
+
+    def _wait_image_appears(self, window: int = 60, probe_timeout: int = 30) -> bool:
+        """轮询等待镜像出现 (构建方 build 期间探测命令排队, 超时不算失败).
+
+        参数:
+            window:        单轮等待窗口秒数 (之后无论结果都返回, 由调用方
+                           回到抢锁流程 — 构建方若失败释放锁, 本进程接管).
+            probe_timeout: 单次探测超时秒数.
+
+        返回:
+            window 内镜像是否出现.
+        """
+        deadline = time.time() + window
+        while time.time() < deadline:
+            if self._image_exists(timeout=probe_timeout):
+                return True
+            time.sleep(2)
+        return False
+
+    def _build_base_image(self) -> None:
+        """从项目根 Containerfile 构建默认镜像 (须持有 _BASE_IMAGE_LOCK)."""
+        context = str(Path(CONTAINERFILE).resolve().parent)
+        r = subprocess.run(
+            ["podman", "build", "-f", CONTAINERFILE,
+             "-t", DEFAULT_IMAGE, context],
+            capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"podman build 创建镜像 {DEFAULT_IMAGE} 失败 ({r.returncode}): "
+                f"{(r.stderr or r.stdout or '').strip()[:300]}")
+        logger.info("自定义镜像 %s 已从 %s 构建 (角色容器从它复制)",
+                    DEFAULT_IMAGE, CONTAINERFILE)
 
     def ensure_base_image(self) -> str:
         """确保电脑默认容器镜像存在 (由项目根 Containerfile 定义). 返回镜像名.
@@ -1017,15 +1132,25 @@ class ComputerManager:
         (阿里源/apt 包/hermes/MCP 包, 约 10 分钟, 见项目根 Containerfile),
         之后角色容器从该镜像秒建, 只补员工用户.
 
-        并发保护: 模块级锁 + 双检 — 多角色并行装配时首个调用者完成
-        构建, 其余等待后直接复用镜像 (不重复构建).
+        并发保护: 进程间文件锁 + 双检 — 首个调用者 (任意进程) 持锁完成
+        构建; 其余调用者 (含跨进程) 拿不到锁时轮询 podman image exists
+        直到镜像出现, 不再因探测超时 (build 期间 storage 锁排队) 误报失败.
+        构建方失败释放锁后, 等待方回到抢锁流程自行接管构建.
         """
         if shutil.which("podman") is None:
             return DEFAULT_IMAGE  # 降级环境无 podman, 无所谓镜像
-        with _BASE_IMAGE_LOCK:
-            r = subprocess.run(["podman", "image", "exists", DEFAULT_IMAGE],
-                               capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
+        while True:
+            if _BASE_IMAGE_LOCK.try_acquire():
+                try:
+                    # 双检: 持锁后重新确认, 前一个构建方可能刚完成
+                    if self._image_exists():
+                        return DEFAULT_IMAGE
+                    self._build_base_image()
+                    return DEFAULT_IMAGE
+                finally:
+                    _BASE_IMAGE_LOCK.release()
+            # 拿不到锁 → 另一进程正在构建 → 轮询等待镜像出现
+            if self._wait_image_appears():
                 return DEFAULT_IMAGE
             # 镜像不存在 → 从项目根 Containerfile 构建 (context = Containerfile 所在目录)
             context = str(Path(CONTAINERFILE).resolve().parent)

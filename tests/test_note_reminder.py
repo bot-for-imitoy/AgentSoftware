@@ -44,7 +44,7 @@ def _jump_tick(tm: TimeEventBus, tick: int) -> None:
 def test_write_note_with_reminder(tmp_path):
     """write_note 带 remind_tick → 注册提醒 (payload 携带笔记标题)."""
     tm = _make_tm()
-    store = NoteStore(role_id="tester_1", time_manager=tm)
+    store = NoteStore(base_dir=str(tmp_path), role_id="tester_1", time_manager=tm)
     store.write_note("写周报", "本周工作小结", remind_tick=50)
 
     tasks = tm.list_tasks(owner_role="tester_1")
@@ -59,7 +59,7 @@ def test_write_note_with_reminder(tmp_path):
 def test_write_note_without_reminder(tmp_path):
     """不带 remind_tick → 普通笔记, 无提醒."""
     tm = _make_tm()
-    store = NoteStore(role_id="tester_1", time_manager=tm)
+    store = NoteStore(base_dir=str(tmp_path), role_id="tester_1", time_manager=tm)
     store.write_note("普通笔记", "没有提醒")
     assert tm.list_tasks(owner_role="tester_1") == []
     assert store.get_reminder("普通笔记") is None
@@ -68,7 +68,7 @@ def test_write_note_without_reminder(tmp_path):
 def test_delete_note_cancels_reminder(tmp_path):
     """删除带提醒的笔记 → 提醒一并取消."""
     tm = _make_tm()
-    store = NoteStore(role_id="tester_1", time_manager=tm)
+    store = NoteStore(base_dir=str(tmp_path), role_id="tester_1", time_manager=tm)
     store.write_note("待办", "删掉", remind_tick=10)
     assert len(tm.list_tasks(owner_role="tester_1")) == 1
     assert store.delete_note("待办") is True
@@ -78,7 +78,7 @@ def test_delete_note_cancels_reminder(tmp_path):
 def test_edit_note_resets_reminder(tmp_path):
     """edit_note 提供 remind_tick → 旧提醒取消, 注册新提醒."""
     tm = _make_tm()
-    store = NoteStore(role_id="tester_1", time_manager=tm)
+    store = NoteStore(base_dir=str(tmp_path), role_id="tester_1", time_manager=tm)
     store.write_note("计划", "v1", remind_tick=5)
     store.edit_note("计划", "v2", remind_tick=30)
 
@@ -96,7 +96,7 @@ def test_reminder_fires_task_due_event(tmp_path):
     tm = _make_tm()
     captured: list = []
     tm.set_event_sender(lambda ev: captured.append(ev))
-    store = NoteStore(role_id="tester_1", time_manager=tm)
+    store = NoteStore(base_dir=str(tmp_path), role_id="tester_1", time_manager=tm)
 
     store.write_note("下午开会", "记得准备材料", remind_tick=3)
     tm.start()
