@@ -102,6 +102,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
+from src.core.mcp_client import MCPServer
+
 logger = logging.getLogger(__name__)
 
 # ── 路径常量 (使用处统一引用, 不散落字面量) ──────────────
@@ -136,7 +138,7 @@ class Computer(ABC):
         self._on = False
         self._auto_mcp = auto_mcp          # 自动创建的电脑: 创建时自动安装 MCP 服务器
         self._mcp_tools: dict[str, Any] = {}  # 已安装到本电脑的 MCP 工具 (name → ToolDef)
-        self._mcp_server: Any = None       # 本电脑独立的 MCP 服务器连接 (懒创建)
+        self._mcp_server: Optional[MCPServer] = None       # 本电脑独立的 MCP 服务器连接 (懒创建)
         self._connect_error: Optional[str] = None  # 最近一次 MCP 连接失败原因 (诊断用)
 
     # ── MCP 会话存活检测与重连 ───────────────────────────
