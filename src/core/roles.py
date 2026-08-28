@@ -66,7 +66,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from src.core.computer import Computer
-from src.core.llm import DeepSeekLLM, OllamaLLM
+from src.core.llm import DeepSeekLLM, OllamaLLM, OpenAICompatLLM
 from src.core.note_store import NoteStore
 from src.core.types import AgentState, Event, Priority
 
@@ -1000,6 +1000,7 @@ class RolePool:
         参数:
             role_id: 角色 ID, 作为 LLM 的 label (DEBUG 日志区分是谁在调 API).
         """
+        return OpenAICompatLLM(label=role_id)
         if self._llm_provider == "ollama":
             return OllamaLLM(model=self._llm_model, label=role_id)
         return DeepSeekLLM(api_key=self._llm_api_key, model=self._llm_model,
