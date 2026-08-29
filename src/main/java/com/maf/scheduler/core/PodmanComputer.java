@@ -153,7 +153,7 @@ public class PodmanComputer extends Computer {
 
     /** 执行 podman 命令. */
     protected ProcessResult pod(String... args) {
-        return pod(60, args);
+        return pod(600000, args);
     }
 
     protected ProcessResult pod(int timeoutSeconds, String... args) {

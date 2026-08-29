@@ -3,7 +3,9 @@ package com.maf.scheduler.core;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,13 +137,40 @@ public abstract class Computer {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             Process p = pb.start();
+
+            StringBuilder stdoutBuffer = new StringBuilder();
+            StringBuilder stderrBuffer = new StringBuilder();
+
+            // 1. 异步实时读取 stdout
+            Thread stdoutThread = Thread.ofVirtual().start(() -> {
+                try (var reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println(line); // 即时控制台输出
+                        stdoutBuffer.append(line).append("\n"); // 累加日志
+                    }
+                } catch (IOException ignored) {}
+            });
+
+            // 2. 异步实时读取 stderr
+            Thread stderrThread = Thread.ofVirtual().start(() -> {
+                try (var reader = new BufferedReader(new InputStreamReader(p.getErrorStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.err.println(line); // 即时标准错误输出
+                        stderrBuffer.append(line).append("\n");
+                    }
+                } catch (IOException ignored) {}
+            });
+
+            // 3. 写入 stdin
             if (stdinInput != null) {
-                var w = p.outputWriter(StandardCharsets.UTF_8);
-                w.write(stdinInput);
-                w.close();
+                try (var w = p.outputWriter(StandardCharsets.UTF_8)) {
+                    w.write(stdinInput);
+                }
             }
-            String stdout = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String stderr = new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+
+            // 4. 等待子进程完成并确保读取线程结束
             boolean done = p.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             int rc;
             if (!done) {
@@ -150,7 +179,11 @@ public abstract class Computer {
             } else {
                 rc = p.exitValue();
             }
-            return new ProcessResult(stdout, stderr, rc);
+
+            stdoutThread.join();
+            stderrThread.join();
+
+            return new ProcessResult(stdoutBuffer.toString(), stderrBuffer.toString(), rc);
         } catch (IOException e) {
             return new ProcessResult("", "错误: 进程启动失败 - " + e.getMessage(), -2);
         } catch (InterruptedException e) {
