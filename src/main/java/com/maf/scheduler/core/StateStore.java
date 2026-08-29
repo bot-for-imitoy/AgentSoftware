@@ -283,10 +283,19 @@ public class StateStore {
         if (todo.isEmpty()) {
             return;
         }
-        ExecutorService ex = Executors.newFixedThreadPool(Math.min(10, todo.size()));
+        // 并行重建: 每台电脑一个虚拟线程 (Java 21+), 信号量限流避免 podman 打满
+        int maxWorkers = Math.min(10, todo.size());
+        java.util.concurrent.Semaphore gate = new java.util.concurrent.Semaphore(maxWorkers);
+        ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor();
         for (Map.Entry<String, Object> item : todo) {
             ex.submit(() -> {
                 String rid = item.getKey();
+                try {
+                    gate.acquire();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
                 try {
                     Map<String, Object> cdata = (Map<String, Object>) item.getValue();
                     AgentRole role = roles.get(rid);
@@ -303,6 +312,8 @@ public class StateStore {
                     logger.info("StateStore: 电脑已恢复绑定 → {}", rid);
                 } catch (Exception e) {
                     logger.error("StateStore: 电脑恢复失败 → {}", rid, e);
+                } finally {
+                    gate.release();
                 }
             });
         }

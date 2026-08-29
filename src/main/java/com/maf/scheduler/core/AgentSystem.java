@@ -63,23 +63,28 @@ public class AgentSystem {
             role.bindTimeManager(timeManager);
         }
         if (autoToolkits) {
-            // 并行装配: 每角色一个线程, 限制并发数避免 podman/npx 打满
+            // 并行装配: 每角色一个虚拟线程 (Java 21+), 用信号量限制并发数,
+            // 避免 podman/npx 打满 (原固定线程池的 max_workers 语义不变)
             int maxWorkers = Math.min(10, roles.size());
             if (maxWorkers < 1) {
                 maxWorkers = 1;
             }
-            ExecutorService ex = Executors.newFixedThreadPool(maxWorkers,
-                    r -> {
-                        Thread t = new Thread(r, "role-setup");
-                        t.setDaemon(true);
-                        return t;
-                    });
+            java.util.concurrent.Semaphore gate = new java.util.concurrent.Semaphore(maxWorkers);
+            ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor();
             for (AgentRole role : roles) {
                 ex.submit(() -> {
+                    try {
+                        gate.acquire();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
                     try {
                         pool.setupRole(role);
                     } catch (Exception e) {
                         logger.error("AgentSystem: 角色 {} 装配失败 (电脑/MCP)", role.roleId, e);
+                    } finally {
+                        gate.release();
                     }
                 });
             }

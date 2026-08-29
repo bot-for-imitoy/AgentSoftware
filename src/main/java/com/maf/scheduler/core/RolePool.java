@@ -11,8 +11,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -45,17 +43,11 @@ public class RolePool {
                 : System.getenv().getOrDefault("LLM_PROVIDER", "deepseek");
         this.timeManager = timeManager;
         this.autoToolkits = autoToolkits;
-        // 每角色一个常驻 worker 线程: max_workers 必须 ≥ 最大角色数 (46 角色完整团队)
-        this.executor = Executors.newFixedThreadPool(64, new ThreadFactory() {
-            private final AtomicInteger n = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "role-" + n.incrementAndGet());
-                t.setDaemon(true);
-                return t;
-            }
-        });
+        // 每角色一个常驻 worker: 用 Java 21+ 虚拟线程 — 不再受固定线程池
+        // max_workers 上限约束 (46 角色完整团队也无需担心平台线程数),
+        // 角色 worker 大量阻塞在 LLM HTTP 等待/队列轮询上, 虚拟线程开销极小.
+        this.executor = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("role-", 0).factory());
     }
 
     public RolePool() {

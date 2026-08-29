@@ -15,7 +15,7 @@
 ### 构建与测试
 
 ```bash
-# 前置: JDK 17+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
+# 前置: JDK 25+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
 mvn compile          # 编译
 mvn test             # 运行全部 JUnit 测试 (84 个用例)
 mvn package          # 打包 target/maf-scheduler.jar
@@ -60,7 +60,8 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 
 ### 与 Python 版的差异说明
 
-- 构建/测试用 Maven (`pom.xml`), 依赖: Jackson (JSON)、slf4j (日志)、jakarta.mail (SMTP)。
+- 构建/测试用 Maven (`pom.xml`), 依赖: Jackson (JSON)、slf4j (日志)、jakarta.mail (SMTP)。目标 JDK 25 (`maven.compiler.release=25`)。
+- 多线程全部使用 **Java 21+ 虚拟线程**: 角色 worker (`RolePool`)、角色并行装配 (`AgentSystem.addRoles`)、电脑并行恢复 (`StateStore.restoreComputers`) 均改为虚拟线程执行器; 需要限流处 (装配/恢复) 用 `Semaphore` 保持原并发上限语义。每个角色一个常驻虚拟线程, 不再受固定线程池 `max_workers` 约束。
 - LLM 请求用 JDK `java.net.http.HttpClient`, 重试语义 (429/5xx/超时重试, 4xx 立即失败) 与 Python 版一致。
 - MCP 客户端自行实现 newline-delimited JSON-RPC 2.0 走 stdio (不依赖 MCP SDK), 支持 `npx -y <包>` 与自定义命令 (容器内 `podman exec -i`)。
 - 环境变量覆盖路径解析同时支持系统属性 (`-DAGENTSCHEDULER_DATA_DIR=...` 等), 便于测试/容器注入。
