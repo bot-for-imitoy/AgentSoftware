@@ -1,8 +1,71 @@
 # Shift & Event-Driven Agent Scheduler
 
+> **当前分支 `java`: 本分支为 Java 重写版** (Maven + JUnit 5)。
+> Python 原版保存在 `master` 分支。架构、作息规则、工具语义与 Python 版完全一致,
+> 模块一一对应 (见下方「Java 重写说明」)。
+
 > 项目还在开发中，按照 DeepSeek 的说法运行起来是没有问题的。但没有进行广泛测试。
 > 项目基于 Hermes + DeepSeek 开发，会优先适配 DeepSeek。现阶段还在搭框架与测试的早期阶段，后续会逐步建立并完善各模块。
 > 下面的部分是 Hermes 写的。其中带引用部分是作者补充的
+
+---
+
+## Java 重写说明 (java 分支)
+
+### 构建与测试
+
+```bash
+# 前置: JDK 17+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
+mvn compile          # 编译
+mvn test             # 运行全部 JUnit 测试 (84 个用例)
+mvn package          # 打包 target/maf-scheduler.jar
+```
+
+### 运行入口
+
+```bash
+mvn exec:java -Dexec.mainClass=com.maf.scheduler.Main          # 主入口: 多日循环
+mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.RoleDemo # 单角色演示
+mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.TalkDemo # talk 协作链演示
+mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演示
+```
+
+### Python → Java 模块映射
+
+| Python 模块 | Java 类 | 说明 |
+|---|---|---|
+| `core/types.py` | `core/Types.java` | Event / AgentState / Priority |
+| `core/event_bus.py` | `core/EventBus.java` | 定时事件调度表 |
+| `core/time_manager.py` | `core/TimeEventBus.java` | 作息时间引擎 + 事件总线 (含 ScheduledTask) |
+| `core/dispatcher.py` | `core/EventDispatcher.java` | 事件广播 + 3 层过滤 |
+| `core/tools.py` | `core/ToolRegistry.java` | ToolDef / ToolKit / ToolRegistry |
+| `core/roles.py` | `core/AgentRole.java` + `core/RolePool.java` | 角色系统 (含 Task / Urgency / ToolLoopError) |
+| `core/agent_system.py` | `core/AgentSystem.java` | 统一管理 TimeEventBus + RolePool |
+| `core/llm.py` | `core/LLM.java` + `OpenAICompatLLM.java` + `DeepSeekLLM.java` + `OllamaLLM.java` | DeepSeek / Ollama 客户端 (Java HttpClient) |
+| `core/computer.py` | `core/Computer.java` + `PodmanComputer.java` + `SSHComputer.java` + `ComputerManager.java` | 个人电脑体系 |
+| `core/mcp_client.py` | `core/MCPServer.java` | MCP stdio JSON-RPC 客户端 (newline-delimited) |
+| `core/note_store.py` | `core/NoteStore.java` | 笔记 + 每日总结 |
+| `core/todo_store.py` | `core/TodoStore.java` | 个人待办 |
+| `core/state_store.py` | `core/StateStore.java` | 全量状态持久化 (data/state.json) |
+| `core/mail_service.py` | `core/MailService.java` | 公司邮件 (虚拟 / SMTP via jakarta.mail) |
+| `core/role_templates.py` | `core/RoleTemplates.java` | 54 个角色模板 |
+| `core/role_factory.py` | `core/RoleFactory.java` | LLM 驱动招聘 |
+| `core/pinyin_map.py` | `core/PinyinMap.java` | 中文名 → 拼音 |
+| `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
+| `core/config_store.py` | `core/ConfigStore.java` | JSON 配置 (点号路径) |
+| `python_tools/*.py` | `tools/*.java` | 全部工具类 (memory/time/todo/task_view/computer/mcp_manager/skill/email/talk/hr/client/hermes) |
+| `main.py` | `Main.java` | 主入口 |
+| `role_demo.py` / `talk_demo.py` / `mcp_demo.py` | `demo/RoleDemo.java` / `TalkDemo.java` / `McpDemo.java` | 演示 |
+| `tests/*.py` | `src/test/java/**` (JUnit 5) | 核心测试移植 (84 用例) |
+
+### 与 Python 版的差异说明
+
+- 构建/测试用 Maven (`pom.xml`), 依赖: Jackson (JSON)、slf4j (日志)、jakarta.mail (SMTP)。
+- LLM 请求用 JDK `java.net.http.HttpClient`, 重试语义 (429/5xx/超时重试, 4xx 立即失败) 与 Python 版一致。
+- MCP 客户端自行实现 newline-delimited JSON-RPC 2.0 走 stdio (不依赖 MCP SDK), 支持 `npx -y <包>` 与自定义命令 (容器内 `podman exec -i`)。
+- 环境变量覆盖路径解析同时支持系统属性 (`-DAGENTSCHEDULER_DATA_DIR=...` 等), 便于测试/容器注入。
+
+---
 
 基于**企业作息与事件驱动**理念的多角色 AI Agent 调度框架。
 
