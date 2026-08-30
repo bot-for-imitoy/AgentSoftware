@@ -79,8 +79,8 @@ public class RolePool {
         if (timeManager != null) {
             role.bindTimeManager(timeManager);
         }
-        // 默认工具 (memory/time/todo/task_view/computer/mcp_manager/skill_manager/email)
-        for (ToolRegistry.ToolKit toolkit : Toolkits.defaultToolkits()) {
+        // 默认工具 (memory/note/time/todo/task_view/pc/mcp_manager/skill_manager/email)
+        for (com.maf.scheduler.tools.Toolkit toolkit : Toolkits.defaultToolkits(role)) {
             role.addToolkit(toolkit);
         }
         // 默认 MCP 工具组 (如 file_ops 文件操作, 装到角色个人电脑)

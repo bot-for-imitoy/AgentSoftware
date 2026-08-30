@@ -45,3 +45,6 @@ library_checker.py
 __pycache__/
 *.pyc
 *.pyo
+
+# ── 本地 Maven 仓库 (沙箱只读 ~/.m2 时的可写替代) ────────
+.m2w/
