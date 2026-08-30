@@ -1,6 +1,5 @@
 package com.maf.scheduler.core;
 
-import com.maf.scheduler.tools.ToolkitBinders;
 import com.maf.scheduler.tools.ToolkitBridge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -575,14 +574,6 @@ public class AgentRole {
     public int addToolkit(ToolRegistry.ToolKit toolkit) {
         if (tools == null) {
             tools = new ToolRegistry();
-        }
-        // 按工具类名分发绑定逻辑 (holder 模式: 调用时才读角色引用, 跨线程安全)
-        for (Map.Entry<String, java.util.function.BiConsumer<ToolRegistry.ToolKit, AgentRole>> e
-                : ToolkitBinders.getBinders().entrySet()) {
-            if (e.getKey().equals(toolkit.name)) {
-                e.getValue().accept(toolkit, this);
-                break;
-            }
         }
         return tools.addToolkit(toolkit);
     }

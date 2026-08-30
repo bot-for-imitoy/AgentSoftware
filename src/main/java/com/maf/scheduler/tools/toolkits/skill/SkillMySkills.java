@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.tools.SkillToolkit;
+import com.maf.scheduler.tools.toolkits.skill.SkillManager;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.ArrayList;
@@ -15,9 +15,9 @@ import java.util.Map;
 public class SkillMySkills extends Tool {
 
     private final AgentRole agentRole;
-    private final SkillToolkit.SkillManager manager;
+    private final SkillManager manager;
 
-    public SkillMySkills(AgentRole agentRole, SkillToolkit.SkillManager manager) {
+    public SkillMySkills(AgentRole agentRole, SkillManager manager) {
         super();
         this.agentRole = agentRole;
         this.manager = manager;

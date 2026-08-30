@@ -42,7 +42,7 @@ public class ListRoles extends Tool {
     }
 
     /** 构建团队花名册 (固定格式, 供 talk 描述与 list_roles 工具复用). */
-    private static String buildTeamRoster(RolePool pool) {
+    public static String buildTeamRoster(RolePool pool) {
         List<String> rosterLines = new ArrayList<>();
         for (AgentRole r : pool.allRoles()) {
             String resp = !r.responsibilities.isEmpty() ? r.responsibilities : r.title;

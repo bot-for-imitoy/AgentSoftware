@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.tools.SkillToolkit;
+import com.maf.scheduler.tools.toolkits.skill.SkillManager;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -14,9 +14,9 @@ import java.util.Map;
 public class SkillAdd extends Tool {
 
     private final AgentRole agentRole;
-    private final SkillToolkit.SkillManager manager;
+    private final SkillManager manager;
 
-    public SkillAdd(AgentRole agentRole, SkillToolkit.SkillManager manager) {
+    public SkillAdd(AgentRole agentRole, SkillManager manager) {
         super();
         this.agentRole = agentRole;
         this.manager = manager;

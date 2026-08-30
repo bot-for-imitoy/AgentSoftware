@@ -53,7 +53,7 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 | `core/pinyin_map.py` | `core/PinyinMap.java` | 中文名 → 拼音 |
 | `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
 | `core/config_store.py` | `core/ConfigStore.java` | JSON 配置 (点号路径) |
-| `python_tools/*.py` | `tools/*.java` | 全部工具类 (memory/time/todo/task_view/computer/mcp_manager/skill/email/talk/hr/client/hermes) |
+| `python_tools/*.py` | `tools/toolkits/**` (模板风格: 每域一个 Toolkit + 每函数一个 Tool) | 全部工具类 (memory/note/time/todo/task_view/pc/mcp_manager/skill/email/talk/hr/client/hermes), 见 §8.1 |
 | `main.py` | `Main.java` | 主入口 |
 | `role_demo.py` / `talk_demo.py` / `mcp_demo.py` | `demo/RoleDemo.java` / `TalkDemo.java` / `McpDemo.java` | 演示 |
 | `tests/*.py` | `src/test/java/**` (JUnit 5) | 核心测试移植 (84 用例) |

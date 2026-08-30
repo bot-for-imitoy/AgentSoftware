@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools.toolkits.mcp;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.tools.MCPManagerToolkit;
+import com.maf.scheduler.tools.toolkits.mcp.MCPManager;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -14,9 +14,9 @@ import java.util.Map;
 public class McpAdd extends Tool {
 
     private final AgentRole agentRole;
-    private final MCPManagerToolkit.MCPManager manager;
+    private final MCPManager manager;
 
-    public McpAdd(AgentRole agentRole, MCPManagerToolkit.MCPManager manager) {
+    public McpAdd(AgentRole agentRole, MCPManager manager) {
         super();
         this.agentRole = agentRole;
         this.manager = manager;

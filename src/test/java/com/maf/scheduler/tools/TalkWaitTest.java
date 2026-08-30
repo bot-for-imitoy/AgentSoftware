@@ -3,6 +3,8 @@ package com.maf.scheduler.tools;
 import com.maf.scheduler.core.AgentRole;
 import com.maf.scheduler.core.RolePool;
 import com.maf.scheduler.core.ToolRegistry.ToolKit;
+import com.maf.scheduler.tools.toolkits.talk.ListRoles;
+import com.maf.scheduler.tools.toolkits.talk.Talk;
 import com.maf.scheduler.core.ToolRegistry.ToolHandler;
 import com.maf.scheduler.core.Types;
 import org.junit.jupiter.api.Test;
@@ -50,8 +52,7 @@ class TalkWaitTest {
             AgentRole role = AgentRole.builder().name("角色" + rid).roleId(rid).build();
             pool.addRole(role);
             role.setPool(pool);  // 模拟 start() 后的 back-reference
-            ToolKit tk = TalkToolkit.createTalkToolkit(pool);
-            tk.bind("role", role);
+            ToolKit tk = ToolkitBridge.toLegacy(new Talk(role, pool));
             toolkits.put(rid, tk);
         }
         return toolkits;
@@ -76,7 +77,7 @@ class TalkWaitTest {
         RolePool pool = new RolePool();
         pool.addRole(AgentRole.builder().name("张三").roleId("dev_1").build());
         pool.addRole(AgentRole.builder().name("李四").roleId("dev_2").build());
-        String roster = TalkToolkit.buildTeamRoster(pool);
+        String roster = ListRoles.buildTeamRoster(pool);
         assertTrue(roster.contains("张三") && roster.contains("李四"));
         assertFalse(roster.contains("dev_1"));
         assertFalse(roster.contains("dev_2"));
@@ -137,8 +138,7 @@ class TalkWaitTest {
         b.setPool(pool);
         Map<String, ToolKit> tks = new LinkedHashMap<>();
         for (AgentRole r : new AgentRole[]{a, b}) {
-            ToolKit tk = TalkToolkit.createTalkToolkit(pool);
-            tk.bind("role", r);
+            ToolKit tk = ToolkitBridge.toLegacy(new Talk(r, pool));
             tks.put(r.roleId, tk);
         }
         AtomicReference<String> result = new AtomicReference<>();
@@ -267,10 +267,8 @@ class TalkWaitTest {
         // 郭晓东在云盘放附件
         a.computer().writeFile(a.computer().driveRoot() + "/郭晓东/设计稿.md", "附件内容");
 
-        ToolKit tkA = TalkToolkit.createTalkToolkit(pool);
-        tkA.bind("role", a);
-        ToolKit tkB = TalkToolkit.createTalkToolkit(pool);
-        tkB.bind("role", b);
+        ToolKit tkA = ToolkitBridge.toLegacy(new Talk(a, pool));
+        ToolKit tkB = ToolkitBridge.toLegacy(new Talk(b, pool));
         ToolHandler talkA = tkA.getTool("talk").handler;
 
         // 无效附件 (不存在) → 拒绝

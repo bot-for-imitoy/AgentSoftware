@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
-import com.maf.scheduler.tools.SkillToolkit;
+import com.maf.scheduler.tools.toolkits.skill.SkillManager;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.ArrayList;
@@ -14,9 +14,9 @@ import java.util.Map;
  */
 public class SkillSearch extends Tool {
 
-    private final SkillToolkit.SkillManager manager;
+    private final SkillManager manager;
 
-    public SkillSearch(SkillToolkit.SkillManager manager) {
+    public SkillSearch(SkillManager manager) {
         super();
         this.manager = manager;
     }

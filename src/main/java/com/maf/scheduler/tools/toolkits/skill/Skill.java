@@ -1,21 +1,20 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.tools.SkillToolkit;
 import com.maf.scheduler.tools.Toolkit;
 
 /**
  * 技能工具类 (Skill Toolkit) — 基于 SKILL.md 的技能包管理:
  * skill_search / skill_list / skill_add / skill_remove / skill_my_skills.
  *
- * 底层复用全局共享的 {@link SkillToolkit.SkillManager} (扫描技能库 SKILL.md).
+ * 底层复用全局共享的 {@link SkillManager} (扫描技能库 SKILL.md).
  */
 public class Skill extends Toolkit {
 
     private final AgentRole agentRole;
-    private final SkillToolkit.SkillManager manager;
+    private final SkillManager manager;
 
-    public Skill(AgentRole agentRole, SkillToolkit.SkillManager manager) {
+    public Skill(AgentRole agentRole, SkillManager manager) {
         this.agentRole = agentRole;
         this.manager = manager;
         addTool(new SkillSearch(manager));
@@ -26,7 +25,7 @@ public class Skill extends Toolkit {
     }
 
     public Skill(AgentRole agentRole) {
-        this(agentRole, new SkillToolkit.SkillManager());
+        this(agentRole, new SkillManager());
     }
 
     @Override
