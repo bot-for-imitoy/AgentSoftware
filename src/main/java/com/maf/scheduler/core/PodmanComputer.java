@@ -151,9 +151,9 @@ public class PodmanComputer extends Computer {
         return new java.util.LinkedHashMap<>();
     }
 
-    /** 执行 podman 命令. */
+    /** 执行 podman 命令 (默认 60s 超时: 容器操作均为秒级, 卡住应快速失败进入重试/报错, 而非静默数天). */
     protected ProcessResult pod(String... args) {
-        return pod(600000, args);
+        return pod(60, args);
     }
 
     protected ProcessResult pod(int timeoutSeconds, String... args) {

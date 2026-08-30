@@ -180,8 +180,13 @@ public abstract class Computer {
                 rc = p.exitValue();
             }
 
-            stdoutThread.join();
-            stderrThread.join();
+            // 5. 等待读取线程结束 (有界 join). 子进程退出后管道通常会快速 EOF;
+            //    但 podman 的子进程后代 (conmon / 容器进程) 可能仍握着管道写端,
+            //    使 readLine 永久阻塞 — 无超时 join 会让 runProcess 自身卡死
+            //    (叠加 pod() 曾有的 600000s 超时 = 控制台静默近 7 天).
+            long joinDeadline = System.currentTimeMillis() + 30_000;
+            stdoutThread.join(Math.max(1, joinDeadline - System.currentTimeMillis()));
+            stderrThread.join(Math.max(1, joinDeadline - System.currentTimeMillis()));
 
             return new ProcessResult(stdoutBuffer.toString(), stderrBuffer.toString(), rc);
         } catch (IOException e) {

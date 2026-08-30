@@ -2,7 +2,6 @@ package com.maf.scheduler.core;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,8 +21,10 @@ import java.util.Map;
  */
 public final class Json {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT);
+    // 注意: 不在 mapper 上开启 INDENT_OUTPUT — 那会让 stringify() (紧凑, 单行) 也输出
+    // 多行缩进 JSON, 破坏 MCP stdio 的 newline-delimited JSON 传输. 需要缩进的地方
+    // 显式使用 stringifyPretty().
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private Json() {
     }
