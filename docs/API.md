@@ -251,10 +251,10 @@ MailService(config=MailConfig.from_env())
 **邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
 
 ### `RolePool`
-多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（默认 DeepSeek 后端，`llm_provider="ollama"` 时用本地 Ollama 后端；均由 `OpenAICompatLLM` 提供）。
+多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（统一 OpenAI 兼容接口，由 `OpenAICompatLLM` 提供）。
 
 ```python
-RolePool(llm_api_key=None, llm_model=None, llm_provider=None)  # llm_provider 默认读环境变量 LLM_PROVIDER
+RolePool(llm_api_key=None, llm_model=None)  # 配置: 显式参数 > -D 系统属性 > 环境变量 (OPENAI_*) > ConfigStore
 ```
 
 | 方法 | 参数 | 返回 | 说明 |
@@ -469,8 +469,8 @@ loader.close()
 文件: `src/core/llm.py`
 
 ```python
-OpenAICompatLLM(provider="deepseek", api_key=None, model=None)   # 配置: 显式参数 > -D 系统属性 > 环境变量 > ConfigStore
-# provider="ollama" 走本地 Ollama, 免 API Key; 也支持任意 OpenAI 兼容后端
+OpenAICompatLLM(api_key=None, base_url=None, model=None)   # 配置: 显式参数 > -D 系统属性 > 环境变量 > ConfigStore
+# 统一 OpenAI 接口, 不区分后端; 任意 OpenAI 兼容端点均可 (改 base_url/model)
 ```
 
 | 方法 | 参数 | 返回 |
@@ -479,8 +479,8 @@ OpenAICompatLLM(provider="deepseek", api_key=None, model=None)   # 配置: 显�
 | `summarize(text)` | str | `(summary, tokens)` |
 | `chat_with_tools(messages, tools)` | list, list | `(content, tool_calls, usage)` |
 
-环境变量: `DEEPSEEK_API_KEY`（必填）、`DEEPSEEK_MODEL`（默认 deepseek-v4-flash）、`DEEPSEEK_THINKING`（默认 true，思考模式）;
-`LLM_PROVIDER`（deepseek/ollama，切换后端）、`OLLAMA_BASE_URL`（默认 http://localhost:11434）、`OLLAMA_MODEL`（默认 gemma4-16k:latest）。
+环境变量: `OPENAI_API_KEY`（API 密钥，免 Key 的本地端点可省略）、`OPENAI_BASE_URL`（默认 https://api.openai.com）、
+`OPENAI_MODEL`（默认 gpt-4o-mini）；也可用配置文件键 `llm.api_key` / `llm.base_url` / `llm.model`。
 
 ---
 
@@ -489,7 +489,7 @@ OpenAICompatLLM(provider="deepseek", api_key=None, model=None)   # 配置: 显�
 ### 最小多角色系统
 ```python
 import os
-os.environ["DEEPSEEK_API_KEY"] = "sk-xxx"
+os.environ["OPENAI_API_KEY"] = "sk-xxx"
 
 from src.core.agent_system import AgentSystem
 from src.core.types import Event, Priority
@@ -540,7 +540,7 @@ system.get_role("coo").add_toolkit(toolkits.get("memory_ops"))
 ### 运行完整演示
 ```bash
 cd AgentCompany && source .venv/bin/activate
-DEEPSEEK_API_KEY=sk-xxx python -m src.main        # 多日循环演示
-DEEPSEEK_API_KEY=sk-xxx python -m src.role_demo   # 角色并发演示
-DEEPSEEK_API_KEY=sk-xxx python -m src.talk_demo   # 角色通信演示
+OPENAI_API_KEY=sk-xxx python -m src.main        # 多日循环演示
+OPENAI_API_KEY=sk-xxx python -m src.role_demo   # 角色并发演示
+OPENAI_API_KEY=sk-xxx python -m src.talk_demo   # 角色通信演示
 ```
