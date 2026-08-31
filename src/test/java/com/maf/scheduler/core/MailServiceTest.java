@@ -23,8 +23,19 @@ class MailServiceTest {
     @TempDir
     Path tmp;
 
+    /**
+     * 测试角色构造: 与模板同名同 id 时, username 直接取自模板 JSON
+     * (原 PinyinMap 的拼音派生已并入 role_templates.json 的 username 字段).
+     */
     private static AgentRole role(String name, String roleId, String group) {
-        return AgentRole.builder().name(name).roleId(roleId).group(group).build();
+        AgentRole.Builder b = AgentRole.builder().name(name).roleId(roleId).group(group);
+        if (RoleTemplates.TEMPLATES.containsKey(roleId)) {
+            AgentRole t = RoleTemplates.getTemplate(roleId);
+            if (t.name.equals(name)) {
+                b.username(t.username);
+            }
+        }
+        return b.build();
     }
 
     private MailService service(String suffix) {
