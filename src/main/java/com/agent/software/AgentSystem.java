@@ -5,8 +5,8 @@ import com.agent.software.core.Types;
 import com.agent.software.event.EventDispatcher;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.role.AgentRole;
+import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
-import com.agent.software.role.RoleTemplates;
 import com.agent.software.store.ConfigStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +52,7 @@ public class AgentSystem {
         }
         if (roleIds != null) {
             for (String rid : roleIds) {
-                all.add(RoleTemplates.getTemplate(rid));
+                all.add(RoleLoader.getTemplate(rid));
             }
         }
         if (!all.isEmpty()) {
@@ -121,8 +121,8 @@ public class AgentSystem {
     /** 注册全部默认管理角色 (CEO/COO/HR/CFO). */
     public List<AgentRole> addDefaultRoles() {
         List<AgentRole> roles = new ArrayList<>();
-        for (String rid : RoleTemplates.DEFAULT_ROLES) {
-            roles.add(addRole(RoleTemplates.getTemplate(rid)));
+        for (String rid : RoleLoader.DEFAULT_ROLES) {
+            roles.add(addRole(RoleLoader.getTemplate(rid)));
         }
         return roles;
     }

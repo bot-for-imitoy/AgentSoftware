@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * RoleTemplates JSON 化测试: 内置 role_templates.json 资源、JSON → AgentRole 加载器.
+ * RoleLoader JSON 化测试: 内置 role_templates.json 资源、JSON → AgentRole 加载器.
  */
-class RoleTemplatesJsonTest {
+class RoleLoaderJsonTest {
 
     @TempDir
     Path tmp;
@@ -35,10 +35,10 @@ class RoleTemplatesJsonTest {
     /** 内置 JSON 资源必须完整还原出 55 个角色模板, 且默认角色齐全. */
     @Test
     void testResourceLoadsAllTemplates() {
-        assertEquals(55, RoleTemplates.TEMPLATES.size(),
+        assertEquals(55, RoleLoader.TEMPLATES.size(),
                 "内置模板数量应为 55 (role_templates.json)");
-        for (String rid : RoleTemplates.DEFAULT_ROLES) {
-            assertTrue(RoleTemplates.TEMPLATES.containsKey(rid), "默认角色缺失: " + rid);
+        for (String rid : RoleLoader.DEFAULT_ROLES) {
+            assertTrue(RoleLoader.TEMPLATES.containsKey(rid), "默认角色缺失: " + rid);
         }
     }
 
@@ -47,8 +47,8 @@ class RoleTemplatesJsonTest {
     @Test
     void testResourceJsonComplete() throws IOException {
         String resource = new String(
-                RoleTemplates.class.getClassLoader().getResourceAsStream(
-                        RoleTemplates.DEFAULT_TEMPLATES_RESOURCE).readAllBytes(),
+                RoleLoader.class.getClassLoader().getResourceAsStream(
+                        RoleLoader.DEFAULT_TEMPLATES_RESOURCE).readAllBytes(),
                 StandardCharsets.UTF_8);
         Map<String, Object> root = Json.parseObject(resource);
         assertEquals(55, root.size());
@@ -73,7 +73,7 @@ class RoleTemplatesJsonTest {
 
     @Test
     void testTemplateSpotChecks() {
-        AgentRole architect = RoleTemplates.getTemplate("architect");
+        AgentRole architect = RoleLoader.getTemplate("architect");
         assertEquals("王建国", architect.name);
         assertEquals("System Architect", architect.title);
         assertEquals("架构与版本组", architect.group);
@@ -81,20 +81,20 @@ class RoleTemplatesJsonTest {
         assertTrue(architect.skills.contains("C4 Model"));
         assertTrue(architect.interestKeywords.contains("架构"));
 
-        AgentRole ceo = RoleTemplates.getTemplate("CEO");
+        AgentRole ceo = RoleLoader.getTemplate("CEO");
         assertEquals("林总", ceo.name);
         assertTrue(ceo.isDefault);
         assertEquals("领导组", ceo.group);
 
-        AgentRole rm = RoleTemplates.getTemplate("release_manager");
+        AgentRole rm = RoleLoader.getTemplate("release_manager");
         assertTrue(rm.systemPromptExtra.contains("/mnt/drive/Public/work/"));
         assertTrue(rm.systemPromptExtra.contains("git init"));
 
-        AgentRole lead = RoleTemplates.getTemplate("frontend_lead");
+        AgentRole lead = RoleLoader.getTemplate("frontend_lead");
         assertTrue(lead.systemPromptExtra.contains("方谨言"));
         assertTrue(lead.systemPromptExtra.contains("审核"));
 
-        AgentRole tester = RoleTemplates.getTemplate("tester_20");
+        AgentRole tester = RoleLoader.getTemplate("tester_20");
         assertEquals("阮志明", tester.name);
         assertEquals("测试组", tester.group);
     }
@@ -103,7 +103,7 @@ class RoleTemplatesJsonTest {
     @Test
     void testOnlyManagementRolesAreDefault() {
         Set<String> defaultIds = Set.of("CEO", "COO", "HR", "CFO");
-        for (Map.Entry<String, Supplier<AgentRole>> e : RoleTemplates.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             assertEquals(defaultIds.contains(e.getKey()),
                     e.getValue().get().isDefault, e.getKey() + " is_default 不正确");
         }
@@ -138,7 +138,7 @@ class RoleTemplatesJsonTest {
                   }
                 ]
                 """;
-        List<AgentRole> roles = RoleTemplates.loadFromJson(json);
+        List<AgentRole> roles = RoleLoader.loadFromJson(json);
         assertEquals(2, roles.size());
         AgentRole a = roles.get(0);
         assertEquals("alpha", a.roleId);
@@ -171,7 +171,7 @@ class RoleTemplatesJsonTest {
                   }
                 }
                 """;
-        Map<String, Supplier<AgentRole>> table = RoleTemplates.templatesFromJson(json);
+        Map<String, Supplier<AgentRole>> table = RoleLoader.templatesFromJson(json);
         assertEquals(Set.of("alpha"), table.keySet());
         assertEquals("alpha", table.get("alpha").get().roleId);
         assertEquals("张三", table.get("alpha").get().name);
@@ -192,7 +192,7 @@ class RoleTemplatesJsonTest {
                   "interest_keywords": ["b"]
                 }
                 """;
-        List<AgentRole> roles = RoleTemplates.loadFromJson(json);
+        List<AgentRole> roles = RoleLoader.loadFromJson(json);
         assertEquals(1, roles.size());
         assertEquals("solo", roles.get(0).roleId);
         assertEquals("独立角色", roles.get(0).name);
@@ -214,7 +214,7 @@ class RoleTemplatesJsonTest {
                   }
                 }
                 """, StandardCharsets.UTF_8);
-        List<AgentRole> roles = RoleTemplates.loadFromJson(f);
+        List<AgentRole> roles = RoleLoader.loadFromJson(f);
         assertEquals(1, roles.size());
         assertEquals("file_role", roles.get(0).roleId);
     }
@@ -240,7 +240,7 @@ class RoleTemplatesJsonTest {
         m.put("computer_kwargs", Map.of("cpu", "2"));
         m.put("salience_threshold", 0.6);
         m.put("state", "WAIT");
-        AgentRole r = RoleTemplates.fromJsonMap(m);
+        AgentRole r = RoleLoader.fromJsonMap(m);
         assertEquals("rich", r.roleId);
         assertEquals("富字段", r.name);
         assertEquals("fuziduan", r.username);
@@ -271,7 +271,7 @@ class RoleTemplatesJsonTest {
         m.put("personality", "P");
         m.put("skills", List.of("s"));
         m.put("interest_keywords", List.of("k"));
-        AgentRole r = RoleTemplates.fromJsonMap(m);
+        AgentRole r = RoleLoader.fromJsonMap(m);
         assertEquals("derived", r.username);
         assertEquals(1100, r.uid);
     }
@@ -281,17 +281,17 @@ class RoleTemplatesJsonTest {
     /** toJsonMap → fromJsonMap 对单个模板往返后对象逐字段相等. */
     @Test
     void testToJsonMapRoundTrip() {
-        AgentRole src = RoleTemplates.getTemplate("CEO");
-        AgentRole back = RoleTemplates.fromJsonMap(RoleTemplates.toJsonMap(src));
+        AgentRole src = RoleLoader.getTemplate("CEO");
+        AgentRole back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
         assertRoleEquals(src, back);
     }
 
     /** 全部 55 个模板都能 toJsonMap → fromJsonMap 无损往返. */
     @Test
     void testToJsonMapRoundTripAllTemplates() {
-        for (String rid : RoleTemplates.TEMPLATES.keySet()) {
-            AgentRole src = RoleTemplates.getTemplate(rid);
-            AgentRole back = RoleTemplates.fromJsonMap(RoleTemplates.toJsonMap(src));
+        for (String rid : RoleLoader.TEMPLATES.keySet()) {
+            AgentRole src = RoleLoader.getTemplate(rid);
+            AgentRole back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
             assertRoleEquals(src, back);
         }
     }
@@ -299,8 +299,8 @@ class RoleTemplatesJsonTest {
     /** toJsonMap 省略默认值字段 (与内置模板文件形态一致). */
     @Test
     void testToJsonMapOmitsDefaults() {
-        AgentRole architect = RoleTemplates.getTemplate("architect");
-        Map<String, Object> m = RoleTemplates.toJsonMap(architect);
+        AgentRole architect = RoleLoader.getTemplate("architect");
+        Map<String, Object> m = RoleLoader.toJsonMap(architect);
         assertNull(m.get("is_default"));
         assertNull(m.get("email"));
         assertNull(m.get("state"));
@@ -315,21 +315,21 @@ class RoleTemplatesJsonTest {
     /** registerFromJson 把外部 JSON 合并进全局注册表. */
     @Test
     void testRegisterFromJsonMerges() throws IOException {
-        int before = RoleTemplates.TEMPLATES.size();
+        int before = RoleLoader.TEMPLATES.size();
         String json = """
                 {"custom_1": {"name": "自定义", "title": "C", "responsibilities": "x",
                   "personality": "y", "skills": ["s"], "interest_keywords": ["k"]}}
                 """;
         try {
-            int added = RoleTemplates.registerFromJson(json);
+            int added = RoleLoader.registerFromJson(json);
             assertEquals(1, added);
-            assertEquals(before + 1, RoleTemplates.TEMPLATES.size());
-            assertTrue(RoleTemplates.TEMPLATES.containsKey("custom_1"));
-            assertEquals("自定义", RoleTemplates.getTemplate("custom_1").name);
+            assertEquals(before + 1, RoleLoader.TEMPLATES.size());
+            assertTrue(RoleLoader.TEMPLATES.containsKey("custom_1"));
+            assertEquals("自定义", RoleLoader.getTemplate("custom_1").name);
         } finally {
-            RoleTemplates.TEMPLATES.remove("custom_1");  // 清理, 避免影响其他测试
+            RoleLoader.TEMPLATES.remove("custom_1");  // 清理, 避免影响其他测试
         }
-        assertEquals(before, RoleTemplates.TEMPLATES.size());
+        assertEquals(before, RoleLoader.TEMPLATES.size());
     }
 
     // ── 辅助 ────────────────────────────────────────────────

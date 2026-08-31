@@ -70,7 +70,7 @@ public class RoleFactory {
     public AgentRole createRole(String requirement) {
         // 构建现有模板列表供 LLM 参考
         List<Map<String, Object>> existing = new ArrayList<>();
-        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleTemplates.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             AgentRole r = e.getValue().get();
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("role_id", r.roleId);
@@ -103,12 +103,12 @@ public class RoleFactory {
             }
         }
         // 生成唯一人名与 role_id
-        String personName = RoleTemplates.nextName();
+        String personName = RoleLoader.nextName();
         String generatedRoleId = String.valueOf(roleConfig.get("role_id"));
-        if (RoleTemplates.TEMPLATES.containsKey(generatedRoleId)) {
+        if (RoleLoader.TEMPLATES.containsKey(generatedRoleId)) {
             String base = generatedRoleId;
             int dup = 1;
-            while (RoleTemplates.TEMPLATES.containsKey(generatedRoleId)) {
+            while (RoleLoader.TEMPLATES.containsKey(generatedRoleId)) {
                 generatedRoleId = base + "_" + dup;
                 dup++;
             }
@@ -128,7 +128,7 @@ public class RoleFactory {
                 .systemPromptExtra(Json.str(roleConfig, "system_prompt_extra", ""))
                 .build();
         // 注册进模板池
-        RoleTemplates.addTemplate(role);
+        RoleLoader.addTemplate(role);
         logger.info("RoleFactory: created role '{}' ({}) — {}, {} skills, {} keywords, {} tokens",
                 generatedRoleId, personName, role.title, role.skills.size(),
                 role.interestKeywords.size(), resp.tokens);

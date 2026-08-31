@@ -2,7 +2,7 @@ package com.agent.software.tools.toolkits.hr;
 
 import com.agent.software.role.AgentRole;
 
-import com.agent.software.role.RoleTemplates;
+import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Tool;
 import com.agent.software.utils.Json;
 
@@ -35,7 +35,7 @@ public class ListCandidates extends Tool {
     @Override
     public String handler(Map<String, Object> args) {
         List<Map<String, Object>> roles = new ArrayList<>();
-        for (Map.Entry<String, Supplier<AgentRole>> e : RoleTemplates.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             AgentRole r = e.getValue().get();
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("role_id", r.roleId);

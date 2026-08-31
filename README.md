@@ -48,7 +48,7 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 | `core/todo_store.py` | `core/TodoStore.java` | 个人待办 |
 | `core/state_store.py` | `core/StateStore.java` | 全量状态持久化 (data/state.json) |
 | `core/mail_service.py` | `core/MailService.java` | 公司邮件 (虚拟 / SMTP via jakarta.mail) |
-| `core/role_templates.py` | `core/RoleTemplates.java` | 55 个角色模板 (JSON 描述: `src/main/resources/role_templates.json`) |
+| `core/role_templates.py` | `core/RoleLoader.java` | 55 个角色模板 (JSON 描述: `src/main/resources/role_templates.json`) |
 | `core/role_factory.py` | `core/RoleFactory.java` | LLM 驱动招聘 |
 | `core/pinyin_map.py` | — (已并入 `role_templates.json` 的 `username` 字段) | 中文名 → 拼音用户名 |
 | `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
@@ -70,10 +70,10 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
   &gt; 默认值; 各来源键名一致 (见下方环境变量表)。DeepSeek/Ollama 已合并进单个具体类
   `OpenAICompatLLM` (provider 参数选择后端), 不再有抽象基类。
 - 角色模板 JSON 化: 55 个角色模板的内容不再写死在 Java 里, 统一由 `src/main/resources/role_templates.json`
-  (顶层 `role_id → 角色配置` 映射) 描述; `RoleTemplates` 类加载时自动载入注册表。
-  另提供 `RoleTemplates.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
+  (顶层 `role_id → 角色配置` 映射) 描述; `RoleLoader` 类加载时自动载入注册表。
+  另提供 `RoleLoader.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
   等方法, 从任意 JSON (字符串/文件, 支持映射/数组/单对象三种形态) 加载或导出 `AgentRole` 角色对象
-  (测试见 `RoleTemplatesJsonTest`)。原 `PinyinMap` 已删除: 各角色的拼音用户名直接写入 JSON 的
+  (测试见 `RoleLoaderJsonTest`)。原 `PinyinMap` 已删除: 各角色的拼音用户名直接写入 JSON 的
   `username` 字段, 未显式给出时回退 `role_id`。
 
 ---

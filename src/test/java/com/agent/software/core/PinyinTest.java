@@ -2,8 +2,8 @@ package com.agent.software.core;
 
 import com.agent.software.core.Types.AgentState;
 import com.agent.software.role.AgentRole;
+import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
-import com.agent.software.role.RoleTemplates;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,7 +23,7 @@ class PinyinTest {
 
     @Test
     void testAllTemplatesHavePinyinUsername() {
-        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleTemplates.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             AgentRole r = e.getValue().get();
             assertTrue(r.username != null && !r.username.isEmpty(), e.getKey() + " 缺拼音 username");
             assertTrue(r.username.matches("[a-z0-9_]+"),
@@ -92,7 +92,7 @@ class PinyinTest {
         System.setProperty("AGENTSCHEDULER_DATA_DIR", tmp.resolve("data").toString());
         try {
             RolePool pool = new RolePool();
-            AgentRole r = RoleTemplates.getTemplate("release_manager");
+            AgentRole r = RoleLoader.getTemplate("release_manager");
             r.computerKind = "local";  // 避免 buildSystemPrompt 触发 podman 开机
             pool.addRole(r);
             String prompt = r.buildSystemPrompt();

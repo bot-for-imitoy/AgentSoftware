@@ -17,13 +17,14 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Role Templates — 预定义角色模板 (Python 版 role_templates.py 的 Java 对应物).
+ * RoleLoader — 角色加载器: 所有角色统一从 classpath 资源 role_templates.json 加载
+ * (Python 版 role_templates.py 的 Java 对应物, 数据源为 JSON 而非 Java 代码).
  *
- * <p>模板内容统一以 JSON 描述, 内置 55 个角色模板保存在 classpath 资源
+ * <p>角色模板内容全部由 JSON 描述, 内置 55 个角色模板保存在 classpath 资源
  * {@value #DEFAULT_TEMPLATES_RESOURCE} 中, 顶层为 {@code role_id → 角色配置} 的映射.
- * 类加载时自动把 JSON 载入 {@link #TEMPLATES} 注册表 (注册表即 JSON 的唯一数据源,
- * 无需再维护一份 Java 静态定义); 也可通过 {@link #loadFromJson(String)} /
- * {@link #templatesFromJson(String)} 等方法从任意 JSON (字符串/文件) 加载角色对象.
+ * 类加载时自动把 JSON 载入 {@link #TEMPLATES} 注册表 (注册表即 JSON 的唯一数据源);
+ * 也可通过 {@link #loadFromJson(String)} / {@link #templatesFromJson(String)} 等
+ * 方法从任意 JSON (字符串/文件) 加载角色对象.
  *
  * <p>JSON 字段约定 (与 {@link #fromJsonMap(Map)} 一一对应):
  * <pre>
@@ -49,12 +50,12 @@ import java.util.function.Supplier;
  * 支持的 JSON 根形态: ① {@code {role_id: {…}, …}} 注册表映射 (内置文件形态);
  * ② {@code [{…}, …]} 角色对象数组; ③ 单个角色对象 {@code {role_id: …, …}}.
  */
-public final class RoleTemplates {
+public final class RoleLoader {
 
-    /** classpath 上的内置角色模板 JSON 资源名. */
+    /** classpath 上的角色模板 JSON 资源名 (唯一数据源). */
     public static final String DEFAULT_TEMPLATES_RESOURCE = "role_templates.json";
 
-    private RoleTemplates() {
+    private RoleLoader() {
     }
 
     // ── 参数化角色工厂 (程序化注册用) ─────────────────────────
@@ -86,13 +87,13 @@ public final class RoleTemplates {
         loadTemplatesFromResource();
     }
 
-    /** 从 classpath 资源加载内置模板进 {@link #TEMPLATES}. */
+    /** 从 classpath 资源加载角色模板进 {@link #TEMPLATES}. */
     private static void loadTemplatesFromResource() {
-        try (InputStream in = RoleTemplates.class.getClassLoader()
+        try (InputStream in = RoleLoader.class.getClassLoader()
                 .getResourceAsStream(DEFAULT_TEMPLATES_RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException(
-                        "找不到内置角色模板资源: " + DEFAULT_TEMPLATES_RESOURCE);
+                        "找不到角色模板资源: " + DEFAULT_TEMPLATES_RESOURCE);
             }
             String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             registerFromJson(json);
@@ -154,7 +155,7 @@ public final class RoleTemplates {
         return b.build();
     }
 
-    /** AgentRole → 可序列化 JSON Map (默认值字段省略, 与内置模板文件形态一致). */
+    /** AgentRole → 可序列化 JSON Map (默认值字段省略, 与模板文件形态一致). */
     public static Map<String, Object> toJsonMap(AgentRole role) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", role.name);
