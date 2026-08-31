@@ -26,20 +26,38 @@ public class AgentSystem {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentSystem.class);
 
-    public final TimeEventBus timeManager;   // 共享时间源
+    public final TimeEventBus timeManager;   // 共享时间源 (本系统 context 持有)
     public final RolePool pool;
     public final EventDispatcher dispatcher;
     public final boolean autoToolkits;
     public final ConfigStore configStore;
 
+    /** 本系统运行时上下文: 每系统独立的协作对象 (电脑/邮箱/MCP/技能/对话锁) 与数据目录. */
+    private final AgentSystemContext context;
+
+    /**
+     * 默认上下文构造 (数据目录 ./data, 所有协作对象每系统独立实例).
+     * 多实例场景请使用 {@link #AgentSystem(AgentSystemContext, List, List, double, boolean)}.
+     */
     public AgentSystem(List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
-        this.timeManager = new TimeEventBus();
+        this(AgentSystemContext.createDefault(), roles, roleIds, checkInterval, autoToolkits);
+    }
+
+    /**
+     * 显式上下文构造: 每套 {@link AgentSystem} 拥有自己的时钟/电脑注册表/邮箱/
+     * 工具管理器/对话锁与数据目录, 多个系统可在同一进程内安全共存
+     * (见 docs/agent-system-multi-instance.md).
+     */
+    public AgentSystem(AgentSystemContext context, List<AgentRole> roles, List<String> roleIds,
+                       double checkInterval, boolean autoToolkits) {
+        this.context = context;
+        this.timeManager = context.timeManager;
         this.timeManager.checkInterval = checkInterval;
-        this.pool = new RolePool(null, null, timeManager, autoToolkits);
+        this.pool = new RolePool(null, null, timeManager, autoToolkits, context);
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
-        this.configStore = new ConfigStore();
+        this.configStore = context.configStore;
 
         // 时间线程的事件 → 事件分发器 (作息事件统一入口)
         this.timeManager.setEventSender(this::onTimeEvent);
@@ -64,13 +82,20 @@ public class AgentSystem {
         this(null, null, 30.0, true);
     }
 
+    /** 本系统运行时上下文 (每系统独立的协作对象与数据目录). */
+    public AgentSystemContext context() {
+        return context;
+    }
+
     // ── 角色管理 ──────────────────────────────────────────
 
     /** 批量注册角色: 耗时装配 (电脑创建 + MCP 服务器启动) 多线程并行. */
     public List<AgentRole> addRoles(List<AgentRole> roles) {
-        // 先统一绑定共享时间源 (快, 串行)
+        // 先统一绑定共享时间源与系统上下文 (快, 串行) — 保证角色所有惰性依赖
+        // (电脑/邮箱/笔记/待办/日志) 都落在本系统, 而非进程级全局单例
         for (AgentRole role : roles) {
             role.bindTimeManager(timeManager);
+            role.bindContext(context);
         }
         if (autoToolkits) {
             // 并行装配: 每角色一个虚拟线程 (Java 21+), 用信号量限制并发数,

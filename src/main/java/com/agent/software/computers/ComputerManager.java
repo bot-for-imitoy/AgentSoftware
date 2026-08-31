@@ -38,7 +38,12 @@ public class ComputerManager {
 
     public String networkName = DEFAULT_NETWORK_NAME;
 
-    private ComputerManager() {
+    /**
+     * 每系统独立实例: 角色电脑注册表按系统隔离, 使多个 AgentSystem 可安全共存
+     * (见 {@link com.agent.software.AgentSystemContext}). 未注入实例的旧代码
+     * 仍可通过 {@link #getInstance()} 使用进程级默认单例.
+     */
+    public ComputerManager() {
     }
 
     private static final ComputerManager INSTANCE = new ComputerManager();

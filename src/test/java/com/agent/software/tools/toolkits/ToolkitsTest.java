@@ -37,15 +37,15 @@ class ToolkitsTest {
     @TempDir
     Path tmp;
 
-    /** 把应用数据目录指向临时目录 (角色默认 NoteStore 路径可写). */
+    /** 把应用数据目录指向临时目录 (PathManager 前缀 = AGENTCOMPANY, 角色默认存储路径可写). */
     @BeforeEach
     void setUp() {
-        System.setProperty("AGENTSCHEDULER_DATA_DIR", tmp.resolve("data").toString());
+        System.setProperty("AGENTCOMPANY_DATA_DIR", tmp.resolve("data").toString());
     }
 
     @AfterEach
     void tearDown() {
-        System.clearProperty("AGENTSCHEDULER_DATA_DIR");
+        System.clearProperty("AGENTCOMPANY_DATA_DIR");
     }
 
     // ── note 工具类 (与 memory 分离) ──────────────────────

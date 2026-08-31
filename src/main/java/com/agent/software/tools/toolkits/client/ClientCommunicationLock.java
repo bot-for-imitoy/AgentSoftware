@@ -7,8 +7,9 @@ package com.agent.software.tools.toolkits.client;
  * 锁被占用时, 其他成员调用 talk_to_client 会立即收到错误提示,
  * 避免多人同时抢占控制台输入.
  *
- * 单例由 {@link #getInstance()} 获取; 构造器为包私有,
- * 便于测试在同包内创建独立实例 (不污染全局状态).
+ * 进程级默认单例由 {@link #getInstance()} 获取; 每个 {@link
+ * com.agent.software.AgentSystem} 通过 {@link com.agent.software.AgentSystemContext}
+ * 持有自己的锁实例, 多系统互不阻塞. 构造器公开, 便于测试与多实例场景创建独立实例.
  */
 public final class ClientCommunicationLock {
 
@@ -17,7 +18,7 @@ public final class ClientCommunicationLock {
     private String holderRoleId = null;
     private String holderName = null;
 
-    ClientCommunicationLock() {
+    public ClientCommunicationLock() {
     }
 
     public static ClientCommunicationLock getInstance() {

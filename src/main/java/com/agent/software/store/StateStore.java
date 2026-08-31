@@ -4,7 +4,6 @@ import com.agent.software.AgentSystem;
 import com.agent.software.computers.Computer;
 import com.agent.software.core.Types;
 
-import com.agent.software.computers.ComputerManager;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
@@ -115,7 +114,7 @@ public class StateStore {
             String kind = comp.getClass().getSimpleName().replace("Computer", "").toLowerCase();
             c.put("kind", kind);
             c.put("auto_mcp", comp.isAutoMcp());
-            c.put("name", ComputerManager.getInstance().nameOf(role.roleId, role.name));
+            c.put("name", system.context().computerManager.nameOf(role.roleId, role.name));
             computers.put(role.roleId, c);
         }
 
@@ -312,7 +311,7 @@ public class StateStore {
                     if (!List.of("podman", "local", "ssh").contains(kind)) {
                         kind = "podman";
                     }
-                    Computer comp = ComputerManager.getInstance().create(kind, rid,
+                    Computer comp = system.context().computerManager.create(kind, rid,
                             Json.str(cdata, "name", role.name),
                             Json.boolVal(cdata, "auto_mcp", true),
                             new LinkedHashMap<>());

@@ -1,6 +1,7 @@
 package com.agent.software.tools.toolkits.pc;
 
 import com.agent.software.computers.Computer;
+import com.agent.software.computers.ComputerManager;
 import com.agent.software.role.AgentRole;
 
 import com.agent.software.tools.Toolkit;
@@ -17,15 +18,19 @@ public class Pc extends Toolkit {
     private final Computer computer;
 
     public Pc(Computer computer) {
+        this(computer, null);
+    }
+
+    public Pc(Computer computer, ComputerManager manager) {
         this.computer = computer;
         addTool(new RunCommand(computer));
         addTool(new ComputerStatus(computer));
-        addTool(new LanDevices());
+        addTool(new LanDevices(manager));
         addTool(new Reboot(computer));
     }
 
     public Pc(AgentRole agentRole) {
-        this(agentRole.computer());
+        this(agentRole.computer(), agentRole.computerManager());
     }
 
     @Override

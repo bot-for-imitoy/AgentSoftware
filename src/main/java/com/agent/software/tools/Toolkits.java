@@ -1,5 +1,6 @@
 package com.agent.software.tools;
 
+import com.agent.software.AgentSystemContext;
 import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.email.Email;
 import com.agent.software.tools.toolkits.mcp.McpManager;
@@ -63,8 +64,15 @@ public final class Toolkits {
      * 自动逐个加载 (RolePool.setupRole 调用, 传入具体角色以便工具类绑定).
      * 每个调用返回新的独立模板风格工具类实例 (AgentRole.addToolkit(Toolkit)
      * 会自动桥接为旧版 ToolKit 供 LLM 调用).
+     *
+     * <p>工具类使用的协作对象 (MCP/技能/邮箱/对话锁) 优先取角色所属
+     * {@link AgentSystemContext} 的每系统实例, 未绑定上下文的独立角色
+     * 回退到本类的进程级默认单例 (旧行为).
      */
     public static List<Toolkit> defaultToolkits(AgentRole role) {
+        AgentSystemContext ctx = role != null ? role.context() : null;
+        MCPManager mcpManager = ctx != null ? ctx.mcpManager : MCP_MANAGER;
+        SkillManager skillManager = ctx != null ? ctx.skillManager : SKILL_MANAGER;
         List<Toolkit> out = new ArrayList<>();
         out.add(new Memory(role));
         out.add(new Note(role));
@@ -72,11 +80,11 @@ public final class Toolkits {
         out.add(new Todo(role));
         out.add(new TaskView(role));
         out.add(new Pc(role));
-        out.add(new McpManager(role, MCP_MANAGER));
-        out.add(new Skill(role, SKILL_MANAGER));
-        out.add(new Email(role, null));
+        out.add(new McpManager(role, mcpManager));
+        out.add(new Skill(role, skillManager));
+        out.add(new Email(role, ctx != null ? ctx.mailService : null));
         // 领导组全员装备与甲方沟通工具 (talk_to_client, 全局互斥)
-        if (LEADERSHIP_GROUP.equals(role.group)) {
+        if (role != null && LEADERSHIP_GROUP.equals(role.group)) {
             out.add(new Client(role));
         }
         return out;

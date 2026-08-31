@@ -22,6 +22,9 @@ import java.util.regex.Pattern;
  * 每个 Role 绑定一个 NoteStore 实例, 内容按角色隔离:
  *   data/notes/&lt;role_id&gt;/notes/&lt;标题&gt;.md      # 普通笔记
  *   data/notes/&lt;role_id&gt;/summaries/&lt;day&gt;.md   # 每日总结
+ *
+ * 默认基础目录为项目内 data/notes (与 .gitignore 及全项目 ./data/* 布局一致);
+ * 多 AgentSystem 场景下由 AgentSystemContext 传入每系统数据目录, 各系统互不干扰.
  */
 public class NoteStore {
 
@@ -37,8 +40,7 @@ public class NoteStore {
     public final Path summaryPath;
 
     public NoteStore(String baseDir, String roleId, TimeEventBus timeManager) {
-        this.base = baseDir != null ? Paths.get(baseDir)
-                : PathManager.createDefault().dataDir().resolve("notes");
+        this.base = baseDir != null ? Paths.get(baseDir) : Paths.get("data", "notes");
         this.roleId = roleId != null ? roleId : "";
         this.timeManager = timeManager;
         this.dir = this.base.resolve(roleId);
