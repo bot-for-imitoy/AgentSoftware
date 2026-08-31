@@ -48,7 +48,7 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 | `core/todo_store.py` | `core/TodoStore.java` | 个人待办 |
 | `core/state_store.py` | `core/StateStore.java` | 全量状态持久化 (data/state.json) |
 | `core/mail_service.py` | `core/MailService.java` | 公司邮件 (虚拟 / SMTP via jakarta.mail) |
-| `core/role_templates.py` | `core/RoleTemplates.java` | 54 个角色模板 |
+| `core/role_templates.py` | `core/RoleTemplates.java` | 54 个角色模板 (JSON 描述: `src/main/resources/role_templates.json`) |
 | `core/role_factory.py` | `core/RoleFactory.java` | LLM 驱动招聘 |
 | `core/pinyin_map.py` | `core/PinyinMap.java` | 中文名 → 拼音 |
 | `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
@@ -65,6 +65,11 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 - LLM 请求用 JDK `java.net.http.HttpClient`, 重试语义 (429/5xx/超时重试, 4xx 立即失败) 与 Python 版一致。
 - MCP 客户端自行实现 newline-delimited JSON-RPC 2.0 走 stdio (不依赖 MCP SDK), 支持 `npx -y <包>` 与自定义命令 (容器内 `podman exec -i`)。
 - 环境变量覆盖路径解析同时支持系统属性 (`-DAGENTSCHEDULER_DATA_DIR=...` 等), 便于测试/容器注入。
+- 角色模板 JSON 化: 54 个角色模板的内容不再写死在 Java 里, 统一由 `src/main/resources/role_templates.json`
+  (顶层 `role_id → 角色配置` 映射) 描述; `RoleTemplates` 类加载时自动载入注册表。
+  另提供 `RoleTemplates.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
+  等方法, 从任意 JSON (字符串/文件, 支持映射/数组/单对象三种形态) 加载或导出 `AgentRole` 角色对象
+  (测试见 `RoleTemplatesJsonTest`)。
 
 ---
 
