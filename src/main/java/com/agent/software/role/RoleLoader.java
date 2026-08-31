@@ -277,10 +277,11 @@ public final class RoleLoader {
 
     // ── 默认团队 ──────────────────────────────────────────────
 
-    /** 默认团队: 管理层 (CEO/COO/HR) + 工程团队. CFO 保留在 TEMPLATES, 不列入默认集合. */
+    /** 默认团队: 管理层 (CEO/COO/HR/CTO/需求分析师) + 工程团队. CFO 保留在 TEMPLATES, 不列入默认集合. */
     public static final Set<String> DEFAULT_ROLES = new LinkedHashSet<>(Arrays.asList(
             "CEO", "COO", "HR",
             "CTO",
+            "business_analyst",
             "frontend_lead", "backend_lead", "fullstack_lead",
             "mobile_lead", "test_lead",
             "architect", "release_manager",

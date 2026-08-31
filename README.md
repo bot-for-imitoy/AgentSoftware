@@ -272,6 +272,7 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 | COO | 陈总 | 拆解目标→盘点员工→发起招聘 |
 | HR | 王人事 | 招聘申请→发布招聘→新人即入职（无面试） |
 | CFO | 钱财 | 预算批复→Token 限额→高风险审批（模板保留，暂不启用） |
+| 需求分析师 | 徐若楠 | 与甲方（用户）/领导层沟通需求→产出《需求说明书》 |
 
 **技术团队**：architect(王建国) / fullstack_dev(李明) / reviewer(张伟) / qa_engineer(刘洋) / ops_engineer(赵强)
 
@@ -287,7 +288,7 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 
 | 分组 | 成员 |
 |------|------|
-| 领导组 | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 |
+| 领导组 | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 / 需求分析师 徐若楠 |
 | 前端开发组 | frontend_lead 陈思远 + frontend_dev_1~3 |
 | 后端开发组 | backend_lead 王宇轩 + backend_dev_1~3 |
 | 移动开发组 | mobile_lead 张雅婷 + mobile_dev_1~3 |
@@ -586,7 +587,7 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | `event_bus.py` | 事件总线基类: 注册/取消/调度事件 | `EventBus` |
 | `dispatcher.py` | 事件分发器: 广播事件到所有角色 | `EventDispatcher` |
 | `llm.py` | LLM 后端: OpenAICompatLLM 具体类 (chat/summarize/工具调用/重试), 统一 OpenAI 接口, 只读 OPENAI_* 环境变量 | `OpenAICompatLLM` |
-| `role_templates.py` | 55 个角色模板 (46 默认): CEO/COO/HR/CTO/技术负责人/前端后端移动全栈/测试/攻击者等 | `ceo`, `coo`, `frontend_dev`, `create_all_roles`, `get_template`, `TEMPLATES` |
+| `role_templates.py` | 55 个角色模板 (47 默认): CEO/COO/HR/CTO/需求分析师/技术负责人/前端后端移动全栈/测试/攻击者等 | `ceo`, `coo`, `frontend_dev`, `create_all_roles`, `get_template`, `TEMPLATES` |
 | `role_factory.py` | 角色工厂: 按模板创建角色 (指定 api_key/model) | `RoleFactory` |
 | `agent_system.py` | 团队系统: 装配多角色 + 时间引擎 + 事件分发, 并行开机 | `AgentSystem` |
 | `tools.py` | 工具注册表: ToolDef(工具定义) / ToolKit(工具类) / ToolRegistry(统一注册/调用/OpenAI schema 导出) | `ToolDef`, `ToolKit`, `ToolRegistry` |
