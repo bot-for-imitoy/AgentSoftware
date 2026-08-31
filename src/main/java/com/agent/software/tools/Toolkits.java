@@ -1,5 +1,6 @@
 package com.agent.software.tools;
 
+import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.email.Email;
 import com.agent.software.tools.toolkits.mcp.McpManager;
 import com.agent.software.tools.toolkits.memory.Memory;
@@ -46,6 +47,9 @@ public final class Toolkits {
     /** 默认 MCP 工具组: 文件操作 MCP 工具集. */
     public static final List<String> DEFAULT_MCP_GROUPS = List.of("file_ops");
 
+    /** 领导组组名 (对应 role_templates.json 的 group 字段). */
+    public static final String LEADERSHIP_GROUP = "Leadership Group";
+
     public static MCPManager getMcpManager() {
         return MCP_MANAGER;
     }
@@ -71,6 +75,10 @@ public final class Toolkits {
         out.add(new McpManager(role, MCP_MANAGER));
         out.add(new Skill(role, SKILL_MANAGER));
         out.add(new Email(role, null));
+        // 领导组全员装备与甲方沟通工具 (talk_to_client, 全局互斥)
+        if (LEADERSHIP_GROUP.equals(role.group)) {
+            out.add(new Client(role));
+        }
         return out;
     }
 }

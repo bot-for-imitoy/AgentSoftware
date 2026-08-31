@@ -1,6 +1,5 @@
 package com.agent.software;
 
-import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
@@ -218,10 +217,9 @@ public class Main {
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
         step("创建 AgentSystem, 加入 " + roleIds.size() + " 个默认角色...");
         AgentSystem system = new AgentSystem(null, roleIds, 30.0, true);
-        system.getRole("CEO").addToolkit(new Client(system.getRole("CEO")));
         system.getRole("HR").addToolkit(new Hr(system.getRole("HR"), null));
         ok("角色就绪: " + system.pool.listRoles().size() + " 人 (CEO/COO/HR + 工程团队)");
-        ok("CEO 已装备 talk_to_client (与甲方实时交流)");
+        ok("领导组已装备 talk_to_client (与甲方实时交流, 同一时间仅一人可与甲方对话)");
         ok("HR 已装备招聘工具 (post_job_posting / list_candidates)");
 
         // 0. 恢复上次进度 (StateStore)

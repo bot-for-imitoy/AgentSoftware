@@ -13,7 +13,7 @@ public class Client extends Toolkit {
 
     public Client(AgentRole agentRole) {
         this.agentRole = agentRole;
-        addTool(new TalkToClient());
+        addTool(new TalkToClient(agentRole));
     }
 
     @Override
