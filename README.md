@@ -41,7 +41,7 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 | `core/tools.py` | `core/ToolRegistry.java` | ToolDef / ToolKit / ToolRegistry |
 | `core/roles.py` | `core/AgentRole.java` + `core/RolePool.java` | 角色系统 (含 Task / Urgency / ToolLoopError) |
 | `core/agent_system.py` | `core/AgentSystem.java` | 统一管理 TimeEventBus + RolePool |
-| `core/llm.py` | `core/LLM.java` + `OpenAICompatLLM.java` + `DeepSeekLLM.java` + `OllamaLLM.java` | DeepSeek / Ollama 客户端 (Java HttpClient) |
+| `core/llm.py` | `core/LLM.java` + `OpenAICompatLLM.java` | DeepSeek / Ollama / 任意 OpenAI 兼容客户端 (Java HttpClient) |
 | `core/computer.py` | `core/Computer.java` + `PodmanComputer.java` + `SSHComputer.java` + `ComputerManager.java` | 个人电脑体系 |
 | `core/mcp_client.py` | `core/MCPServer.java` | MCP stdio JSON-RPC 客户端 (newline-delimited) |
 | `core/note_store.py` | `core/NoteStore.java` | 笔记 + 每日总结 |
@@ -65,6 +65,10 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 - LLM 请求用 JDK `java.net.http.HttpClient`, 重试语义 (429/5xx/超时重试, 4xx 立即失败) 与 Python 版一致。
 - MCP 客户端自行实现 newline-delimited JSON-RPC 2.0 走 stdio (不依赖 MCP SDK), 支持 `npx -y <包>` 与自定义命令 (容器内 `podman exec -i`)。
 - 环境变量覆盖路径解析同时支持系统属性 (`-DAGENTSCHEDULER_DATA_DIR=...` 等), 便于测试/容器注入。
+- **LLM 配置统一分层解析**: 构造器显式参数 &gt; Java 参数 (`-D` 系统属性) &gt; 环境变量 &gt;
+  配置文件 (ConfigStore, 点号键如 `llm.deepseek.api_key` / `llm.ollama.base_url` / `llm.provider`)
+  &gt; 默认值; 各来源键名一致 (见下方环境变量表)。DeepSeek/Ollama 已合并进单个具体类
+  `OpenAICompatLLM` (provider 参数选择后端), 不再有抽象基类。
 - 角色模板 JSON 化: 55 个角色模板的内容不再写死在 Java 里, 统一由 `src/main/resources/role_templates.json`
   (顶层 `role_id → 角色配置` 映射) 描述; `RoleTemplates` 类加载时自动载入注册表。
   另提供 `RoleTemplates.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
@@ -471,6 +475,10 @@ print(dev._tools.call_tool("lan_devices", {}))
 
 ## 环境变量
 
+下表所有 LLM 变量均可改用 Java 参数 (`-D<同名>`, 优先级最高) 或配置文件
+(ConfigStore, 键如 `llm.deepseek.api_key` / `llm.ollama.base_url` / `llm.provider`,
+优先级最低) 提供; 三处都不设置时才使用默认值。
+
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | DEEPSEEK_API_KEY | (必填) | DeepSeek API 密钥 |
@@ -511,8 +519,9 @@ export SMTP_PASSWORD="********"
 ### 使用本地 Ollama 模型
 
 项目默认走 DeepSeek 云端 API。要改用本地 Ollama (OpenAI 兼容端点, 免 API Key),
-设置环境变量后照常运行即可, 角色线程与招聘流程 (`RolePool`/`RoleFactory`) 会自动
-切换到 `OllamaLLM`:
+设置环境变量 (或 `-DLLM_PROVIDER=ollama` / 配置文件 `llm.provider`) 后照常运行即可,
+角色线程与招聘流程 (`RolePool`/`RoleFactory`) 会自动切换到 Ollama 后端
+(`OpenAICompatLLM` provider=ollama):
 
 ```bash
 export LLM_PROVIDER=ollama                     # 全局切换后端
@@ -521,7 +530,9 @@ ollama serve                                    # 确保本地服务在跑
 python src/role_demo.py                         # 示例: 多角色系统全走本地模型
 ```
 
-也可代码级指定: `RolePool(llm_provider="ollama")` 或 `RoleFactory(provider="ollama")`。
+也可代码级指定: `RolePool(llm_provider="ollama")` 或 `RoleFactory(provider="ollama")`,
+或 `new OpenAICompatLLM("ollama")` 直接创建客户端 (provider 参数: `deepseek` / `ollama` /
+自定义 OpenAI 兼容后端)。
 
 ### 状态持久化 (StateStore)
 
@@ -572,7 +583,7 @@ pool.journal_all("全局通知")   # 每个角色的日志都写一条
 | `time_manager.py` | 作息时间引擎 + 事件总线: Tick/天/上下班事件, 定时任务, 全角色空闲才快进 Tick | `TimeEventBus`, `ScheduledTask` |
 | `event_bus.py` | 事件总线基类: 注册/取消/调度事件 | `EventBus` |
 | `dispatcher.py` | 事件分发器: 广播事件到所有角色 | `EventDispatcher` |
-| `llm.py` | LLM 后端抽象: OpenAICompatLLM 基类(chat/summarize/工具调用/重试) + DeepSeekLLM + OllamaLLM(本地模型) | `OpenAICompatLLM`, `DeepSeekLLM`, `OllamaLLM` |
+| `llm.py` | LLM 后端: OpenAICompatLLM 具体类 (chat/summarize/工具调用/重试), provider 选 DeepSeek/Ollama/任意 OpenAI 兼容后端 | `OpenAICompatLLM` |
 | `role_templates.py` | 55 个角色模板 (46 默认): CEO/COO/HR/CTO/技术负责人/前端后端移动全栈/测试/攻击者等 | `ceo`, `coo`, `frontend_dev`, `create_all_roles`, `get_template`, `TEMPLATES` |
 | `role_factory.py` | 角色工厂: 按模板创建角色 (指定 api_key/model/provider) | `RoleFactory` |
 | `agent_system.py` | 团队系统: 装配多角色 + 时间引擎 + 事件分发, 并行开机 | `AgentSystem` |

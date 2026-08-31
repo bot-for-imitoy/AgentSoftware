@@ -2,10 +2,9 @@ package com.agent.software.role;
 
 import com.agent.software.computers.ComputerManager;
 import com.agent.software.event.TimeEventBus;
-import com.agent.software.tools.Toolkit;
-import com.agent.software.llm.DeepSeekLLM;
 import com.agent.software.llm.LLM;
-import com.agent.software.llm.OllamaLLM;
+import com.agent.software.llm.OpenAICompatLLM;
+import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.Toolkits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,8 +44,7 @@ public class RolePool {
                     TimeEventBus timeManager, boolean autoToolkits) {
         this.llmApiKey = llmApiKey;
         this.llmModel = llmModel;
-        this.llmProvider = llmProvider != null ? llmProvider
-                : System.getenv().getOrDefault("LLM_PROVIDER", "deepseek");
+        this.llmProvider = llmProvider != null ? llmProvider : OpenAICompatLLM.resolveProvider();
         this.timeManager = timeManager;
         this.autoToolkits = autoToolkits;
         // 每角色一个常驻 worker: 用 Java 21+ 虚拟线程 — 不再受固定线程池
@@ -97,10 +95,7 @@ public class RolePool {
 
     /** 按 llm_provider 创建角色 LLM 客户端 (带角色日志前缀). */
     public LLM newLlm(String roleId) {
-        if ("ollama".equals(llmProvider)) {
-            return new OllamaLLM(null, null, llmModel, roleId, null);
-        }
-        return new DeepSeekLLM(llmApiKey, null, llmModel, null, roleId, null);
+        return new OpenAICompatLLM(llmProvider, llmApiKey, null, llmModel, null, roleId, null);
     }
 
     /** 动态入职: 注册新角色并立即启动其 worker 线程 (招聘流程用). */

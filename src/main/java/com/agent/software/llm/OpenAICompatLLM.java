@@ -1,8 +1,8 @@
 package com.agent.software.llm;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.agent.software.store.ConfigStore;
 import com.agent.software.utils.Json;
+import com.agent.software.utils.LayeredConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,16 +17,31 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI 兼容 chat/completions 客户端基类 (Python 版 llm.py 的
- * OpenAICompatLLM). DeepSeek/Ollama 两个后端协议完全一致 (OpenAI 格式),
- * 差异只有环境变量名 / 默认模型 / 是否需要 API Key / 是否注入 thinking 参数.
+ * 统一的 OpenAI 兼容 chat/completions 客户端 (Python 版 llm.py 的 OpenAICompatLLM).
  *
- * 子类覆盖类属性即可, 无需重写请求逻辑.
+ * <p>DeepSeek / Ollama 等 OpenAI 兼容后端的请求协议完全一致 (OpenAI 格式), 差异只有
+ * 环境变量名 / 默认模型 / 是否需要 API Key / 是否注入 thinking 参数 — 因此合并为单个
+ * <b>具体类</b>, 通过 {@code provider} 参数选择后端, 不再需要 DeepSeekLLM / OllamaLLM
+ * 子类 (也不再存在抽象基类, 客户端层次只有 {@link LLM} 接口 + 本实现).
+ *
+ * <p><b>配置解析统一优先级</b> (高 → 低, 与 {@link LayeredConfig} 一致):
+ * <ol>
+ *   <li>构造器显式参数 (apiKey / baseUrl / model / thinking);</li>
+ *   <li>Java 参数: 系统属性 {@code -DDEEPSEEK_API_KEY=...} 等 (键名与环境变量一致);</li>
+ *   <li>环境变量: {@code DEEPSEEK_API_KEY} / {@code OLLAMA_BASE_URL} 等;</li>
+ *   <li>配置文件: {@link ConfigStore} 点号路径 {@code llm.&lt;provider&gt;.&lt;field&gt;} 与通用
+ *       {@code llm.&lt;field&gt;};</li>
+ *   <li>默认值.</li>
+ * </ol>
+ * 后端选择 (provider) 同样分层读取: {@code -DLLM_PROVIDER} / {@code LLM_PROVIDER} /
+ * {@code llm.provider}, 缺省 {@code deepseek}.
  */
-public abstract class OpenAICompatLLM implements LLM {
+public class OpenAICompatLLM implements LLM {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAICompatLLM.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** 默认后端. */
+    public static final String DEFAULT_PROVIDER = "deepseek";
 
     // ── 请求失败重试 (用户指定) ────────────────────────────────
     // 可恢复错误等 retryDelay 秒 (10s) 重试, 最多 retryMax 次 (200);
@@ -35,14 +50,20 @@ public abstract class OpenAICompatLLM implements LLM {
     public int retryMax = 200;
     public int apiTimeoutSeconds = 120;
 
-    // 子类覆盖
+    // ── 后端规格 (由 provider 决定) ─────────────────────────
+    /** 后端标识: "deepseek" | "ollama" | 自定义 OpenAI 兼容名. */
+    public final String provider;
+    /** 日志前缀 (如 "DeepSeek"). */
     public String apiName = "LLM";
+    /** API Key 环境变量名 (无需 Key 的后端为空串). */
     public String apiKeyEnv = "";
     public String baseUrlEnv = "";
     public String modelEnv = "";
     public String defaultBaseUrl = "";
     public String defaultModel = "";
     public boolean requiresApiKey = false;
+    /** 是否启用思考模式 (仅 deepseek, 缺省 true). */
+    public boolean thinking;
 
     protected String apiKey;
     protected String baseUrl;
@@ -51,35 +72,112 @@ public abstract class OpenAICompatLLM implements LLM {
     protected String retryError = "";            // 最近一次请求失败原因
     protected final ConfigStore configStore;
 
-    protected OpenAICompatLLM(String apiKey, String baseUrl, String model, String label,
-                              ConfigStore configStore) {
+    /** 便捷构造: provider 必填, 其余全部走分层配置 (Java 参数 &gt; 环境变量 &gt; ConfigStore). */
+    public OpenAICompatLLM(String provider) {
+        this(provider, null, null, null, null, null, null);
+    }
+
+    /**
+     * 完整构造.
+     *
+     * @param provider 后端: "deepseek" / "ollama" / 自定义 OpenAI 兼容名; null = 分层解析 LLM_PROVIDER
+     * @param apiKey   显式 API Key (null = 分层解析)
+     * @param baseUrl  显式 Base URL (null = 分层解析)
+     * @param model    显式模型名 (null = 分层解析)
+     * @param thinking 显式 thinking 开关 (仅 deepseek 生效; null = 分层解析)
+     * @param label    角色标识 (DEBUG 日志前缀)
+     */
+    public OpenAICompatLLM(String provider, String apiKey, String baseUrl, String model,
+                           Boolean thinking, String label, ConfigStore configStore) {
+        this(provider, apiKey, baseUrl, model, thinking, label, configStore, null, null);
+    }
+
+    /**
+     * 测试注入版: env / props 为配置快照 (null = 读取真实系统属性 / 环境变量),
+     * 与 PathManager 的注入方式一致.
+     */
+    OpenAICompatLLM(String provider, String apiKey, String baseUrl, String model,
+                    Boolean thinking, String label, ConfigStore configStore,
+                    Map<String, String> env, Map<String, String> props) {
         this.configStore = configStore != null ? configStore : new ConfigStore();
-        String provider = apiName.toLowerCase();
-        String envKey = System.getenv().getOrDefault(apiKeyEnv, "");
-        this.apiKey = apiKey != null ? apiKey : strVal(configValue(provider, "api_key", envKey));
-        String envBase = System.getenv().getOrDefault(baseUrlEnv, defaultBaseUrl);
-        String b = baseUrl != null ? baseUrl : strVal(configValue(provider, "base_url", envBase));
-        this.baseUrl = b.endsWith("/") ? b.substring(0, b.length() - 1) : b;
-        String envModel = System.getenv().getOrDefault(modelEnv, defaultModel);
-        this.model = model != null ? model : strVal(configValue(provider, "model", envModel));
+        this.provider = (provider != null && !provider.isEmpty())
+                ? provider.toLowerCase() : resolveProvider(env, props);
+        applyProvider(this.provider);
         this.label = label != null ? label : "";
+        this.apiKey = first(apiKey, LayeredConfig.get(apiKeyEnv, configStore,
+                storeKeys("api_key"), "", env, props));
+        this.baseUrl = stripSlash(first(baseUrl, LayeredConfig.get(baseUrlEnv, configStore,
+                storeKeys("base_url"), defaultBaseUrl, env, props)));
+        this.model = first(model, LayeredConfig.get(modelEnv, configStore,
+                storeKeys("model"), defaultModel, env, props));
+        this.thinking = "deepseek".equals(this.provider)
+                ? LayeredConfig.getBool("DEEPSEEK_THINKING", configStore,
+                        storeKeys("thinking"), true, env, props)
+                : false;
         if (requiresApiKey && (this.apiKey == null || this.apiKey.isEmpty())) {
             throw new IllegalArgumentException(String.format(
-                    "%s API key is required. Set %s env var or pass api_key= to %s().",
-                    apiName, apiKeyEnv, getClass().getSimpleName()));
+                    "%s API key is required. Set %s (system property or env var) or "
+                            + "llm.%s.api_key / llm.api_key in the config file, or pass api_key= to OpenAICompatLLM().",
+                    apiName, apiKeyEnv, this.provider));
         }
     }
 
-    private Object configValue(String provider, String field, Object def) {
-        Object v = configStore.get("llm." + provider + "." + field, null);
-        if (v != null) {
-            return v;
-        }
-        return configStore.get("llm." + field, def);
+    /** 解析 LLM 后端: Java 参数 &gt; 环境变量 &gt; 配置文件 (llm.provider) &gt; 默认 deepseek. */
+    public static String resolveProvider() {
+        return resolveProvider(null, null);
     }
 
-    private static String strVal(Object o) {
-        return o == null ? "" : String.valueOf(o);
+    static String resolveProvider(Map<String, String> env, Map<String, String> props) {
+        return LayeredConfig.get("LLM_PROVIDER", new ConfigStore(),
+                new String[]{"llm.provider"}, DEFAULT_PROVIDER, env, props);
+    }
+
+    // ── 后端规格 ────────────────────────────────────────────
+
+    private void applyProvider(String provider) {
+        switch (provider) {
+            case "ollama" -> {
+                apiName = "Ollama";
+                apiKeyEnv = "";
+                baseUrlEnv = "OLLAMA_BASE_URL";
+                modelEnv = "OLLAMA_MODEL";
+                defaultBaseUrl = "http://localhost:11434";
+                defaultModel = "gemma4-16k:latest";
+                requiresApiKey = false;
+            }
+            case "deepseek" -> {
+                apiName = "DeepSeek";
+                apiKeyEnv = "DEEPSEEK_API_KEY";
+                baseUrlEnv = "DEEPSEEK_BASE_URL";
+                modelEnv = "DEEPSEEK_MODEL";
+                defaultBaseUrl = "https://api.deepseek.com";
+                defaultModel = "deepseek-v4-flash";
+                requiresApiKey = true;
+            }
+            default -> {
+                // 自定义 OpenAI 兼容后端 (vLLM / LM Studio / 私有网关等)
+                apiName = provider;
+                apiKeyEnv = "OPENAI_API_KEY";
+                baseUrlEnv = "OPENAI_BASE_URL";
+                modelEnv = "OPENAI_MODEL";
+                defaultBaseUrl = "https://api.openai.com";
+                defaultModel = "gpt-4o-mini";
+                requiresApiKey = false;
+            }
+        }
+    }
+
+    /** ConfigStore 点号路径: 优先 provider 专属, 回退通用. */
+    private String[] storeKeys(String field) {
+        return new String[]{"llm." + provider + "." + field, "llm." + field};
+    }
+
+    private static String first(String explicit, String resolved) {
+        return explicit != null ? explicit : resolved;
+    }
+
+    private static String stripSlash(String s) {
+        return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
     }
 
     // ── 调试日志 (带角色前缀) ─────────────────────────────
@@ -146,7 +244,7 @@ public abstract class OpenAICompatLLM implements LLM {
         if (maxTokens != null) {
             payload.put("max_tokens", maxTokens);
         }
-        extraPayload(payload, maxTokens);
+        applyExtraPayload(payload, maxTokens);
         debug("{} API call (tools): model={} messages={} tools={}",
                 apiName, model, messages.size(), tools.size());
 
@@ -179,11 +277,20 @@ public abstract class OpenAICompatLLM implements LLM {
         return new LLM.ToolsResponse(content, rawCalls, usage.isEmpty() ? null : usage);
     }
 
-    // ── 子类钩子 ───────────────────────────────────────────
+    // ── 后端私有参数注入 ───────────────────────────────────
 
-    /** 子类钩子: 在发送前向 payload 注入私有参数 (基类默认不注入). */
-    protected void extraPayload(Map<String, Object> payload, Integer maxTokens) {
-        // no-op
+    /** 发送前向 payload 注入后端私有参数 (deepseek 思考模式; 其余后端不注入). */
+    private void applyExtraPayload(Map<String, Object> payload, Integer maxTokens) {
+        if (!"deepseek".equals(provider) || !thinking) {
+            return;
+        }
+        Map<String, Object> thinkingPayload = new LinkedHashMap<>();
+        thinkingPayload.put("type", "enabled");
+        payload.put("thinking", thinkingPayload);
+        Object cur = payload.get("max_tokens");
+        if (cur instanceof Number n && n.intValue() < 1024) {
+            payload.put("max_tokens", 1024);
+        }
     }
 
     // ── Internal ───────────────────────────────────────────
@@ -321,7 +428,7 @@ public abstract class OpenAICompatLLM implements LLM {
         payload.put("messages", messages);
         payload.put("temperature", temperature);
         payload.put("max_tokens", maxTokens);
-        extraPayload(payload, maxTokens);
+        applyExtraPayload(payload, maxTokens);
         debug("{} API call: model={} messages={}", apiName, model, messages.size());
 
         Map<String, Object> data = postWithRetry(url, payload);

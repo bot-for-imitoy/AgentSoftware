@@ -251,7 +251,7 @@ MailService(config=MailConfig.from_env())
 **邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
 
 ### `RolePool`
-多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（默认 DeepSeekLLM，`llm_provider="ollama"` 时用本地 OllamaLLM）。
+多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（默认 DeepSeek 后端，`llm_provider="ollama"` 时用本地 Ollama 后端；均由 `OpenAICompatLLM` 提供）。
 
 ```python
 RolePool(llm_api_key=None, llm_model=None, llm_provider=None)  # llm_provider 默认读环境变量 LLM_PROVIDER
@@ -469,8 +469,8 @@ loader.close()
 文件: `src/core/llm.py`
 
 ```python
-DeepSeekLLM(api_key=None, model=None)   # 默认从环境变量 DEEPSEEK_API_KEY / DEEPSEEK_MODEL
-OllamaLLM(model=None)                   # 本地 Ollama, 默认 gemma4-16k:latest, 免 API Key
+OpenAICompatLLM(provider="deepseek", api_key=None, model=None)   # 配置: 显式参数 > -D 系统属性 > 环境变量 > ConfigStore
+# provider="ollama" 走本地 Ollama, 免 API Key; 也支持任意 OpenAI 兼容后端
 ```
 
 | 方法 | 参数 | 返回 |

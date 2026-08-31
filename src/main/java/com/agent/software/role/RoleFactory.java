@@ -1,8 +1,7 @@
 package com.agent.software.role;
 
-import com.agent.software.llm.DeepSeekLLM;
 import com.agent.software.llm.LLM;
-import com.agent.software.llm.OllamaLLM;
+import com.agent.software.llm.OpenAICompatLLM;
 import com.agent.software.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,13 +29,8 @@ public class RoleFactory {
     private final LLM llm;
 
     public RoleFactory(String apiKey, String model, String provider) {
-        String p = provider != null ? provider
-                : System.getenv().getOrDefault("LLM_PROVIDER", "deepseek");
-        if ("ollama".equals(p)) {
-            this.llm = new OllamaLLM(null, null, model, "role_factory", null);
-        } else {
-            this.llm = new DeepSeekLLM(apiKey, null, model, null, "role_factory", null);
-        }
+        String p = provider != null ? provider : OpenAICompatLLM.resolveProvider();
+        this.llm = new OpenAICompatLLM(p, apiKey, null, model, null, "role_factory", null);
     }
 
     public RoleFactory() {

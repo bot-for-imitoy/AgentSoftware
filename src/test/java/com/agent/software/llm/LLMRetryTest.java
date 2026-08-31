@@ -1,6 +1,7 @@
 package com.agent.software.llm;
 
 import com.agent.software.store.ConfigStore;
+import com.agent.software.utils.LayeredConfig;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,8 +92,9 @@ class LLMRetryTest {
         return s;
     }
 
-    private OllamaLLM client(FakeServer s) {
-        OllamaLLM llm = new OllamaLLM(null, s.baseUrl(), null, null, null);
+    private OpenAICompatLLM client(FakeServer s) {
+        OpenAICompatLLM llm = new OpenAICompatLLM("ollama", null, s.baseUrl(), null, null, null,
+                new ConfigStore(), Map.of(), Map.of());
         llm.retryDelay = 0;   // 关闭重试延时
         llm.retryMax = 3;
         return llm;
@@ -143,7 +146,7 @@ class LLMRetryTest {
         FakeServer s = fake(200);
         s.sleepMillis = 1500;    // 首个请求慢于客户端超时 (1s) → 超时
         s.sleepFirstCount = 1;   // 仅首个请求睡眠 → 重试成功
-        OllamaLLM llm = client(s);
+        OpenAICompatLLM llm = client(s);
         llm.apiTimeoutSeconds = 1;
         LLM.ChatResponse r = llm.chat("s", "u", 0.7, 8);
         assertEquals("ok", r.text);
@@ -176,29 +179,108 @@ class LLMRetryTest {
         assertEquals(5, r.totalTokens());
     }
 
-    // ── ConfigStore 优先级 ────────────────────────────────
+    // ── 配置优先级 (Java 参数 > 环境变量 > ConfigStore) ──────
 
+    /** 无系统属性/环境变量时, 配置回落到 ConfigStore (llm.<provider>.* / llm.*). */
     @Test
-    void testConfigStorePrecedesEnvironment(@TempDir Path tmp) {
+    void testConfigFileUsedWhenNoSystemSources(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
         config.update(Map.of(
                 "llm.ollama.base_url", "http://config.example/",
                 "llm.ollama.model", "config-model"));
-        OllamaLLM client = new OllamaLLM(null, null, null, null, config);
+        OpenAICompatLLM client = new OpenAICompatLLM("ollama", null, null, null, null, null, config,
+                Map.of(), Map.of());
         assertEquals("http://config.example", client.baseUrl);
         assertEquals("config-model", client.model);
-        OllamaLLM explicit = new OllamaLLM(null, "http://explicit.example", null, null, config);
-        assertEquals("http://explicit.example", explicit.baseUrl);
     }
 
+    /** 环境变量优先于配置文件. */
+    @Test
+    void testEnvironmentPrecedesConfigFile(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        config.update(Map.of("llm.ollama.base_url", "http://config.example/"));
+        OpenAICompatLLM client = new OpenAICompatLLM("ollama", null, null, null, null, null, config,
+                Map.of("OLLAMA_BASE_URL", "http://env.example/"), Map.of());
+        assertEquals("http://env.example", client.baseUrl);
+    }
+
+    /** Java 参数 (-D 系统属性) 优先于环境变量. */
+    @Test
+    void testSystemPropertyPrecedesEnvironment(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        OpenAICompatLLM client = new OpenAICompatLLM("ollama", null, null, null, null, null, config,
+                Map.of("OLLAMA_BASE_URL", "http://env.example/"),
+                Map.of("OLLAMA_BASE_URL", "http://prop.example/"));
+        assertEquals("http://prop.example", client.baseUrl);
+    }
+
+    /** 构造器显式参数优先于一切来源. */
+    @Test
+    void testExplicitArgumentPrecedesAllSources(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        OpenAICompatLLM client = new OpenAICompatLLM("ollama", null, "http://explicit.example", null,
+                null, null, config,
+                Map.of("OLLAMA_BASE_URL", "http://env.example/"),
+                Map.of("OLLAMA_BASE_URL", "http://prop.example/"));
+        assertEquals("http://explicit.example", client.baseUrl);
+    }
+
+    /** provider 统一分层解析: -DLLM_PROVIDER > LLM_PROVIDER > llm.provider > deepseek. */
+    @Test
+    void testResolveProviderLayers(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        config.update(Map.of("llm.provider", "config-provider"));
+        // 配置文件层 (注入 store, 不受真实配置文件影响)
+        assertEquals("config-provider", LayeredConfig.get("LLM_PROVIDER", config,
+                new String[]{"llm.provider"}, "deepseek", Map.of(), Map.of()));
+        // 环境变量层优先于配置文件
+        assertEquals("env-provider", LayeredConfig.get("LLM_PROVIDER", config,
+                new String[]{"llm.provider"}, "deepseek",
+                Map.of("LLM_PROVIDER", "env-provider"), Map.of()));
+        // Java 参数层优先于环境变量
+        assertEquals("prop-provider", LayeredConfig.get("LLM_PROVIDER", config,
+                new String[]{"llm.provider"}, "deepseek",
+                Map.of("LLM_PROVIDER", "env-provider"), Map.of("LLM_PROVIDER", "prop-provider")));
+        // 默认值
+        config.delete("llm.provider");
+        assertEquals("deepseek", LayeredConfig.get("LLM_PROVIDER", config,
+                new String[]{"llm.provider"}, "deepseek", Map.of(), Map.of()));
+        // 静态入口: env/props 层短路, 不触碰真实配置文件
+        assertEquals("env-provider",
+                OpenAICompatLLM.resolveProvider(Map.of("LLM_PROVIDER", "env-provider"), Map.of()));
+        assertEquals("prop-provider",
+                OpenAICompatLLM.resolveProvider(Map.of("LLM_PROVIDER", "env-provider"),
+                        Map.of("LLM_PROVIDER", "prop-provider")));
+    }
+
+    /** DeepSeek 配置: api_key / thinking 走分层解析, 缺 Key 时抛错. */
     @Test
     void testDeepseekConfigIncludesApiKeyAndThinking(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
         config.update(Map.of(
                 "llm.deepseek.api_key", "config-key",
                 "llm.deepseek.thinking", false));
-        DeepSeekLLM client = new DeepSeekLLM(null, null, null, null, null, config);
+        OpenAICompatLLM client = new OpenAICompatLLM("deepseek", null, null, null, null, null, config,
+                Map.of(), Map.of());
         assertEquals("config-key", client.apiKey);
         assertFalse(client.thinking);
+    }
+
+    @Test
+    void testDeepseekApiKeyRequired(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        assertThrows(IllegalArgumentException.class, () ->
+                new OpenAICompatLLM("deepseek", null, null, null, null, null, config,
+                        Map.of(), Map.of()));
+    }
+
+    /** 自定义 OpenAI 兼容后端: 使用 OPENAI_* 环境变量, 不强制 Key. */
+    @Test
+    void testCustomProviderUsesOpenaiEnv(@TempDir Path tmp) {
+        ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
+        OpenAICompatLLM client = new OpenAICompatLLM("vllm", null, null, null, null, null, config,
+                Map.of("OPENAI_BASE_URL", "http://vllm.example/"), Map.of());
+        assertEquals("http://vllm.example", client.baseUrl);
+        assertEquals("vllm", client.apiName);
     }
 }
