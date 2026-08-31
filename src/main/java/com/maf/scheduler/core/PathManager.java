@@ -24,7 +24,7 @@ public class PathManager {
     }
 
     /**
-     * @param appName   应用名 (平台目录下的子目录, 如 "AgentScheduler").
+     * @param appName   应用名 (平台目录下的子目录, 如 "AgentCompany").
      * @param envPrefix 环境变量覆盖前缀 (null = appName 大写化).
      * @param env       环境变量快照 (测试注入用; null = System.getenv()).
      * @param platform  平台名 (测试注入用; null = 当前 OS 名).
@@ -38,7 +38,7 @@ public class PathManager {
     }
 
     public static PathManager createDefault() {
-        return new PathManager("AgentScheduler");
+        return new PathManager("AgentCompany");
     }
 
     private boolean isWindows() {

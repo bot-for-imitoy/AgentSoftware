@@ -539,7 +539,7 @@ system.get_role("coo").add_toolkit(toolkits.get("memory_ops"))
 
 ### 运行完整演示
 ```bash
-cd maf_scheduler && source .venv/bin/activate
+cd AgentCompany && source .venv/bin/activate
 DEEPSEEK_API_KEY=sk-xxx python -m src.main        # 多日循环演示
 DEEPSEEK_API_KEY=sk-xxx python -m src.role_demo   # 角色并发演示
 DEEPSEEK_API_KEY=sk-xxx python -m src.talk_demo   # 角色通信演示

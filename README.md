@@ -18,7 +18,7 @@
 # 前置: JDK 25+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
 mvn compile          # 编译
 mvn test             # 运行全部 JUnit 测试 (84 个用例)
-mvn package          # 打包 target/maf-scheduler.jar
+mvn package          # 打包 target/agent-company.jar
 ```
 
 ### 运行入口
@@ -311,7 +311,7 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 ## 项目结构
 
 ```
-maf_scheduler/
+AgentCompany/
 ├── src/
 │   ├── core/
 │   │   ├── types.py           # Event, AgentState, Priority 等数据类型
@@ -356,7 +356,7 @@ maf_scheduler/
 - DeepSeek API Key（环境变量 `DEEPSEEK_API_KEY`）
 
 ```bash
-cd maf_scheduler
+cd AgentCompany
 source .venv/bin/activate
 
 # 设置 API Key (必填, 源码不再硬编码)
