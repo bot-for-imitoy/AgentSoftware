@@ -24,10 +24,10 @@ mvn package          # 打包 target/agent-company.jar
 ### 运行入口
 
 ```bash
-mvn exec:java -Dexec.mainClass=com.maf.scheduler.Main          # 主入口: 多日循环
-mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.RoleDemo # 单角色演示
-mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.TalkDemo # talk 协作链演示
-mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演示
+mvn exec:java -Dexec.mainClass=com.agent.software.Main          # 主入口: 多日循环
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.RoleDemo # 单角色演示
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.TalkDemo # talk 协作链演示
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演示
 ```
 
 ### Python → Java 模块映射
@@ -216,7 +216,7 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 
 专属工具：CEO 有 `talk_to_client`（甲方交流），HR 有 `post_job_posting` / `list_candidates`。
 
-### 8.1 模板风格工具类（Java 版 `src/main/java/com/maf/scheduler/tools/toolkits/`）
+### 8.1 模板风格工具类（Java 版 `src/main/java/com/agent/software/tools/toolkits/`）
 
 Java 版默认装配已切换到模板风格实现：每个业务域一个 `Toolkit` 子类 + 每个函数一个
 `Tool` 子类（以 `toolkits/note/WriteNote` 为模板）：

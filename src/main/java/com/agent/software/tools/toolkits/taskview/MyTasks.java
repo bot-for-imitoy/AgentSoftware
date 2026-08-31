@@ -1,0 +1,72 @@
+package com.agent.software.tools.toolkits.taskview;
+
+import com.agent.software.role.AgentRole;
+import com.agent.software.tools.Tool;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * my_tasks — 查看分配给我的任务列表: 待处理队列 (系统/同事派发, 还没开始)
+ * + 最近完成/失败的任务历史 (含结果与 token 消耗).
+ * scope 可选: all(默认)/pending(只看队列)/done/failed.
+ */
+public class MyTasks extends Tool {
+
+    private static final int HISTORY_LIMIT = 10;
+
+    private final AgentRole agentRole;
+
+    public MyTasks(AgentRole agentRole) {
+        super();
+        this.agentRole = agentRole;
+    }
+
+    @Override
+    public String getToolName() {
+        return "my_tasks";
+    }
+
+    @Override
+    public Map<String, Object> getSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("scope", "(Optional) all / pending / done / failed.");
+        return schema;
+    }
+
+    @Override
+    public String handler(Map<String, Object> args) {
+        Object oscope = args.get("scope");
+        String scope = oscope instanceof String s && !s.strip().isEmpty()
+                ? s.strip().toLowerCase() : "all";
+        List<AgentRole.Task> queue = agentRole.pendingTasks();
+        List<String> pendingLines = new ArrayList<>();
+        for (AgentRole.Task t : queue) {
+            String desc = t.description.length() > 120 ? t.description.substring(0, 120) : t.description;
+            pendingLines.add("- [id=" + t.taskId + "] 紧急度=" + t.urgency + " | " + desc);
+        }
+        List<AgentRole.Task> history = agentRole.taskHistory(HISTORY_LIMIT);
+        List<String> histLines = new ArrayList<>();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            AgentRole.Task t = history.get(i);
+            String mark = "done".equals(t.status) ? "✅" : "❌";
+            String desc = t.description.length() > 100 ? t.description.substring(0, 100) : t.description;
+            histLines.add("- " + mark + " [" + t.status + ", " + t.tokensConsumed + " tokens] " + desc);
+        }
+        List<String> parts = new ArrayList<>();
+        if (scope.equals("all") || scope.equals("pending")) {
+            String head = "📥 待处理 (队列 " + pendingLines.size() + " 个)";
+            parts.add(head + (pendingLines.isEmpty() ? " — 空" : "\n" + String.join("\n", pendingLines)));
+        }
+        if (scope.equals("all") || scope.equals("done") || scope.equals("failed")) {
+            if (scope.equals("done") || scope.equals("failed")) {
+                histLines.removeIf(l -> !l.contains("[" + scope + ","));
+            }
+            String head = "📋 最近任务 (" + histLines.size() + " 条)";
+            parts.add(head + (histLines.isEmpty() ? " — 空" : "\n" + String.join("\n", histLines)));
+        }
+        return String.join("\n\n", parts);
+    }
+}
