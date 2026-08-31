@@ -1,5 +1,7 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 import com.maf.scheduler.tools.ToolkitBridge;
 import com.maf.scheduler.tools.toolkits.email.Email;
 import org.junit.jupiter.api.Test;

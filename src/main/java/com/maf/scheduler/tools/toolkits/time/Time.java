@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools.toolkits.time;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.TimeEventBus;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.event.TimeEventBus;
 import com.maf.scheduler.tools.Toolkit;
 
 /**

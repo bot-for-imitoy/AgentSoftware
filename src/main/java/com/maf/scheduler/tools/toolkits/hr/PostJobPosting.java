@@ -1,9 +1,9 @@
 package com.maf.scheduler.tools.toolkits.hr;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.core.Json;
-import com.maf.scheduler.core.RoleFactory;
-import com.maf.scheduler.core.RolePool;
+import com.maf.scheduler.role.RoleFactory;
+import com.maf.scheduler.role.RolePool;
 import com.maf.scheduler.tools.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

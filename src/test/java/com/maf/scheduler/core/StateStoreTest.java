@@ -1,6 +1,9 @@
 package com.maf.scheduler.core;
 
 import com.maf.scheduler.computers.Computer;
+import com.maf.scheduler.computers.ComputerManager;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.store.StateStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

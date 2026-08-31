@@ -1,6 +1,6 @@
 package com.maf.scheduler.llm;
 
-import com.maf.scheduler.core.ConfigStore;
+import com.maf.scheduler.store.ConfigStore;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

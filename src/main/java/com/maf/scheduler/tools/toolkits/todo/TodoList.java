@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.todo;
 
-import com.maf.scheduler.core.TodoStore;
+import com.maf.scheduler.store.TodoStore;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.ArrayList;

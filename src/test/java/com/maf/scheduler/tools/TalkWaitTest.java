@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.RolePool;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 import com.maf.scheduler.core.ToolRegistry.ToolKit;
 import com.maf.scheduler.tools.toolkits.talk.ListRoles;
 import com.maf.scheduler.tools.toolkits.talk.Talk;

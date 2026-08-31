@@ -1,7 +1,7 @@
 package com.maf.scheduler.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.maf.scheduler.core.ConfigStore;
+import com.maf.scheduler.store.ConfigStore;
 import com.maf.scheduler.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

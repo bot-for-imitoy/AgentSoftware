@@ -1,5 +1,7 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.store.TodoStore;
 import com.maf.scheduler.tools.ToolkitBridge;
 import com.maf.scheduler.tools.toolkits.taskview.TaskView;
 import com.maf.scheduler.tools.toolkits.todo.Todo;
@@ -8,7 +10,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

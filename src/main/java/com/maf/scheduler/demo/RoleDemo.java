@@ -1,10 +1,8 @@
 package com.maf.scheduler.demo;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.RolePool;
-import com.maf.scheduler.core.RoleTemplates;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 

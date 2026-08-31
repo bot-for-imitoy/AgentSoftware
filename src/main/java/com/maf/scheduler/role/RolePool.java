@@ -1,5 +1,7 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.role;
 
+import com.maf.scheduler.computers.ComputerManager;
+import com.maf.scheduler.event.TimeEventBus;
 import com.maf.scheduler.llm.DeepSeekLLM;
 import com.maf.scheduler.llm.LLM;
 import com.maf.scheduler.llm.OllamaLLM;

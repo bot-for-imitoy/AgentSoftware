@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

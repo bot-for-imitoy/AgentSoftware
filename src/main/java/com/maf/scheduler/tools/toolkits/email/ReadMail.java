@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.email;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.core.MailService;
 import com.maf.scheduler.tools.Tool;
 

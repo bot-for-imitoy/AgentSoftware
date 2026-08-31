@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.time;
 
-import com.maf.scheduler.core.TimeEventBus;
+import com.maf.scheduler.event.TimeEventBus;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.LinkedHashMap;

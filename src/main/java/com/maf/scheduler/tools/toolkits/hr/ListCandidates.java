@@ -1,8 +1,8 @@
 package com.maf.scheduler.tools.toolkits.hr;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.core.Json;
-import com.maf.scheduler.core.RoleTemplates;
+import com.maf.scheduler.role.RoleTemplates;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.ArrayList;

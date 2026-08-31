@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.tools.toolkits.mcp.MCPManager;
 import com.maf.scheduler.tools.toolkits.skill.SkillManager;
 

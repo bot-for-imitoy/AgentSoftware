@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.pc;
 
-import com.maf.scheduler.core.ComputerManager;
+import com.maf.scheduler.computers.ComputerManager;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.ArrayList;

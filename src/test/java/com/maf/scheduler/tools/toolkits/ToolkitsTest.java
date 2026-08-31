@@ -1,10 +1,10 @@
 package com.maf.scheduler.tools.toolkits;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.core.Computer;
-import com.maf.scheduler.core.NoteStore;
-import com.maf.scheduler.core.TimeEventBus;
-import com.maf.scheduler.core.TodoStore;
+import com.maf.scheduler.store.NoteStore;
+import com.maf.scheduler.event.TimeEventBus;
+import com.maf.scheduler.store.TodoStore;
 import com.maf.scheduler.core.Types;
 import com.maf.scheduler.tools.Toolkit;
 import com.maf.scheduler.tools.ToolkitBridge;

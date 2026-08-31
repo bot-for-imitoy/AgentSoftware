@@ -1,8 +1,15 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.role;
 
 import com.maf.scheduler.computers.Computer;
+import com.maf.scheduler.computers.ComputerManager;
+import com.maf.scheduler.core.PinyinMap;
+import com.maf.scheduler.event.TimeEventBus;
+import com.maf.scheduler.core.ToolRegistry;
+import com.maf.scheduler.core.Types;
 import com.maf.scheduler.llm.LLM;
 import com.maf.scheduler.services.MailService;
+import com.maf.scheduler.store.NoteStore;
+import com.maf.scheduler.store.TodoStore;
 import com.maf.scheduler.tools.ToolkitBridge;
 import com.maf.scheduler.utils.Json;
 import org.slf4j.Logger;

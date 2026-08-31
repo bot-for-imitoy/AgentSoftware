@@ -1,6 +1,5 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.computers;
 
-import com.maf.scheduler.computers.Computer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,5 +1,7 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

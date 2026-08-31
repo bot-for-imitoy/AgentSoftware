@@ -1,4 +1,4 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.store;
 
 import com.maf.scheduler.utils.Json;
 import org.slf4j.Logger;

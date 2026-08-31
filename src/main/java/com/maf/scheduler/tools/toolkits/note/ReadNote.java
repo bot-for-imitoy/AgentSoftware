@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.note;
 
-import com.maf.scheduler.core.NoteStore;
+import com.maf.scheduler.store.NoteStore;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.LinkedHashMap;

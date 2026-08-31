@@ -1,4 +1,4 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.role;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -1,8 +1,6 @@
 package com.maf.scheduler.computers;
 
 import com.maf.scheduler.core.MCPServer;
-import com.maf.scheduler.core.PodmanComputer;
-import com.maf.scheduler.core.SSHComputer;
 import com.maf.scheduler.core.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

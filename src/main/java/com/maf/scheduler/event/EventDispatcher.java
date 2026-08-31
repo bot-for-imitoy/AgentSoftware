@@ -1,5 +1,8 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.event;
 
+import com.maf.scheduler.core.Types;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

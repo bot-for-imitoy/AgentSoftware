@@ -1,10 +1,10 @@
 package com.maf.scheduler;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.core.AgentSystem;
-import com.maf.scheduler.core.NoteStore;
-import com.maf.scheduler.core.RoleTemplates;
-import com.maf.scheduler.core.StateStore;
+import com.maf.scheduler.store.NoteStore;
+import com.maf.scheduler.role.RoleTemplates;
+import com.maf.scheduler.store.StateStore;
 import com.maf.scheduler.core.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

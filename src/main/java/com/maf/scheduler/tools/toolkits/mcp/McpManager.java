@@ -1,6 +1,6 @@
 package com.maf.scheduler.tools.toolkits.mcp;
 
-import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.tools.Toolkit;
 
 /**

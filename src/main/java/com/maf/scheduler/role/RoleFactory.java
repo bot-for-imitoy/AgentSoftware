@@ -1,4 +1,4 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.role;
 
 import com.maf.scheduler.llm.DeepSeekLLM;
 import com.maf.scheduler.llm.LLM;

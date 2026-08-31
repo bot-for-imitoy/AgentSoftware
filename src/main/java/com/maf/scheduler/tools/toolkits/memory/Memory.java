@@ -1,7 +1,7 @@
 package com.maf.scheduler.tools.toolkits.memory;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.NoteStore;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.store.NoteStore;
 import com.maf.scheduler.tools.Toolkit;
 
 /**

@@ -1,7 +1,6 @@
 package com.maf.scheduler.tools.toolkits.skill;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.tools.toolkits.skill.SkillManager;
+import com.maf.scheduler.role.AgentRole;
 import com.maf.scheduler.tools.Tool;
 
 import java.util.LinkedHashMap;

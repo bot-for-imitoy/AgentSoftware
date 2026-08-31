@@ -1,5 +1,6 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.store;
 
+import com.maf.scheduler.core.PathManager;
 import com.maf.scheduler.utils.Json;
 
 import java.io.IOException;

@@ -1,7 +1,7 @@
 package com.maf.scheduler.demo;
 
-import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.RolePool;
+import com.maf.scheduler.role.AgentRole;
+import com.maf.scheduler.role.RolePool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
