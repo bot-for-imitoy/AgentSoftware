@@ -1,4 +1,4 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.llm;
 
 import java.util.List;
 import java.util.Map;

@@ -1,7 +1,6 @@
 package com.maf.scheduler.tools;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.MailService;
 import com.maf.scheduler.core.ToolRegistry.ToolKit;
 
 import java.util.ArrayList;

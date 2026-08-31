@@ -1,4 +1,6 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.llm;
+
+import com.maf.scheduler.core.ConfigStore;
 
 /**
  * 本地 Ollama 客户端 (OpenAI 兼容端点, 免 API Key) — Python 版 OllamaLLM.

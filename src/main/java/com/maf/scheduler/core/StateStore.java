@@ -1,5 +1,7 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.computers.Computer;
+import com.maf.scheduler.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,5 +1,6 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.services.MailService;
 import com.maf.scheduler.tools.EmailToolkit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

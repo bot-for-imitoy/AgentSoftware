@@ -1,5 +1,7 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.services;
 
+import com.maf.scheduler.core.AgentRole;
+import com.maf.scheduler.utils.Json;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Session;

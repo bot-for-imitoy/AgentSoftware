@@ -1,5 +1,8 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.llm.DeepSeekLLM;
+import com.maf.scheduler.llm.LLM;
+import com.maf.scheduler.llm.OllamaLLM;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;

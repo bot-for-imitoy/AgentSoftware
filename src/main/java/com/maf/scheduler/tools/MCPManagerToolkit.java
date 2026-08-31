@@ -1,8 +1,8 @@
 package com.maf.scheduler.tools;
 
 import com.maf.scheduler.core.AgentRole;
-import com.maf.scheduler.core.Computer;
-import com.maf.scheduler.core.Json;
+import com.maf.scheduler.computers.Computer;
+import com.maf.scheduler.utils.Json;
 import com.maf.scheduler.core.ToolRegistry.ToolDef;
 import com.maf.scheduler.core.ToolRegistry.ToolKit;
 import com.maf.scheduler.core.ToolRegistry.ToolHandler;

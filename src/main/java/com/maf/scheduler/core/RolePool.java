@@ -1,5 +1,8 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.llm.DeepSeekLLM;
+import com.maf.scheduler.llm.LLM;
+import com.maf.scheduler.llm.OllamaLLM;
 import com.maf.scheduler.tools.Toolkits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,4 +1,4 @@
-package com.maf.scheduler.core;
+package com.maf.scheduler.utils;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

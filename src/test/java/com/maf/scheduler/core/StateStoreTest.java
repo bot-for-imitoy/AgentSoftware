@@ -1,11 +1,11 @@
 package com.maf.scheduler.core;
 
+import com.maf.scheduler.computers.Computer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
