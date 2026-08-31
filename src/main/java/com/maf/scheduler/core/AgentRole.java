@@ -3,9 +3,8 @@ package com.maf.scheduler.core;
 import com.maf.scheduler.computers.Computer;
 import com.maf.scheduler.llm.LLM;
 import com.maf.scheduler.services.MailService;
+import com.maf.scheduler.tools.ToolkitBridge;
 import com.maf.scheduler.utils.Json;
-import com.maf.scheduler.tools.ToolkitBinders;
-import com.maf.scheduler.tools.TalkToolkit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -580,15 +579,18 @@ public class AgentRole {
         if (tools == null) {
             tools = new ToolRegistry();
         }
-        // 按工具类名分发绑定逻辑 (holder 模式: 调用时才读角色引用, 跨线程安全)
-        for (Map.Entry<String, java.util.function.BiConsumer<ToolRegistry.ToolKit, AgentRole>> e
-                : ToolkitBinders.getBinders().entrySet()) {
-            if (e.getKey().equals(toolkit.name)) {
-                e.getValue().accept(toolkit, this);
-                break;
-            }
-        }
         return tools.addToolkit(toolkit);
+    }
+
+    /**
+     * 导入模板风格工具类 (toolkits.*, Tool/Toolkit). 桥接为旧版 ToolKit 后加载.
+     * 模板工具类在构造时已注入依赖 (角色/存储/管理器), 无需走旧版 binder 绑定.
+     */
+    public int addToolkit(com.maf.scheduler.tools.Toolkit toolkit) {
+        if (tools == null) {
+            tools = new ToolRegistry();
+        }
+        return tools.addToolkit(ToolkitBridge.toLegacy(toolkit));
     }
 
     public List<String> mcpToolNames() {
@@ -605,9 +607,7 @@ public class AgentRole {
         if (mcpToolNames().contains("talk")) {
             return;  // already registered
         }
-        ToolRegistry.ToolKit tk = TalkToolkit.createTalkToolkit(pool);
-        tk.bind("role", this);  // 供 talk 记录发送方活动日志
-        int added = addToolkit(tk);
+        int added = addToolkit(new com.maf.scheduler.tools.toolkits.talk.Talk(this, pool));
         logger.info("[{}] talk toolkit loaded — {} tools", roleId, added);
     }
 

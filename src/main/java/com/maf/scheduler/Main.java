@@ -6,8 +6,6 @@ import com.maf.scheduler.core.NoteStore;
 import com.maf.scheduler.core.RoleTemplates;
 import com.maf.scheduler.core.StateStore;
 import com.maf.scheduler.core.Types;
-import com.maf.scheduler.tools.ClientToolkit;
-import com.maf.scheduler.tools.HrToolkit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -219,8 +217,8 @@ public class Main {
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
         step("创建 AgentSystem, 加入 " + roleIds.size() + " 个默认角色...");
         AgentSystem system = new AgentSystem(null, roleIds, 30.0, true);
-        system.getRole("CEO").addToolkit(ClientToolkit.createClientToolkit());
-        system.getRole("HR").addToolkit(HrToolkit.createHrToolkit(null));
+        system.getRole("CEO").addToolkit(new com.maf.scheduler.tools.toolkits.client.Client(system.getRole("CEO")));
+        system.getRole("HR").addToolkit(new com.maf.scheduler.tools.toolkits.hr.Hr(system.getRole("HR"), null));
         ok("角色就绪: " + system.pool.listRoles().size() + " 人 (CEO/COO/HR + 工程团队)");
         ok("CEO 已装备 talk_to_client (与甲方实时交流)");
         ok("HR 已装备招聘工具 (post_job_posting / list_candidates)");

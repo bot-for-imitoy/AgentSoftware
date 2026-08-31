@@ -3,6 +3,8 @@ package com.maf.scheduler.tools;
 import com.maf.scheduler.core.AgentRole;
 import com.maf.scheduler.core.RolePool;
 import com.maf.scheduler.core.ToolRegistry.ToolKit;
+import com.maf.scheduler.tools.toolkits.talk.ListRoles;
+import com.maf.scheduler.tools.toolkits.talk.Talk;
 import com.maf.scheduler.core.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -48,8 +50,7 @@ class TalkGroupTest {
         for (AgentRole role : roles) {
             pool.addRole(role);
             role.setPool(pool);
-            ToolKit tk = TalkToolkit.createTalkToolkit(pool);
-            tk.bind("role", role);
+            ToolKit tk = ToolkitBridge.toLegacy(new Talk(role, pool));
             toolkits.put(role.roleId, tk);
         }
         return toolkits;
@@ -151,7 +152,7 @@ class TalkGroupTest {
         pool.addRole(role("顾承宇", "frontend_dev_1", "前端开发组"));
         pool.addRole(role("林总", "CEO", "领导组"));
         pool.addRole(role("新人", "newbie_1", ""));
-        String roster = TalkToolkit.buildTeamRoster(pool);
+        String roster = ListRoles.buildTeamRoster(pool);
         assertTrue(roster.contains("(组: 前端开发组)"));
         assertTrue(roster.contains("(组: 领导组)"));
         assertTrue(roster.contains("(组: 未分组)"));

@@ -1,7 +1,7 @@
 package com.maf.scheduler.core;
 
-import com.maf.scheduler.services.MailService;
-import com.maf.scheduler.tools.EmailToolkit;
+import com.maf.scheduler.tools.ToolkitBridge;
+import com.maf.scheduler.tools.toolkits.email.Email;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -113,8 +113,7 @@ class MailServiceTest {
     // ── email 工具类 (LLM 调用面) ─────────────────────────
 
     private ToolRegistry.ToolKit mailToolkit(AgentRole sender, RolePool pool, MailService svc) {
-        ToolRegistry.ToolKit tk = EmailToolkit.createEmailToolkit(svc);
-        EmailToolkit.bindEmailToToolkit(tk, sender);
+        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(new Email(sender, svc));
         sender.setPool(pool);
         return tk;
     }
@@ -145,7 +144,7 @@ class MailServiceTest {
         ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
         String result = tk.getTool("send_email").handler.handle(
                 Map.of("to", "不存在的同事", "subject", "x", "body", "y"));
-        assertTrue(result.contains("错误"));
+        assertTrue(result.contains("Error"));
         assertTrue(result.contains("mail_address_book"));
     }
 
@@ -172,7 +171,7 @@ class MailServiceTest {
         assertEquals(0, svc.unreadCount(svc.emailFor(b)));
 
         String bad = tkB.getTool("open_mail").handler.handle(Map.of("message_id", "nope"));
-        assertTrue(bad.contains("错误"));
+        assertTrue(bad.contains("Error"));
     }
 
     @Test
@@ -198,6 +197,6 @@ class MailServiceTest {
         String filtered = tk.getTool("mail_address_book").handler.handle(Map.of("group", "前端开发组"));
         assertTrue(!filtered.contains("【领导组】"));
         String notFound = tk.getTool("mail_address_book").handler.handle(Map.of("group", "不存在组"));
-        assertTrue(notFound.contains("错误"));
+        assertTrue(notFound.contains("Error"));
     }
 }

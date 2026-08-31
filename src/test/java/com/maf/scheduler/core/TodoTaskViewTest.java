@@ -1,8 +1,8 @@
 package com.maf.scheduler.core;
 
-import com.maf.scheduler.tools.TaskViewToolkit;
-import com.maf.scheduler.tools.TodoToolkit;
-import com.maf.scheduler.tools.TalkToolkit;
+import com.maf.scheduler.tools.ToolkitBridge;
+import com.maf.scheduler.tools.toolkits.taskview.TaskView;
+import com.maf.scheduler.tools.toolkits.todo.Todo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -61,13 +61,13 @@ class TodoTaskViewTest {
     @Test
     void testTodoToolsViaHandler() {
         AgentRole role = AgentRole.builder().name("测试").roleId("tester_1").build();
-        ToolRegistry.ToolKit tk = TodoToolkit.createTodoToolkit();
-        tk.bind("store", new TodoStore("tester_1", tmp.resolve("todos.json").toString()));
+        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(
+                new Todo(new TodoStore("tester_1", tmp.resolve("todos.json").toString())));
         ToolRegistry.ToolHandler h = tk.getTool("todo_add").handler;
 
-        assertTrue(h.handle(Map.of("detail", "x")).contains("必填"));
+        assertTrue(h.handle(Map.of("detail", "x")).contains("Error"));
         String r1 = h.handle(Map.of("title", "写周报", "detail", "本周小结"));
-        assertTrue(r1.startsWith("已添加待办 [ID="));
+        assertTrue(r1.startsWith("todo_add: 已添加待办 [ID="));
         String tid = r1.split("ID=")[1].split("]")[0];
         String lst = tk.getTool("todo_list").handler.handle(Map.of());
         assertTrue(lst.contains("写周报") && lst.contains("pending"));
@@ -82,8 +82,7 @@ class TodoTaskViewTest {
     @Test
     void testMyTasksTool() {
         AgentRole role = AgentRole.builder().name("测试").roleId("tester_1").build();
-        ToolRegistry.ToolKit tk = TaskViewToolkit.createTaskViewToolkit();
-        tk.bind("role", role);
+        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(new TaskView(role));
         ToolRegistry.ToolHandler myTasks = tk.getTool("my_tasks").handler;
 
         String empty = myTasks.handle(Map.of());

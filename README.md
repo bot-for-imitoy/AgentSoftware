@@ -18,7 +18,7 @@
 # 前置: JDK 25+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
 mvn compile          # 编译
 mvn test             # 运行全部 JUnit 测试 (84 个用例)
-mvn package          # 打包 target/maf-scheduler.jar
+mvn package          # 打包 target/agent-company.jar
 ```
 
 ### 运行入口
@@ -53,7 +53,7 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 | `core/pinyin_map.py` | `core/PinyinMap.java` | 中文名 → 拼音 |
 | `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
 | `core/config_store.py` | `core/ConfigStore.java` | JSON 配置 (点号路径) |
-| `python_tools/*.py` | `tools/*.java` | 全部工具类 (memory/time/todo/task_view/computer/mcp_manager/skill/email/talk/hr/client/hermes) |
+| `python_tools/*.py` | `tools/toolkits/**` (模板风格: 每域一个 Toolkit + 每函数一个 Tool) | 全部工具类 (memory/note/time/todo/task_view/pc/mcp_manager/skill/email/talk/hr/client/hermes), 见 §8.1 |
 | `main.py` | `Main.java` | 主入口 |
 | `role_demo.py` / `talk_demo.py` / `mcp_demo.py` | `demo/RoleDemo.java` / `TalkDemo.java` / `McpDemo.java` | 演示 |
 | `tests/*.py` | `src/test/java/**` (JUnit 5) | 核心测试移植 (84 用例) |
@@ -210,6 +210,32 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 
 专属工具：CEO 有 `talk_to_client`（甲方交流），HR 有 `post_job_posting` / `list_candidates`。
 
+### 8.1 模板风格工具类（Java 版 `src/main/java/com/maf/scheduler/tools/toolkits/`）
+
+Java 版默认装配已切换到模板风格实现：每个业务域一个 `Toolkit` 子类 + 每个函数一个
+`Tool` 子类（以 `toolkits/note/WriteNote` 为模板）：
+
+| Toolkit (类) | 工具 | 说明 |
+|--------|------|------|
+| `toolkits.memory.Memory` | `summary` | **只含记忆相关内容**（每日总结，下一天自动注入提示词 + 下班关机） |
+| `toolkits.note.Note` | `write_note` / `edit_note` / `list_notes` / `read_note` / `delete_note` | 笔记（**已从 memory 分离**；笔记与定时提醒统一） |
+| `toolkits.time.Time` | `get_time` / `take_rest` | 作息 |
+| `toolkits.todo.Todo` | `todo_add` / `todo_list` / `todo_update` / `todo_delete` | 待办清单 |
+| `toolkits.taskview.TaskView` | `my_tasks` | 任务队列 + 历史 |
+| `toolkits.pc.Pc` | `run_command` / `computer_status` / `lan_devices` / `reboot` | **pc = computer 工具**（个人电脑操作） |
+| `toolkits.mcp.McpManager` | `mcp_search` / `mcp_list` / `mcp_add` / `mcp_remove` / `mcp_my_tools` | MCP 自助管理 |
+| `toolkits.skill.Skill` | `skill_search` / `skill_list` / `skill_add` / `skill_remove` / `skill_my_skills` | SKILL.md 技能管理 |
+| `toolkits.email.Email` | `send_email` / `read_mail` / `open_mail` / `mail_address_book` | 员工邮件 |
+| `toolkits.hermes.Hermes` | `hermes_new_conversation` / `hermes_send` | 调用电脑上的 Hermes Agent |
+| `toolkits.talk.Talk` | `talk` / `list_roles` | 角色间通信（同组互发，跨组走邮件） |
+| `toolkits.hr.Hr` | `post_job_posting` / `list_candidates` | 招聘即入职（HR 专属） |
+| `toolkits.client.Client` | `talk_to_client` | 甲方交流（CEO 专属） |
+
+基类：`tools.Tool`（getToolName / getSchema / handler）与 `tools.Toolkit`
+（addTool / getTools / trigger）。`tools.ToolkitBridge.toLegacy()` 把模板风格
+工具类桥接为旧版 `ToolRegistry.ToolKit` 供 LLM 调用
+（`AgentRole.addToolkit(Toolkit)` 已支持直接加载）。
+
 ### 9. 招聘即入职 (`src/core/hr_toolkit.py` + `src/core/roles.py`)
 
 HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行中团队并启动 worker**
@@ -285,7 +311,7 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 ## 项目结构
 
 ```
-maf_scheduler/
+AgentCompany/
 ├── src/
 │   ├── core/
 │   │   ├── types.py           # Event, AgentState, Priority 等数据类型
@@ -330,7 +356,7 @@ maf_scheduler/
 - DeepSeek API Key（环境变量 `DEEPSEEK_API_KEY`）
 
 ```bash
-cd maf_scheduler
+cd AgentCompany
 source .venv/bin/activate
 
 # 设置 API Key (必填, 源码不再硬编码)

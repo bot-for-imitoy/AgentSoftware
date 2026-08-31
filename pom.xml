@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.maf</groupId>
-  <artifactId>maf-scheduler</artifactId>
+  <artifactId>agent-company</artifactId>
   <version>1.0.0</version>
   <packaging>jar</packaging>
 
@@ -57,7 +57,7 @@
   </dependencies>
 
   <build>
-    <finalName>maf-scheduler</finalName>
+    <finalName>agent-company</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
