@@ -30,11 +30,11 @@ class RoleTemplatesJsonTest {
 
     // ── 内置资源 ────────────────────────────────────────────
 
-    /** 内置 JSON 资源必须完整还原出 54 个角色模板, 且默认角色齐全. */
+    /** 内置 JSON 资源必须完整还原出 55 个角色模板, 且默认角色齐全. */
     @Test
     void testResourceLoadsAllTemplates() {
-        assertEquals(54, RoleTemplates.TEMPLATES.size(),
-                "内置模板数量应为 54 (role_templates.json)");
+        assertEquals(55, RoleTemplates.TEMPLATES.size(),
+                "内置模板数量应为 55 (role_templates.json)");
         for (String rid : RoleTemplates.DEFAULT_ROLES) {
             assertTrue(RoleTemplates.TEMPLATES.containsKey(rid), "默认角色缺失: " + rid);
         }
@@ -49,7 +49,7 @@ class RoleTemplatesJsonTest {
                         RoleTemplates.DEFAULT_TEMPLATES_RESOURCE).readAllBytes(),
                 StandardCharsets.UTF_8);
         Map<String, Object> root = Json.parseObject(resource);
-        assertEquals(54, root.size());
+        assertEquals(55, root.size());
         for (Map.Entry<String, Object> e : root.entrySet()) {
             String id = e.getKey();
             Map<String, Object> conf = (Map<String, Object>) e.getValue();
@@ -284,7 +284,7 @@ class RoleTemplatesJsonTest {
         assertRoleEquals(src, back);
     }
 
-    /** 全部 54 个模板都能 toJsonMap → fromJsonMap 无损往返. */
+    /** 全部 55 个模板都能 toJsonMap → fromJsonMap 无损往返. */
     @Test
     void testToJsonMapRoundTripAllTemplates() {
         for (String rid : RoleTemplates.TEMPLATES.keySet()) {

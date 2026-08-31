@@ -16,7 +16,7 @@ import java.util.function.Supplier;
 /**
  * Role Templates — 预定义角色模板 (Python 版 role_templates.py 的 Java 对应物).
  *
- * <p>模板内容统一以 JSON 描述, 内置 54 个角色模板保存在 classpath 资源
+ * <p>模板内容统一以 JSON 描述, 内置 55 个角色模板保存在 classpath 资源
  * {@value #DEFAULT_TEMPLATES_RESOURCE} 中, 顶层为 {@code role_id → 角色配置} 的映射.
  * 类加载时自动把 JSON 载入 {@link #TEMPLATES} 注册表 (注册表即 JSON 的唯一数据源,
  * 无需再维护一份 Java 静态定义); 也可通过 {@link #loadFromJson(String)} /
