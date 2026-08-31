@@ -1,9 +1,11 @@
 package com.agent.software.tools.toolkits.mcp;
 
+import com.agent.software.computers.Computer;
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.Computer;
-import com.maf.scheduler.core.Json;
+
+
 import com.agent.software.role.ToolRegistry.ToolDef;
+import com.agent.software.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

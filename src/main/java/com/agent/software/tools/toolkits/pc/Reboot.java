@@ -1,6 +1,7 @@
 package com.agent.software.tools.toolkits.pc;
 
-import com.maf.scheduler.core.Computer;
+
+import com.agent.software.computers.Computer;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;

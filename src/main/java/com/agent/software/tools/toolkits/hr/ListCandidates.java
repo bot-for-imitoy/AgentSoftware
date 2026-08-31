@@ -1,9 +1,10 @@
 package com.agent.software.tools.toolkits.hr;
 
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.Json;
+
 import com.agent.software.role.RoleTemplates;
 import com.agent.software.tools.Tool;
+import com.agent.software.utils.Json;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

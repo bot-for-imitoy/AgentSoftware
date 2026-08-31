@@ -1,8 +1,5 @@
-package com.agent.software.core;
+package com.agent.software.llm;
 
-import com.agent.software.llm.DeepSeekLLM;
-import com.agent.software.llm.LLM;
-import com.agent.software.llm.OllamaLLM;
 import com.agent.software.store.ConfigStore;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;

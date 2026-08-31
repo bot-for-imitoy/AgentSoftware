@@ -1,7 +1,8 @@
 package com.agent.software.tools.toolkits.memory;
 
+import com.agent.software.computers.Computer;
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.Computer;
+
 import com.agent.software.store.NoteStore;
 import com.agent.software.core.Types;
 import com.agent.software.tools.Tool;

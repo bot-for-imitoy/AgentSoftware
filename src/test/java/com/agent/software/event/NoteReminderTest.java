@@ -1,6 +1,6 @@
-package com.agent.software.core;
+package com.agent.software.event;
 
-import com.agent.software.event.TimeEventBus;
+import com.agent.software.core.Types;
 import com.agent.software.store.NoteStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

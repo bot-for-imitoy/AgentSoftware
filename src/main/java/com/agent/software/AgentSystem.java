@@ -7,6 +7,7 @@ import com.agent.software.event.TimeEventBus;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
 import com.agent.software.role.RoleTemplates;
+import com.agent.software.store.ConfigStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +30,7 @@ public class AgentSystem {
     public final RolePool pool;
     public final EventDispatcher dispatcher;
     public final boolean autoToolkits;
+    public final ConfigStore configStore;
 
     public AgentSystem(List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
@@ -37,6 +39,7 @@ public class AgentSystem {
         this.pool = new RolePool(null, null, null, timeManager, autoToolkits);
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
+        this.configStore = new ConfigStore();
 
         // 时间线程的事件 → 事件分发器 (作息事件统一入口)
         this.timeManager.setEventSender(this::onTimeEvent);

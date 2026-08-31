@@ -1,7 +1,8 @@
 package com.agent.software.tools.toolkits.email;
 
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.MailService;
+
+import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
 
 import java.util.ArrayList;

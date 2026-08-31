@@ -1,5 +1,8 @@
 package com.agent.software.role;
 
+import com.agent.software.core.Types;
+import com.agent.software.utils.Json;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;

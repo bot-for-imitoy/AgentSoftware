@@ -1,5 +1,7 @@
-package com.agent.software.core;
+package com.agent.software.role;
 
+import com.agent.software.core.Types;
+import com.agent.software.utils.Json;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

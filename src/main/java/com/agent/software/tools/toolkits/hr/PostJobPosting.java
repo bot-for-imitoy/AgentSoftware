@@ -1,10 +1,11 @@
 package com.agent.software.tools.toolkits.hr;
 
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.Json;
+
 import com.agent.software.role.RoleFactory;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.Tool;
+import com.agent.software.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

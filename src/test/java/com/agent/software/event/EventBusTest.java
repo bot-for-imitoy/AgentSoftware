@@ -1,7 +1,6 @@
-package com.agent.software.core;
+package com.agent.software.event;
 
-import com.agent.software.event.EventBus;
-import com.agent.software.event.TimeEventBus;
+import com.agent.software.core.Types;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

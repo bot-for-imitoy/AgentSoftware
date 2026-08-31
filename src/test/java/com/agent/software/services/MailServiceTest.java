@@ -1,4 +1,4 @@
-package com.agent.software.core;
+package com.agent.software.services;
 
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;

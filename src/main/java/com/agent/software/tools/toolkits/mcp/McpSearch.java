@@ -1,7 +1,8 @@
 package com.agent.software.tools.toolkits.mcp;
 
+import com.agent.software.computers.Computer;
 import com.agent.software.role.AgentRole;
-import com.maf.scheduler.core.Computer;
+
 import com.agent.software.role.ToolRegistry.ToolDef;
 import com.agent.software.tools.Tool;
 
