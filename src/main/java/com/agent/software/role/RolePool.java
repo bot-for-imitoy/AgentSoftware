@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 角色池 (RolePool) — Python 版 roles.py 的 RolePool.
  *
  * 管理所有角色并发运行: 每个角色一个常驻 daemon worker 线程, 循环:
- * 1. 弹出最高优先级任务 → 2. 用 DeepSeek/Ollama LLM 执行 → 3. 触发回调 → 4. 重复.
+ * 1. 弹出最高优先级任务 → 2. 用 OpenAI 兼容 LLM 执行 → 3. 触发回调 → 4. 重复.
  */
 public class RolePool {
 
@@ -36,15 +36,13 @@ public class RolePool {
 
     private String llmApiKey;
     private String llmModel;
-    private String llmProvider;                              // "deepseek" | "ollama", 默认读环境变量
     private TimeEventBus timeManager;                        // 共享时间源 (AgentSystem 注入)
     private boolean autoToolkits = true;                     // 默认工具装配开关
 
-    public RolePool(String llmApiKey, String llmModel, String llmProvider,
+    public RolePool(String llmApiKey, String llmModel,
                     TimeEventBus timeManager, boolean autoToolkits) {
         this.llmApiKey = llmApiKey;
         this.llmModel = llmModel;
-        this.llmProvider = llmProvider != null ? llmProvider : OpenAICompatLLM.resolveProvider();
         this.timeManager = timeManager;
         this.autoToolkits = autoToolkits;
         // 每角色一个常驻 worker: 用 Java 21+ 虚拟线程 — 不再受固定线程池
@@ -55,7 +53,7 @@ public class RolePool {
     }
 
     public RolePool() {
-        this(null, null, null, null, true);
+        this(null, null, null, true);
     }
 
     // ── Role management ────────────────────────────────────
@@ -93,9 +91,9 @@ public class RolePool {
         }
     }
 
-    /** 按 llm_provider 创建角色 LLM 客户端 (带角色日志前缀). */
+    /** 按角色创建 LLM 客户端 (带角色日志前缀); 配置走 OpenAI 统一分层解析. */
     public LLM newLlm(String roleId) {
-        return new OpenAICompatLLM(llmProvider, llmApiKey, null, llmModel, null, roleId, null);
+        return new OpenAICompatLLM(llmApiKey, null, llmModel, roleId, null);
     }
 
     /** 动态入职: 注册新角色并立即启动其 worker 线程 (招聘流程用). */
@@ -322,9 +320,5 @@ public class RolePool {
 
     public TimeEventBus timeManager() {
         return timeManager;
-    }
-
-    public String llmProvider() {
-        return llmProvider;
     }
 }

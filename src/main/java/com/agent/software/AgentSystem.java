@@ -36,7 +36,7 @@ public class AgentSystem {
                        double checkInterval, boolean autoToolkits) {
         this.timeManager = new TimeEventBus();
         this.timeManager.checkInterval = checkInterval;
-        this.pool = new RolePool(null, null, null, timeManager, autoToolkits);
+        this.pool = new RolePool(null, null, timeManager, autoToolkits);
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
         this.configStore = new ConfigStore();

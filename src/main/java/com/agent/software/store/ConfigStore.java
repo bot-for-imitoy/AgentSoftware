@@ -12,7 +12,7 @@ import java.util.Map;
  * JSON 配置存储 (Python 版 config_store.py).
  *
  * 配置以 JSON 对象保存, 支持通过点号路径访问多级键, 例如
- * {@code store.set("llm.model", "deepseek-chat")}.
+ * {@code store.set("llm.model", "gpt-4o-mini")}.
  */
 public class ConfigStore {
 

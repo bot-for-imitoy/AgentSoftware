@@ -7,10 +7,10 @@ import java.util.Map;
 /**
  * 分层配置解析工具 — 全项目配置统一按以下优先级读取 (高 → 低):
  * <ol>
- *   <li><b>Java 参数</b>: JVM 系统属性, 如 {@code -DDEEPSEEK_API_KEY=sk-...}
+ *   <li><b>Java 参数</b>: JVM 系统属性, 如 {@code -DOPENAI_API_KEY=sk-...}
  *       (与 PathManager 的系统属性回退约定一致, 键名 = 环境变量名);</li>
- *   <li><b>环境变量</b>: 如 {@code DEEPSEEK_API_KEY};</li>
- *   <li><b>配置文件</b>: {@link ConfigStore} 点号路径 (如 {@code llm.deepseek.api_key});</li>
+ *   <li><b>环境变量</b>: 如 {@code OPENAI_API_KEY};</li>
+ *   <li><b>配置文件</b>: {@link ConfigStore} 点号路径 (如 {@code llm.api_key});</li>
  *   <li><b>默认值</b>.</li>
  * </ol>
  *

@@ -28,13 +28,12 @@ public class RoleFactory {
 
     private final LLM llm;
 
-    public RoleFactory(String apiKey, String model, String provider) {
-        String p = provider != null ? provider : OpenAICompatLLM.resolveProvider();
-        this.llm = new OpenAICompatLLM(p, apiKey, null, model, null, "role_factory", null);
+    public RoleFactory(String apiKey, String model) {
+        this.llm = new OpenAICompatLLM(apiKey, null, model, "role_factory", null);
     }
 
     public RoleFactory() {
-        this(null, null, null);
+        this(null, null);
     }
 
     private static final String CREATE_ROLE_PROMPT = """

@@ -26,7 +26,7 @@ public final class RoleDemo {
     }
 
     public static void main(String[] args) {
-        header("Multi-Role Concurrent Task Scheduler — DeepSeek Integration");
+        header("Multi-Role Concurrent Task Scheduler — OpenAI Integration");
 
         AgentRole coder = AgentRole.builder()
                 .name("李明")
