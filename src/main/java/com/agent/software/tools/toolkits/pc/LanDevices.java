@@ -32,13 +32,13 @@ public class LanDevices extends Tool {
     public String handler(Map<String, Object> args) {
         List<Map<String, String>> devices = ComputerManager.getInstance().listLanDevices();
         if (devices.isEmpty()) {
-            return "lan_devices: (内网暂无电脑设备)";
+            return "lan_devices: (no computer devices on the LAN yet)";
         }
         List<String> lines = new ArrayList<>();
         for (Map<String, String> d : devices) {
-            lines.add("- " + d.get("person") + " (" + d.get("role_id") + ") | 电脑 "
+            lines.add("- " + d.get("person") + " (" + d.get("role_id") + ") | computer "
                     + d.get("computer") + " | " + d.get("ip"));
         }
-        return "lan_devices: 内网电脑设备 (网络 maf-net):\n" + String.join("\n", lines);
+        return "lan_devices: LAN computer devices (network maf-net):\n" + String.join("\n", lines);
     }
 }

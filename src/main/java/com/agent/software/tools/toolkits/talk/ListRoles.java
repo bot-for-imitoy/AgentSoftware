@@ -36,9 +36,9 @@ public class ListRoles extends Tool {
     public String handler(Map<String, Object> args) {
         String roster = buildTeamRoster(pool);
         if (roster.isEmpty()) {
-            return "list_roles: (当前无团队成员)";
+            return "list_roles: (no team members currently)";
         }
-        return "list_roles: 当前团队成员:\n" + roster;
+        return "list_roles: current team members:\n" + roster;
     }
 
     /** 构建团队花名册 (固定格式, 供 talk 描述与 list_roles 工具复用). */
@@ -48,10 +48,10 @@ public class ListRoles extends Tool {
             String resp = !r.responsibilities.isEmpty() ? r.responsibilities : r.title;
             String group = (r.group == null ? "" : r.group).strip();
             if (group.isEmpty()) {
-                group = "未分组";
+                group = "Unassigned";
             }
             List<String> skills = r.skills.size() > 4 ? r.skills.subList(0, 4) : r.skills;
-            rosterLines.add("  - **" + r.name + "** -- " + resp + "  (组: " + group + ")  "
+            rosterLines.add("  - **" + r.name + "** -- " + resp + "  (Group: " + group + ")  "
                     + "Skills: " + String.join(", ", skills));
         }
         return String.join("\n", rosterLines);

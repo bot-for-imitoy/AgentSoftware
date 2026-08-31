@@ -69,8 +69,10 @@ public final class Types {
 
     /** 失败文本谓词: 统一错误前缀约定 (is_failure_text). */
     public static boolean isFailureText(String s) {
-        return s.startsWith("[exit") || s.startsWith("错误")
-                || s.startsWith("文件不存在") || s.startsWith("目录不存在");
+        return s.startsWith("[exit") || s.startsWith("错误") || s.startsWith("Error")
+                || s.startsWith("error") || s.startsWith("文件不存在")
+                || s.startsWith("File not found") || s.startsWith("目录不存在")
+                || s.startsWith("Directory not found");
     }
 
     /** 标准化事件 (types.py 的 Event). */

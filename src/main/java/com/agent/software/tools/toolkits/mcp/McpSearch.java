@@ -62,12 +62,12 @@ public class McpSearch extends Tool {
             }
         }
         if (hits == 0) {
-            return "mcp_search: 没有匹配 '" + kw + "' 的 MCP 工具. 本电脑服务器已装: "
-                    + (computer.listInstalledMcpTools().isEmpty() ? "(无)"
-                    : computer.listInstalledMcpTools()) + ". 可用 mcp_list 查看全部.";
+            return "mcp_search: no MCP tool matching '" + kw + "'. Installed on this computer's server: "
+                    + (computer.listInstalledMcpTools().isEmpty() ? "(none)"
+                    : computer.listInstalledMcpTools()) + ". Use mcp_list to see all.";
         }
         List<String> out = new ArrayList<>();
-        out.add("mcp_search: 搜索 '" + kw + "' 找到 " + hits + " 个工具:");
+        out.add("mcp_search: found " + hits + " tools matching '" + kw + "':");
         out.addAll(lines);
         return String.join("\n", out);
     }

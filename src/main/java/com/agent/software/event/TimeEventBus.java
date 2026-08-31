@@ -268,9 +268,9 @@ public class TimeEventBus extends EventBus {
         int day = dayNumber();
         int tod = tickOfDay();
         if (tod >= shiftEndTick) {
-            return String.format("第 %d 天, Tick %d (已下班 %d Ticks)", day, t, tod - shiftEndTick);
+            return String.format("Day %d, Tick %d (off duty, %d ticks since shift end)", day, t, tod - shiftEndTick);
         }
-        return String.format("第 %d 天, Tick %d (上班中, 距下班还有 %d Ticks)", day, t, shiftEndTick - tod);
+        return String.format("Day %d, Tick %d (on duty, %d ticks until shift end)", day, t, shiftEndTick - tod);
     }
 
     // ── 时间线程 (独占) ───────────────────────────────────
@@ -534,10 +534,10 @@ public class TimeEventBus extends EventBus {
 
         String instruction;
         if (EVENT_SHIFT_END.equals(eventType)) {
-            instruction = "下班时间到: 请调用 summary 工具总结今天的工作, "
-                    + "总结完成后你将自动进入 OFF_DUTY 状态.";
+            instruction = "Shift end: please call the summary tool to summarize today's work; "
+                    + "after the summary is complete you will automatically enter the OFF_DUTY state.";
         } else {
-            instruction = "上班时间到: 查看昨日总结, 开始今天的工作.";
+            instruction = "Shift start: review yesterday's summary and start today's work.";
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();

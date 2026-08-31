@@ -130,7 +130,7 @@ public class PodmanComputer extends Computer {
                         String.valueOf(tool.getOrDefault("description", "")),
                         mapOf(tool.get("inputSchema")),
                         args -> server.callTool(tname, args),
-                        "mcp:" + MCP_FILESYSTEM_PACKAGE + " (容器内 " + containerName + ")");
+                        "mcp:" + MCP_FILESYSTEM_PACKAGE + " (inside container " + containerName + ")");
                 mcpTools.put(tname, td);
             }
             logger.info("电脑[{}] 容器内 MCP 服务器已安装, {} 个工具: {}",
@@ -284,9 +284,9 @@ public class PodmanComputer extends Computer {
             on = true;
             // 跨天重连: 容器 stop 会杀死 MCP stdio 管道, 开机后检测会话存活
             reconnectMcpServer();
-            return "电脑[" + roleId + "] (podman 容器 " + containerName + ") 已开机. 工作目录: " + workdir();
+            return "Computer [" + roleId + "] (podman container " + containerName + ") powered on. Work directory: " + workdir();
         } catch (Exception exc) {
-            return "错误: 开机失败 - " + exc.getMessage();
+            return "Error: power-on failed - " + exc.getMessage();
         }
     }
 
@@ -295,23 +295,23 @@ public class PodmanComputer extends Computer {
         try {
             pod("stop", containerName);
             on = false;
-            return "电脑[" + roleId + "] (podman) 已关机.";
+            return "Computer [" + roleId + "] (podman) powered off.";
         } catch (Exception exc) {
-            return "错误: 关机失败 - " + exc.getMessage();
+            return "Error: power-off failed - " + exc.getMessage();
         }
     }
 
     @Override
     public String runCommand(String command, int timeout, int maxChars) {
         if (!on) {
-            return "错误: 电脑未开机.";
+            return "Error: computer is not powered on.";
         }
         try {
             // 以员工用户执行: 云盘/家目录权限按该用户判定
             ProcessResult r = pod(timeout, "exec", "--user", username, containerName, "sh", "-c", command);
             return formatResult(r, maxChars);
         } catch (Exception exc) {
-            return "错误: 命令执行失败 - " + exc.getMessage();
+            return "Error: command execution failed - " + exc.getMessage();
         }
     }
 
@@ -324,7 +324,7 @@ public class PodmanComputer extends Computer {
     @Override
     public String writeFile(String path, String content) {
         if (!on) {
-            return "错误: 电脑未开机.";
+            return "Error: computer is not powered on.";
         }
         String parent = path.contains("/") ? Paths.get(path).getParent().toString() : ".";
         ProcessResult r = runProcess(List.of("podman", "exec", "-i", "--user", username,
@@ -334,13 +334,13 @@ public class PodmanComputer extends Computer {
         if (r.returnCode != 0) {
             return "[exit " + r.returnCode + "] " + truncate(output, 2000);
         }
-        return output.isEmpty() ? "(无输出)" : truncate(output, 2000);
+        return output.isEmpty() ? "(no output)" : truncate(output, 2000);
     }
 
     /** 以 argv 方式执行容器内命令 (脚本 + 参数分离, 路径不经 shell 解析). */
     protected String execArgv(String script, String... args) {
         if (!on) {
-            return "错误: 电脑未开机.";
+            return "Error: computer is not powered on.";
         }
         List<String> cmd = new ArrayList<>();
         cmd.add("podman");
@@ -358,7 +358,7 @@ public class PodmanComputer extends Computer {
         if (r.returnCode != 0) {
             return "[exit " + r.returnCode + "] " + truncate(output, 2000);
         }
-        return output.isEmpty() ? "(无输出)" : truncate(output, 2000);
+        return output.isEmpty() ? "(no output)" : truncate(output, 2000);
     }
 
     @Override
@@ -374,7 +374,7 @@ public class PodmanComputer extends Computer {
 
     @Override
     public String describe() {
-        return "电脑[" + roleId + "] (podman 容器 " + containerName + "): "
-                + "状态=" + (on ? "开机" : "关机") + ", 工作目录=" + workdir();
+        return "Computer [" + roleId + "] (podman container " + containerName + "): "
+                + "status=" + (on ? "powered on" : "powered off") + ", work directory=" + workdir();
     }
 }

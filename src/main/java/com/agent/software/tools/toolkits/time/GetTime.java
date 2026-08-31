@@ -31,6 +31,6 @@ public class GetTime extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        return this.timeManager.describe() + "\n当前 Tick 数: " + this.timeManager.currentTick();
+        return this.timeManager.describe() + "\nCurrent Tick count: " + this.timeManager.currentTick();
     }
 }

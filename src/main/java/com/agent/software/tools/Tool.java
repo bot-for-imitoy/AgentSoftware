@@ -31,7 +31,7 @@ public abstract class Tool {
         if(schema == null || schema.isEmpty()){
             return "Tool " + getToolName();
         }
-        StringBuilder sb = new StringBuilder("Tool ").append(getToolName()).append(": 参数 ");
+        StringBuilder sb = new StringBuilder("Tool ").append(getToolName()).append(": params ");
         boolean first = true;
         for(Map.Entry<String, Object> e : schema.entrySet()){
             if(!first){

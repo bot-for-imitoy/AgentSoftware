@@ -45,7 +45,7 @@ public class MyTasks extends Tool {
         List<String> pendingLines = new ArrayList<>();
         for (AgentRole.Task t : queue) {
             String desc = t.description.length() > 120 ? t.description.substring(0, 120) : t.description;
-            pendingLines.add("- [id=" + t.taskId + "] 紧急度=" + t.urgency + " | " + desc);
+            pendingLines.add("- [id=" + t.taskId + "] urgency=" + t.urgency + " | " + desc);
         }
         List<AgentRole.Task> history = agentRole.taskHistory(HISTORY_LIMIT);
         List<String> histLines = new ArrayList<>();
@@ -57,15 +57,15 @@ public class MyTasks extends Tool {
         }
         List<String> parts = new ArrayList<>();
         if (scope.equals("all") || scope.equals("pending")) {
-            String head = "📥 待处理 (队列 " + pendingLines.size() + " 个)";
-            parts.add(head + (pendingLines.isEmpty() ? " — 空" : "\n" + String.join("\n", pendingLines)));
+            String head = "📥 Pending (queue " + pendingLines.size() + ")";
+            parts.add(head + (pendingLines.isEmpty() ? " — empty" : "\n" + String.join("\n", pendingLines)));
         }
         if (scope.equals("all") || scope.equals("done") || scope.equals("failed")) {
             if (scope.equals("done") || scope.equals("failed")) {
                 histLines.removeIf(l -> !l.contains("[" + scope + ","));
             }
-            String head = "📋 最近任务 (" + histLines.size() + " 条)";
-            parts.add(head + (histLines.isEmpty() ? " — 空" : "\n" + String.join("\n", histLines)));
+            String head = "📋 Recent tasks (" + histLines.size() + ")";
+            parts.add(head + (histLines.isEmpty() ? " — empty" : "\n" + String.join("\n", histLines)));
         }
         return String.join("\n\n", parts);
     }

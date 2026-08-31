@@ -63,8 +63,8 @@ public class HermesSend extends Tool {
             return "hermes_send: Error: needs content";
         }
         if (!SID_ONLY_RE.matcher(cid).matches()) {
-            return "hermes_send: Error: 对话 id 格式非法: '" + cid
-                    + "' (应为 hermes_new_conversation 返回的 id)";
+            return "hermes_send: Error: invalid conversation id format: '" + cid
+                    + "' (should be the id returned by hermes_new_conversation)";
         }
         String cmd = "hermes chat -q " + PodmanQuote(content) + " -r " + PodmanQuote(cid) + " -Q 2>&1";
         String out = computer.runCommand(cmd, HERMES_TIMEOUT, 100_000);
@@ -72,7 +72,7 @@ public class HermesSend extends Tool {
             return errorHint(out);
         }
         if (out.strip().isEmpty()) {
-            return "hermes_send: (Hermes 未返回内容)";
+            return "hermes_send: (Hermes returned no content)";
         }
         List<String> cleaned = new ArrayList<>();
         for (String line : out.split("\n")) {
@@ -90,18 +90,18 @@ public class HermesSend extends Tool {
         String text = raw.length() > 300 ? raw.substring(0, 300) : raw;
         if (text.contains("Configure Hermes") || text.toLowerCase().contains("wizard")
                 || text.contains("model.provider")) {
-            return "hermes_send: Error: 电脑上的 Hermes 尚未配置模型, 无法对话: ("
+            return "hermes_send: Error: Hermes on the computer has no model configured yet, cannot chat: ("
                     + (text.length() > 100 ? text.substring(0, 100) : text).strip()
-                    + ") 需要先在电脑上配置模型/API key";
+                    + ") configure the model/API key on the computer first";
         }
         if (text.toLowerCase().contains("not found") || text.contains("No such file")) {
-            return "hermes_send: Error: 电脑上未安装 Hermes Agent: "
+            return "hermes_send: Error: Hermes Agent is not installed on the computer: "
                     + (text.length() > 120 ? text.substring(0, 120) : text);
         }
         if (text.strip().isEmpty()) {
-            return "hermes_send: Error: Hermes 调用失败 (无输出)";
+            return "hermes_send: Error: Hermes call failed (no output)";
         }
-        return "hermes_send: Error: Hermes 调用失败: " + text;
+        return "hermes_send: Error: Hermes call failed: " + text;
     }
 
     private static String PodmanQuote(String s) {

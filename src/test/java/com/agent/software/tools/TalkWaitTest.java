@@ -90,7 +90,7 @@ class TalkWaitTest {
         Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
         AgentRole roleB = pool.getRole("B");
         String result = talk(tks, "A", "角色B", "按名字发送测试", false);
-        assertTrue(result.contains("消息已发送给 角色B"));
+        assertTrue(result.contains("message sent to 角色B"));
         assertEquals(1, roleB.queueDepth());
     }
 
@@ -99,7 +99,7 @@ class TalkWaitTest {
         RolePool pool = new RolePool();
         Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
         String result = talk(tks, "A", "不存在的名字", "hi", false);
-        assertTrue(result.contains("找不到"));
+        assertTrue(result.contains("cannot find"));
         assertTrue(result.contains("list_roles"));
     }
 
@@ -116,14 +116,14 @@ class TalkWaitTest {
         try {
             assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
             String reply = talk(tks, "B", "A", "进度 80%", false);
-            assertTrue(reply.contains("已回复给正在等待的"));
+            assertTrue(reply.contains("replied to 角色A who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("已收到 角色B 的回复: 进度 80%"));
+        assertTrue(result.get().contains("received reply from 角色B: 进度 80%"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // 状态恢复
     }
 
@@ -148,14 +148,14 @@ class TalkWaitTest {
             assertTrue(waitUntil(() -> a.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
             assertEquals("tester_1", a.waitingReplyFrom());  // 内部等待链存 role_id
             String reply = talk(tks, "tester_1", "王建国", "进度 80%", false);
-            assertTrue(reply.contains("已回复给正在等待的"));
+            assertTrue(reply.contains("replied to 王建国 who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("已收到 郭晓东 的回复: 进度 80%"));
+        assertTrue(result.get().contains("received reply from 郭晓东: 进度 80%"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, a.state);
     }
 
@@ -170,7 +170,7 @@ class TalkWaitTest {
         roleA.beginWait("B");  // A 正在等 B 的回复
         try {
             String result = talk(tks, "B", "A", "收到, 马上处理", true);
-            assertTrue(result.contains("已回复给正在等待的"));
+            assertTrue(result.contains("replied to 角色A who was waiting"));
             assertEquals("收到, 马上处理", roleA.debugReplyBox());  // 投递进 A 的信箱
             assertEquals(Types.AgentState.ON_DUTY_IDLE, roleB.state);  // B 没有进入 WAIT
         } finally {
@@ -191,7 +191,7 @@ class TalkWaitTest {
         roleC.beginWait("A");
         try {
             String result = talk(tks, "A", "B", "有急事", true);
-            assertTrue(result.contains("死锁"));
+            assertTrue(result.contains("deadlock"));
             assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // A 未进入 WAIT
         } finally {
             roleB.endWait();
@@ -213,21 +213,21 @@ class TalkWaitTest {
         try {
             assertTrue(waitUntil(() -> roleB.queueDepth() == 1, 5000), "B 未收到消息");
             AgentRole.Task task = roleB.popTask();
-            assertTrue(task != null && task.description.contains("正在等待你的回复"));
+            assertTrue(task != null && task.description.contains("is waiting for your reply"));
             assertTrue(task.description.contains("角色A"));
             assertEquals(Boolean.TRUE, task.context.get("waiting"));
             // 无超时: 等 1.5s 仍在 WAIT
             Thread.sleep(1500);
             assertEquals(Types.AgentState.WAIT, roleA.state);
             String reply = talk(tks, "B", "A", "进度 80%", false);
-            assertTrue(reply.contains("已回复给正在等待的"));
+            assertTrue(reply.contains("replied to 角色A who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("已收到 角色B 的回复: 进度 80%"));
+        assertTrue(result.get().contains("received reply from 角色B: 进度 80%"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);
     }
 
@@ -241,7 +241,7 @@ class TalkWaitTest {
         roleA.beginWait("B");
         try {
             String result = talk(tks, "C", "A", "普通消息", false);
-            assertTrue(result.contains("消息已发送给"));
+            assertTrue(result.contains("message sent to"));
             assertEquals(Types.AgentState.WAIT, roleA.state);  // 仍在等待 B
             assertNull(roleA.debugReplyBox());
             assertEquals(1, roleA.queueDepth());  // 消息入队, 恢复后处理
@@ -277,7 +277,7 @@ class TalkWaitTest {
         badArgs.put("message", "看下");
         badArgs.put("attachment", "郭晓东/不存在.md");
         String r = talkA.handle(badArgs);
-        assertTrue(r.contains("附件无效"));
+        assertTrue(r.contains("invalid attachment"));
         assertEquals(0, b.queueDepth());
 
         // 有效附件 → 送达, 任务描述带附件提示
@@ -286,9 +286,9 @@ class TalkWaitTest {
         okArgs.put("message", "看下设计稿");
         okArgs.put("attachment", "郭晓东/设计稿.md");
         String r2 = talkA.handle(okArgs);
-        assertTrue(r2.contains("消息已发送给 王建国"));
+        assertTrue(r2.contains("message sent to 王建国"));
         AgentRole.Task task = b.popTask();
-        assertTrue(task != null && task.description.contains("[附件: 郭晓东/设计稿.md]"));
+        assertTrue(task != null && task.description.contains("[Attachment: 郭晓东/设计稿.md]"));
         assertTrue(task.description.contains("mnt/drive"));
         assertEquals("郭晓东/设计稿.md", task.context.get("attachment"));
         pool.shutdown(false);

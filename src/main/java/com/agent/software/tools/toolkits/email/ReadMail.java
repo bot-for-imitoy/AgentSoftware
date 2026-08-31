@@ -59,10 +59,10 @@ public class ReadMail extends Tool {
             msgs = new ArrayList<>(msgs.subList(0, Math.max(0, limit)));
         }
         if (msgs.isEmpty()) {
-            return "read_mail: 收件箱为空 (邮箱 " + email + ").";
+            return "read_mail: inbox is empty (mailbox " + email + ").";
         }
         List<String> lines = new ArrayList<>();
-        lines.add("read_mail: 收件箱 " + email + " (" + mailService.unreadCount(email) + " 封未读):");
+        lines.add("read_mail: inbox " + email + " (" + mailService.unreadCount(email) + " unread):");
         int i = 1;
         for (MailService.MailMessage m : msgs) {
             lines.add("  " + i + ". " + m.preview());

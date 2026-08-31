@@ -29,7 +29,7 @@ public class Memory extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "记忆工具类: 总结今天的工作 (保存后下一天自动注入系统提示词)";
+        return "Memory toolkit: summarize today's work (after saving, it is automatically injected into the system prompt the next day)";
     }
 
 }

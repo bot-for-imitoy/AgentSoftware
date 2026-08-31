@@ -145,11 +145,12 @@ public class OpenAICompatLLM implements LLM {
         List<Map<String, Object>> messages = new ArrayList<>();
         Map<String, Object> system = new LinkedHashMap<>();
         system.put("role", "system");
-        system.put("content", "你是一个专业的助理，负责写工作总结。请用简洁的中文总结以下内容，"
-                + "提取关键决策、待办事项和值得关注的低优先级事件。"
-                + "输出格式：先写一段总结，然后列出关键决策和待办事项。");
+        system.put("content", "You are a professional assistant in charge of writing work summaries. "
+                + "Summarize the following content in concise English, "
+                + "extracting key decisions, action items, and noteworthy low-priority events. "
+                + "Output format: first a summary paragraph, then a list of key decisions and action items.");
         messages.add(system);
-        messages.add(msg("user", "请总结今天的工作日志：\n" + logText));
+        messages.add(msg("user", "Please summarize today's work log:\n" + logText));
         debug("summarize: 追加 user 消息 ({} 字符)", logText.length());
 
         int mt = maxTokens != null ? maxTokens : 256;

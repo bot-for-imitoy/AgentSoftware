@@ -43,8 +43,8 @@ public class TodoDelete extends Tool {
             return "todo_delete: Error: needs todo_id";
         }
         if (this.todoStore.delete(todoId)) {
-            return "todo_delete: 待办已删除: " + todoId;
+            return "todo_delete: Todo deleted: " + todoId;
         }
-        return "todo_delete: 待办不存在: " + todoId;
+        return "todo_delete: Todo not found: " + todoId;
     }
 }

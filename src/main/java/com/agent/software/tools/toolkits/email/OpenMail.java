@@ -49,8 +49,8 @@ public class OpenMail extends Tool {
         }
         MailService.MailMessage msg = mailService.read(mailService.emailFor(agentRole), messageId);
         if (msg == null) {
-            return "open_mail: Error: 找不到邮件 " + messageId
-                    + "。请先调用 read_mail 查看当前收件箱中的邮件。";
+            return "open_mail: Error: mail not found: " + messageId
+                    + ". Please call read_mail first to view mails in the current inbox.";
         }
         return msg.fullText();
     }

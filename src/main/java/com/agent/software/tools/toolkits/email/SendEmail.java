@@ -55,7 +55,7 @@ public class SendEmail extends Tool {
         String subject = osubject instanceof String s ? s.strip() : "";
         String body = obody instanceof String s ? s : "";
         if (subject.isEmpty() && body.strip().isEmpty()) {
-            return "send_email: Error: subject 与 body 至少填一个.";
+            return "send_email: Error: at least one of 'subject' or 'body' must be provided.";
         }
         RolePool pool = agentRole.pool();
         List<String> failed = new ArrayList<>();
@@ -67,13 +67,13 @@ public class SendEmail extends Tool {
             failed.addAll(ccFailed);
         }
         if (to.isEmpty()) {
-            return "send_email: Error: 收件人无法解析: " + String.join(", ", failed.isEmpty() ? List.of("(空)") : failed)
-                    + "。请先调用 mail_address_book 查看成员姓名/邮箱。";
+            return "send_email: Error: could not resolve recipients: " + String.join(", ", failed.isEmpty() ? List.of("(empty)") : failed)
+                    + ". Please call mail_address_book first to look up member names/emails.";
         }
         String senderEmail = mailService.emailFor(agentRole);
         String result = mailService.send(senderEmail, agentRole.name, to, subject, body, cc);
         if (!failed.isEmpty()) {
-            result += " 注意: 以下收件人未找到, 未发送: " + String.join(", ", failed);
+            result += " Note: the following recipients were not found and were not sent: " + String.join(", ", failed);
         }
         agentRole.journal("发送邮件: 「" + subject + "」 → " + String.join(", ", to));
         return "send_email: " + result;

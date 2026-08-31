@@ -25,7 +25,7 @@ public class Hermes extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "Hermes 工具类: 在电脑上的 Hermes Agent 中新建对话 / 发送内容并拿回复";
+        return "Hermes toolkit: create a new conversation in the Hermes Agent on the computer / send content and get a reply";
     }
 
 }

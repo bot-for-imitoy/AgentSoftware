@@ -41,10 +41,10 @@ public class McpList extends Tool {
             avail.add("- " + td.name + ": " + td.description);
         }
         if (avail.isEmpty()) {
-            return "mcp_list: 本电脑暂无 MCP 服务器工具 (服务器可能未连接).";
+            return "mcp_list: no MCP server tools on this computer (the server may not be connected).";
         }
         List<String> out = new ArrayList<>();
-        out.add("mcp_list: 本电脑 MCP 服务器共有 " + avail.size() + " 个工具:");
+        out.add("mcp_list: this computer's MCP server has " + avail.size() + " tools:");
         out.addAll(avail);
         return String.join("\n", out);
     }

@@ -72,8 +72,8 @@ class MailServiceTest {
         AgentRole b = role("王建国", "architect", "架构与版本组");
         String result = svc.send(svc.emailFor(a), a.name, List.of(svc.emailFor(b)),
                 "测试报告", "发现一个登录页 bug, 详见附件。", null);
-        assertTrue(result.contains("邮件已发送给"));
-        assertTrue(result.contains("虚拟邮箱投递"));
+        assertTrue(result.contains("Email sent to"));
+        assertTrue(result.contains("virtual mailbox delivery"));
 
         List<MailService.MailMessage> inbox = svc.inbox(svc.emailFor(b), null);
         assertEquals(1, inbox.size());
@@ -144,7 +144,7 @@ class MailServiceTest {
         ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
         String result = tk.getTool("send_email").handler.handle(
                 Map.of("to", "王建国", "subject", "跨组沟通", "body", "用邮件联系架构师"));
-        assertTrue(result.contains("邮件已发送给"));
+        assertTrue(result.contains("Email sent to"));
         List<MailService.MailMessage> inbox = svc.inbox(svc.emailFor(b), null);
         assertEquals(1, inbox.size());
         assertEquals("郭晓东", inbox.get(0).senderName);
@@ -177,7 +177,7 @@ class MailServiceTest {
 
         String listed = tkB.getTool("read_mail").handler.handle(Map.of("limit", 5));
         assertTrue(listed.contains("联调说明"));
-        assertTrue(listed.contains("未读"));
+        assertTrue(listed.contains("unread"));
         assertTrue(listed.contains("id="));
 
         String opened = tkB.getTool("open_mail").handler.handle(
@@ -202,15 +202,15 @@ class MailServiceTest {
         ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
 
         String book = tk.getTool("mail_address_book").handler.handle(Map.of());
-        assertTrue(book.contains("【前端开发组】"));
-        assertTrue(book.contains("【领导组】"));
+        assertTrue(book.contains("[前端开发组]"));
+        assertTrue(book.contains("[领导组]"));
         assertTrue(book.contains("顾承宇 <guchengyu@company.com>"));
         assertTrue(book.contains("陈思远 <chensiyuan@company.com>"));
         assertTrue(book.contains("林总 <linzong@company.com>"));
         assertTrue(!book.contains("frontend_dev_1"));
 
         String filtered = tk.getTool("mail_address_book").handler.handle(Map.of("group", "前端开发组"));
-        assertTrue(!filtered.contains("【领导组】"));
+        assertTrue(!filtered.contains("[领导组]"));
         String notFound = tk.getTool("mail_address_book").handler.handle(Map.of("group", "不存在组"));
         assertTrue(notFound.contains("Error"));
     }

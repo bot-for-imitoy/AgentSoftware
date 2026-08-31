@@ -34,7 +34,7 @@ public class MailAddressBook extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("group", "(Optional) Only show one group, e.g. '前端开发组'.");
+        schema.put("group", "(Optional) Only show one group, e.g. 'Frontend Development Group'.");
         return schema;
     }
 
@@ -42,7 +42,7 @@ public class MailAddressBook extends Tool {
     public String handler(Map<String, Object> args) {
         RolePool pool = agentRole.pool();
         if (pool == null) {
-            return "mail_address_book: Error: 当前角色未绑定角色池, 无法获取通讯录.";
+            return "mail_address_book: Error: the current role is not bound to a role pool, so the address book is unavailable.";
         }
         Object ogroup = args.get("group");
         String groupFilter = ogroup instanceof String s ? s.strip() : "";
@@ -50,30 +50,30 @@ public class MailAddressBook extends Tool {
         for (AgentRole r : pool.allRoles()) {
             String g = (r.group == null ? "" : r.group).strip();
             if (g.isEmpty()) {
-                g = "未分组";
+                g = "Ungrouped";
             }
             byGroup.computeIfAbsent(g, k -> new ArrayList<>()).add(r);
         }
         List<String> lines = new ArrayList<>();
-        lines.add("mail_address_book: 公司通讯录 (邮箱后缀 @" + mailService.config.suffix
-                + ", 共 " + pool.allRoles().size() + " 人):");
+        lines.add("mail_address_book: company address book (email suffix @" + mailService.config.suffix
+                + ", " + pool.allRoles().size() + " people):");
         List<String> groups = new ArrayList<>(byGroup.keySet());
         groups.sort(String::compareTo);
         for (String g : groups) {
             if (!groupFilter.isEmpty() && !groupFilter.equals(g)) {
                 continue;
             }
-            lines.add("【" + g + "】");
+            lines.add("[" + g + "]");
             List<AgentRole> members = byGroup.get(g);
             members.sort((a, b) -> a.name.compareTo(b.name));
             for (AgentRole r : members) {
                 String desc = !r.title.isEmpty() ? r.title
-                        : (!r.responsibilities.isEmpty() ? r.responsibilities : "团队成员");
+                        : (!r.responsibilities.isEmpty() ? r.responsibilities : "team member");
                 lines.add("  - " + r.name + " <" + mailService.emailFor(r) + "> — " + desc);
             }
         }
         if (!groupFilter.isEmpty() && !byGroup.containsKey(groupFilter)) {
-            return "mail_address_book: Error: 找不到分组「" + groupFilter + "」。可用分组: "
+            return "mail_address_book: Error: group not found: " + groupFilter + ". Available groups: "
                     + String.join(", ", groups);
         }
         return String.join("\n", lines);

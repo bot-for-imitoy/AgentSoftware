@@ -36,10 +36,10 @@ public class SkillMySkills extends Tool {
     public String handler(Map<String, Object> args) {
         List<Map<String, String>> mine = this.manager.listRoleSkills(agentRole);
         if (mine.isEmpty()) {
-            return "skill_my_skills: 你还没有添加任何技能. 可用 skill_search / skill_list 寻找, 用 skill_add 添加.";
+            return "skill_my_skills: you have not added any skills yet. Use skill_search / skill_list to find them and skill_add to add.";
         }
         List<String> lines = new ArrayList<>();
-        lines.add("skill_my_skills: 你已添加 " + mine.size() + " 个技能:");
+        lines.add("skill_my_skills: you have added " + mine.size() + " skills:");
         for (Map<String, String> m : mine) {
             lines.add("- " + m.get("name") + ": " + m.get("description"));
         }

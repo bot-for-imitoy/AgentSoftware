@@ -61,9 +61,9 @@ public class TodoUpdate extends Tool {
             return "todo_update: Error: " + exc.getMessage();
         }
         if (item == null) {
-            return "todo_update: 待办不存在: " + todoId;
+            return "todo_update: Todo not found: " + todoId;
         }
-        return "todo_update: 待办已更新 [ID=" + todoId + "]: " + item.get("title")
+        return "todo_update: Todo updated [ID=" + todoId + "]: " + item.get("title")
                 + " → " + item.get("status");
     }
 }

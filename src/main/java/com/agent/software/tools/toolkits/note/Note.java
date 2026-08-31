@@ -29,7 +29,7 @@ public class Note extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "笔记工具类: 写/编辑/列出/读取/删除笔记 (可带 Tick 提醒, 笔记与定时任务统一)";
+        return "Note toolkit: write/edit/list/read/delete notes (supports Tick reminders; notes and scheduled tasks are unified)";
     }
 
 }

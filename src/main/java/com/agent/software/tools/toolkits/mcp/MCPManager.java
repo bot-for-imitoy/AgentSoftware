@@ -105,7 +105,7 @@ public final class MCPManager {
         for (String name : targets) {
             try {
                 String r = addTool(role, name);
-                if (!r.startsWith("错误")) {
+                if (!r.startsWith("Error:")) {
                     ok.add(name);
                 }
             } catch (Exception e) {
@@ -124,14 +124,14 @@ public final class MCPManager {
         String roleId = role.roleId;
         Set<String> mine = roleTools.computeIfAbsent(roleId, k -> new LinkedHashSet<>());
         if (mine.contains(toolName)) {
-            return "工具 '" + toolName + "' 已添加给 " + roleId + ", 无需重复添加.";
+            return "Tool '" + toolName + "' is already added to " + roleId + ", no need to add it again.";
         }
         ToolDef td = computer.getMcpTool(toolName);
         if (td == null) {
-            return "错误: 电脑[" + roleId + "] 的 MCP 服务器上没有名为 '" + toolName + "' 的工具. "
-                    + "本电脑已安装: " + (computer.listInstalledMcpTools().isEmpty()
-                    ? "(无)" : computer.listInstalledMcpTools())
-                    + ". 可用 mcp_search / mcp_list 查看全局可用工具.";
+            return "Error: no tool named '" + toolName + "' exists on the MCP server of computer [" + roleId + "]. "
+                    + "Installed on this computer: " + (computer.listInstalledMcpTools().isEmpty()
+                    ? "(none)" : computer.listInstalledMcpTools())
+                    + ". Use mcp_search / mcp_list to see all available tools.";
         }
         // 角色注册代理 handler → 转发到电脑服务器上执行
         Computer compRef = computer;
@@ -140,7 +140,7 @@ public final class MCPManager {
                 args -> compRef.runMcpTool(tname, args), td.source);
         mine.add(toolName);
         logger.info("[{}] MCP 工具已安装到电脑: {} (来源 {})", roleId, toolName, td.source);
-        return "成功: 工具 '" + toolName + "' 已安装到 " + roleId
+        return "Success: tool '" + toolName + "' installed to " + roleId
                 + " (" + truncate(td.description, 60) + ")";
     }
 
@@ -149,14 +149,14 @@ public final class MCPManager {
         String roleId = role.roleId;
         Set<String> mine = roleTools.getOrDefault(roleId, new LinkedHashSet<>());
         if (!mine.contains(toolName)) {
-            return "工具 '" + toolName + "' 尚未添加给 " + roleId + ", 无需移除.";
+            return "Tool '" + toolName + "' has not been added to " + roleId + ", nothing to remove.";
         }
         Computer computer = role.computer();
         computer.uninstallMcpTool(toolName);
         role.removeSingleTool(toolName);
         mine.remove(toolName);
         logger.info("[{}] MCP 工具已从电脑卸载: {}", roleId, toolName);
-        return "成功: 工具 '" + toolName + "' 已从 " + roleId + " 的电脑卸载.";
+        return "Success: tool '" + toolName + "' has been uninstalled from the computer of " + roleId + ".";
     }
 
     /** 列出角色电脑上已安装的 MCP 工具. */

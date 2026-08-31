@@ -25,7 +25,7 @@ public class Email extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "公司邮件工具类: 发送邮件, 查看收件箱, 打开邮件, 查看通讯录";
+        return "Company email toolkit: send emails, check the inbox, open emails, and view the address book";
     }
 
 }

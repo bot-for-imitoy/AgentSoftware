@@ -39,7 +39,7 @@ public class PostJobPosting extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("requirement", "用人需求描述 (自然语言, 尽量包含技能要求和性格偏好).");
+        schema.put("requirement", "Job requirement description (natural language; include skill requirements and personality preferences if possible).");
         return schema;
     }
 
@@ -61,18 +61,18 @@ public class PostJobPosting extends Tool {
             newRole = factory.createRole(requirement);
         } catch (Exception exc) {
             logger.error("招聘流程处理失败: {}", exc.getMessage());
-            return "post_job_posting: Error: 招聘启事处理失败 - " + exc.getMessage();
+            return "post_job_posting: Error: job posting processing failed - " + exc.getMessage();
         }
         // 入职: 加入运行中的团队 (RolePool), 启动 worker
         RolePool pool = agentRole.pool();
-        String onboarding = "已加入团队";
+        String onboarding = "Joined the team";
         if (pool != null) {
             try {
                 pool.addRoleAndStart(newRole);
-                onboarding = "已加入团队并上岗 (可收发消息)";
+                onboarding = "Joined the team and started work (can send/receive messages)";
             } catch (IllegalArgumentException exc) {
                 logger.warn("入职失败: {}", exc.getMessage());
-                onboarding = "团队注册失败: " + exc.getMessage();
+                onboarding = "Team registration failed: " + exc.getMessage();
             }
         } else {
             logger.warn("RolePool 未绑定, 新员工仅注册到模板池");

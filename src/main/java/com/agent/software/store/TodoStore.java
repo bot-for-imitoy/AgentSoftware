@@ -101,7 +101,7 @@ public class TodoStore {
     /** 更新待办状态. 返回更新后的条目; id 不存在返回 null. */
     public Map<String, Object> update(String todoId, String status) {
         if (!TODO_STATUSES.contains(status)) {
-            throw new IllegalArgumentException("非法状态 '" + status + "', 可选: " + String.join(", ", TODO_STATUSES));
+            throw new IllegalArgumentException("Invalid status '" + status + "', allowed: " + String.join(", ", TODO_STATUSES));
         }
         List<Map<String, Object>> items = load();
         for (Map<String, Object> item : items) {

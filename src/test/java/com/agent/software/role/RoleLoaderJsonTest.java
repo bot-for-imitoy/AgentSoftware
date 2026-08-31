@@ -76,15 +76,15 @@ class RoleLoaderJsonTest {
         AgentRole architect = RoleLoader.getTemplate("architect");
         assertEquals("王建国", architect.name);
         assertEquals("System Architect", architect.title);
-        assertEquals("架构与版本组", architect.group);
+        assertEquals("Architecture & Release Group", architect.group);
         assertFalse(architect.isDefault);
         assertTrue(architect.skills.contains("C4 Model"));
-        assertTrue(architect.interestKeywords.contains("架构"));
+        assertTrue(architect.interestKeywords.contains("architecture"));
 
         AgentRole ceo = RoleLoader.getTemplate("CEO");
         assertEquals("林总", ceo.name);
         assertTrue(ceo.isDefault);
-        assertEquals("领导组", ceo.group);
+        assertEquals("Leadership Group", ceo.group);
 
         AgentRole rm = RoleLoader.getTemplate("release_manager");
         assertTrue(rm.systemPromptExtra.contains("/mnt/drive/Public/work/"));
@@ -92,11 +92,11 @@ class RoleLoaderJsonTest {
 
         AgentRole lead = RoleLoader.getTemplate("frontend_lead");
         assertTrue(lead.systemPromptExtra.contains("方谨言"));
-        assertTrue(lead.systemPromptExtra.contains("审核"));
+        assertTrue(lead.systemPromptExtra.contains("review"));
 
         AgentRole tester = RoleLoader.getTemplate("tester_20");
         assertEquals("阮志明", tester.name);
-        assertEquals("测试组", tester.group);
+        assertEquals("Testing Group", tester.group);
     }
 
     /** 只有管理角色 (CEO/COO/HR/CFO) 标记为 is_default. */

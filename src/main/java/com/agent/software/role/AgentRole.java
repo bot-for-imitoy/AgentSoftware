@@ -394,42 +394,44 @@ public class AgentRole {
     /** 构建角色完整 System Prompt. */
     public String buildSystemPrompt() {
         List<String> parts = new ArrayList<>();
-        parts.add("你是 " + name + "，职位是 " + title + "，负责 " + roleId + " 工作。");
-        parts.add("性格特点：" + personality + "。");
+        parts.add("You are " + name + ", your title is " + title
+                + ", working as the " + roleId + " role.");
+        parts.add("Personality: " + personality + ".");
         if (!skills.isEmpty()) {
-            parts.add("技能：" + String.join(", ", skills) + "。");
+            parts.add("Skills: " + String.join(", ", skills) + ".");
         }
-        parts.add("今天是第 " + timeManager().dayNumber() + " 天。");
-        parts.add("如果当前没有任务，你可以直接调用休息。"
-                + "并且你需要注意：不要在不应该打扰其他人的时候向其他人发送信息，"
-                + "只有必要时才会发送。因此当你没有任务的时候，不要询问其它人，"
-                + "直接休息即可。当有事情的时候会自动提醒你的。"
-                + "当你完成任务后，你需要向给你安排任务的同事汇报任务完成情况，然后再休息。");
-        parts.add("如果你有与其他人沟通的任务，请务必保证在指定时间与其沟通，"
-                + "不能提前也不能延后，因为其他人会认为你应该在此时与他沟通。");
-        parts.add("公司云盘位于 /mnt/drive（每台电脑都挂载同一份共享文件夹）：\n"
-                + "  - /mnt/drive/Public —— 公用共享目录，所有员工都可读写（公共资源、公告、协作文件放这里）\n"
-                + "  - /mnt/drive/" + name + " —— 你的个人目录，只有你能写入；其他员工只读\n"
-                + "  - 其他员工的个人目录你也只有只读权限\n"
-                + "文件操作直接用电脑的文件命令（ls / cat / cp / mv / rm 等）；"
-                + "分享文件给同事：写入 Public，或用 talk 的 attachment 参数发送云盘文件路径。");
-        parts.add("公司使用 Git 管理项目代码（多人协作、多项目并存）：\n"
-                + "  - 每个项目一个仓库，代码按项目放在各自的仓库里\n"
-                + "  - 开发在你的个人电脑上执行 git 命令（git clone / branch / add / commit / push / merge 等）\n"
-                + "  - 完成一个功能后：先 git pull 拉取最新代码，提交（commit 并写明改动内容和原因），"
-                + "再 push 合入主干或发起合并请求\n"
-                + "  - 多人在同一项目协作时，动手前先同步最新代码（git pull），避免冲突；"
-                + "遇到冲突先与相关同事沟通再合并\n"
-                + "  - 主干分支必须始终保持可用；不要私自强行覆盖别人的代码\n"
-                + "需要与同事协作的改动，先沟通分工再提交、合并。");
-        parts.add("公司邮箱：每位员工都有一个公司邮箱（如 name@company.com），"
-                + "员工之间通过电子邮件交流（send_email 发送 / read_mail 收件）。");
+        parts.add("Today is day " + timeManager().dayNumber() + ".");
+        parts.add("If you currently have no task, you may directly rest. "
+                + "Also note: do not send messages to others when you should not be disturbing them; "
+                + "only send when necessary. So when you have no task, do not ask others anything, "
+                + "just rest. You will be notified automatically when something comes up. "
+                + "After you finish a task, report the completion to the colleague who assigned it, then rest.");
+        parts.add("If you have a task that involves communicating with someone, make sure to do it "
+                + "at the scheduled time — not early, not late — because the other party expects you "
+                + "to contact them at that time.");
+        parts.add("The company cloud drive is at /mnt/drive (every computer mounts the same shared folder):\n"
+                + "  - /mnt/drive/Public — public shared directory, readable and writable by all employees (put shared resources, announcements, and collaboration files here)\n"
+                + "  - /mnt/drive/" + name + " — your personal directory; only you can write to it; other employees have read-only access\n"
+                + "  - Other employees' personal directories are read-only for you as well\n"
+                + "Use the computer's file commands directly for file operations (ls / cat / cp / mv / rm, etc.); "
+                + "to share a file with a colleague: write it to Public, or send the cloud drive file path via the talk attachment parameter.");
+        parts.add("The company uses Git to manage project code (multi-person collaboration, multiple projects):\n"
+                + "  - Each project is one repository; code is kept in its own repository per project\n"
+                + "  - Run git commands on your personal computer (git clone / branch / add / commit / push / merge, etc.)\n"
+                + "  - After completing a feature: first git pull to get the latest code, commit (with a clear description of what and why), "
+                + "then push to merge into the main branch or open a merge request\n"
+                + "  - When collaborating with others on the same project, sync the latest code first (git pull) to avoid conflicts; "
+                + "when a conflict occurs, communicate with the relevant colleagues before merging\n"
+                + "  - The main branch must always remain usable; do not force-overwrite others' code without permission\n"
+                + "For changes that need collaboration with colleagues, discuss the division of work first, then commit and merge.");
+        parts.add("Company email: every employee has a company mailbox (e.g. name@company.com), "
+                + "and employees communicate via email (send_email to send / read_mail to receive).");
         if (group != null && !group.isEmpty()) {
-            parts.add("你属于「" + group + "」组，你的公司邮箱是 " + mailAddress() + "。"
-                    + "同事沟通规则：talk 工具只能给同组成员发送消息（组内快速沟通）；"
-                    + "跨组同事（其他小组、版本管理、领导等）沟通必须使用邮件 "
-                    + "(send_email 发送、read_mail 查看收件箱)，例如向版本管理角色"
-                    + "方谨言汇报审核结果、与其他小组的同事协作时请发邮件。");
+            parts.add("You belong to the " + group + ", and your company email is " + mailAddress() + ". "
+                    + "Colleague communication rules: the talk tool can only message members of your own group (quick in-group communication); "
+                    + "communication with colleagues in other groups (other teams, release management, leadership, etc.) must use email "
+                    + "(send_email to send, read_mail to check the inbox), for example reporting review results to the "
+                    + "release management role 方谨言 (Fang Jinyan), or collaborating with colleagues in other teams.");
         }
         if (systemPromptExtra != null && !systemPromptExtra.isEmpty()) {
             parts.add(systemPromptExtra);
@@ -437,7 +439,7 @@ public class AgentRole {
         // 注入昨日总结 (如果有) — 只注入严格早于今天(day)的总结
         String summary = getLatestSummary(timeManager().dayNumber());
         if (summary != null && !summary.isEmpty()) {
-            parts.add("\n[昨日总结]\n" + summary + "\n(以上是昨天的总结, 供你延续工作.)");
+            parts.add("\n[Yesterday's Summary]\n" + summary + "\n(The above is yesterday's summary, for you to continue your work.)");
         }
         return String.join("\n", parts);
     }

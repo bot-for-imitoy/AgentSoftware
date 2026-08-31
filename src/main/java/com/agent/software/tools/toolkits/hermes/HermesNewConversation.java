@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 public class HermesNewConversation extends Tool {
 
     private static final int HERMES_TIMEOUT = 600;
-    private static final String INIT_PROMPT = "你好，开始一个新的对话。";
+    private static final String INIT_PROMPT = "Hello, let's start a new conversation.";
     private static final Pattern SID_RE = Pattern.compile("hermes --resume ([0-9a-f_]+)");
 
     private final Computer computer;
@@ -46,9 +46,9 @@ public class HermesNewConversation extends Tool {
         Matcher m = SID_RE.matcher(out);
         if (m.find()) {
             String sid = m.group(1);
-            return "hermes_new_conversation: 对话已创建, 对话 id: " + sid + " (用 hermes_send 发送内容)";
+            return "hermes_new_conversation: conversation created, conversation id: " + sid + " (use hermes_send to send content)";
         }
-        return errorHint(out.isEmpty() ? "(无输出)" : out);
+        return errorHint(out.isEmpty() ? "(no output)" : out);
     }
 
     /** 把 hermes 错误转成给角色的可读提示. */
@@ -56,18 +56,18 @@ public class HermesNewConversation extends Tool {
         String text = raw.length() > 300 ? raw.substring(0, 300) : raw;
         if (text.contains("Configure Hermes") || text.toLowerCase().contains("wizard")
                 || text.contains("model.provider")) {
-            return "hermes_new_conversation: Error: 电脑上的 Hermes 尚未配置模型, 无法对话: ("
+            return "hermes_new_conversation: Error: Hermes on the computer has no model configured yet, cannot chat: ("
                     + (text.length() > 100 ? text.substring(0, 100) : text).strip()
-                    + ") 需要先在电脑上配置模型/API key";
+                    + ") configure the model/API key on the computer first";
         }
         if (text.toLowerCase().contains("not found") || text.contains("No such file")) {
-            return "hermes_new_conversation: Error: 电脑上未安装 Hermes Agent: "
+            return "hermes_new_conversation: Error: Hermes Agent is not installed on the computer: "
                     + (text.length() > 120 ? text.substring(0, 120) : text);
         }
         if (text.strip().isEmpty()) {
-            return "hermes_new_conversation: Error: Hermes 调用失败 (无输出)";
+            return "hermes_new_conversation: Error: Hermes call failed (no output)";
         }
-        return "hermes_new_conversation: Error: Hermes 调用失败: " + text;
+        return "hermes_new_conversation: Error: Hermes call failed: " + text;
     }
 
     private static String PodmanQuote(String s) {

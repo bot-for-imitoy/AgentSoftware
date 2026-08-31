@@ -152,7 +152,7 @@ public class MailService {
 
         /** 单行摘要 (read_mail 列表用). */
         public String preview() {
-            String flag = read ? "已读" : "未读";
+            String flag = read ? "read" : "unread";
             String stamp = new SimpleDateFormat("MM-dd HH:mm").format(new Date((long) (timestamp * 1000)));
             String bodyPreview = body != null && body.length() > 60 ? body.substring(0, 60) : body;
             return "[" + flag + "] " + senderName + " <" + senderEmail + "> 「" + subject + "」 "
@@ -163,16 +163,16 @@ public class MailService {
         public String fullText() {
             String stamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date((long) (timestamp * 1000)));
             String toLine = String.join(", ", recipients);
-            String ccLine = cc.isEmpty() ? "" : "抄送: " + String.join(", ", cc);
-            String smtpNote = viaSmtp ? " [已通过 SMTP 真实发送]" : "";
+            String ccLine = cc.isEmpty() ? "" : "CC: " + String.join(", ", cc);
+            String smtpNote = viaSmtp ? " [sent via real SMTP]" : "";
             StringBuilder sb = new StringBuilder();
-            sb.append("发件人: ").append(senderName).append(" <").append(senderEmail).append(">").append(smtpNote).append("\n");
-            sb.append("收件人: ").append(toLine).append("\n");
+            sb.append("From: ").append(senderName).append(" <").append(senderEmail).append(">").append(smtpNote).append("\n");
+            sb.append("To: ").append(toLine).append("\n");
             if (!ccLine.isEmpty()) {
                 sb.append(ccLine).append("\n");
             }
-            sb.append("时间: ").append(stamp).append("\n");
-            sb.append("主题: ").append(subject).append("\n");
+            sb.append("Time: ").append(stamp).append("\n");
+            sb.append("Subject: ").append(subject).append("\n");
             sb.append("─".repeat(40)).append("\n");
             sb.append(body);
             return sb.toString();
@@ -234,11 +234,11 @@ public class MailService {
             }
         }
         if (toList.isEmpty()) {
-            return "错误: 收件人列表为空, 邮件未发送.";
+            return "Error: recipient list is empty, email not sent.";
         }
         if ((subject == null || subject.strip().isEmpty())
                 && (body == null || body.strip().isEmpty())) {
-            return "错误: 主题与正文不能同时为空, 邮件未发送.";
+            return "Error: subject and body cannot both be empty, email not sent.";
         }
         MailMessage msg = MailMessage.create(senderEmail, senderName,
                 subject == null ? "" : subject, body == null ? "" : body, toList, ccList);
@@ -247,7 +247,7 @@ public class MailService {
                 sendViaSmtp(msg);
             } catch (Exception exc) {
                 logger.error("SMTP 发送失败: {}", exc.getMessage());
-                return "错误: SMTP 发送失败: " + exc.getMessage() + " (邮件未投递)";
+                return "Error: SMTP send failed: " + exc.getMessage() + " (email not delivered)";
             }
             msg.viaSmtp = true;
         }
@@ -264,8 +264,8 @@ public class MailService {
             save();
         }
         String recipientsDesc = String.join(", ", toList);
-        String way = msg.viaSmtp ? "已通过 SMTP 真实发送" : "虚拟邮箱投递";
-        return "邮件已发送给 " + recipientsDesc + ", 主题「" + msg.subject + "」, " + way + ".";
+        String way = msg.viaSmtp ? "sent via real SMTP" : "virtual mailbox delivery";
+        return "Email sent to " + recipientsDesc + ", subject " + msg.subject + ", " + way + ".";
     }
 
     /** 用 jakarta.mail 真实发送邮件 (需已配置 SMTP_HOST). */
@@ -363,9 +363,9 @@ public class MailService {
     /** 当前投递方式描述. */
     public String describe() {
         if ("smtp".equals(config.mode())) {
-            return "真实邮件 (SMTP: " + config.smtpHost + ":" + config.smtpPort + ")";
+            return "Real email (SMTP: " + config.smtpHost + ":" + config.smtpPort + ")";
         }
-        return "虚拟邮箱 (未配置 SMTP, 邮件仅内部投递)";
+        return "Virtual mailbox (SMTP not configured, internal delivery only)";
     }
 
     // ── 持久化 (data/mail/mailboxes.json) ─────────────────

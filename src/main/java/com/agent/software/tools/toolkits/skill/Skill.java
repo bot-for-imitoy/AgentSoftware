@@ -30,7 +30,7 @@ public class Skill extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "技能管理: 搜索/列出/添加/移除 SKILL.md 技能工具, 查看已添加的技能";
+        return "Skill management: search/list/add/remove SKILL.md skill tools and view added skills";
     }
 
 }

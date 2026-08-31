@@ -71,11 +71,11 @@ class PinyinTest {
             assertTrue(prompt.contains("/mnt/drive"));
             assertTrue(prompt.contains("Public"));
             assertTrue(prompt.contains("/mnt/drive/郭晓东"));
-            assertTrue(prompt.contains("只读") || prompt.contains("只有你能写入"));
+            assertTrue(prompt.contains("read-only") || prompt.contains("only you can write"));
             assertTrue(prompt.contains("Git"));
             assertTrue(prompt.contains("git pull"));
             assertTrue(prompt.contains("commit") && prompt.contains("push"));
-            assertTrue(prompt.contains("合并"));
+            assertTrue(prompt.contains("merge"));
         } finally {
             if (oldProp == null) {
                 System.clearProperty("AGENTSCHEDULER_DATA_DIR");
@@ -98,7 +98,7 @@ class PinyinTest {
             String prompt = r.buildSystemPrompt();
             assertTrue(prompt.contains("/mnt/drive/Public/work/"));
             assertTrue(prompt.contains("git init"));
-            assertTrue(prompt.contains("创建 git 仓库") || prompt.contains("创建 git 项目"));
+            assertTrue(prompt.contains("git repository"));
         } finally {
             if (oldProp == null) {
                 System.clearProperty("AGENTSCHEDULER_DATA_DIR");

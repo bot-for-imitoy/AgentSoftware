@@ -33,10 +33,10 @@ public class SkillList extends Tool {
     public String handler(Map<String, Object> args) {
         List<Map<String, String>> avail = this.manager.listAvailable();
         if (avail.isEmpty()) {
-            return "skill_list: 暂无可用技能 (技能库为空, 请确认 data/skills/ 存在).";
+            return "skill_list: no skills available (the skill library is empty; make sure data/skills/ exists).";
         }
         List<String> lines = new ArrayList<>();
-        lines.add("skill_list: 技能库共有 " + avail.size() + " 个技能:");
+        lines.add("skill_list: the skill library has " + avail.size() + " skills:");
         for (Map<String, String> a : avail) {
             lines.add("- " + a.get("name") + ": " + a.get("description"));
         }

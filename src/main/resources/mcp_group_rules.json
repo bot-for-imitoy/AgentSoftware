@@ -6,7 +6,7 @@
   "groups": [
     {
       "name": "file_ops",
-      "description": "文件操作工具组 (读写编辑查找, 来自官方 filesystem 服务器)",
+      "description": "File operations tool group (read/write/edit/search, from the official filesystem server)",
       "match": [
         "read_file",
         "write_file",
@@ -22,7 +22,7 @@
     },
     {
       "name": "git_ops",
-      "description": "Git 与代码仓库工具组",
+      "description": "Git and code repository tool group",
       "match": [
         "git_*",
         "create_issue",
@@ -36,7 +36,7 @@
     },
     {
       "name": "github_ops",
-      "description": "GitHub 平台工具组",
+      "description": "GitHub platform tool group",
       "match": [
         "github_*",
         "gh_*",
@@ -46,7 +46,7 @@
     },
     {
       "name": "default",
-      "description": "未分组工具默认归属",
+      "description": "Default group for ungrouped tools",
       "match": []
     }
   ],

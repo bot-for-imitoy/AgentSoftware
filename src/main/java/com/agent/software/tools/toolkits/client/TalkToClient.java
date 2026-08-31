@@ -31,7 +31,7 @@ public class TalkToClient extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("message", "(Optional) 想对甲方说的话 (如提问/汇报内容).");
+        schema.put("message", "(Optional) What you want to say to the client (e.g. a question or progress report).");
         return schema;
     }
 
@@ -51,15 +51,15 @@ public class TalkToClient extends Tool {
             BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             reply = reader.readLine();
         } catch (IOException e) {
-            return "talk_to_client: Error: 无法获取用户输入 (非交互环境).";
+            return "talk_to_client: Error: cannot get user input (non-interactive environment).";
         }
         if (reply == null) {
-            return "talk_to_client: Error: 无法获取用户输入 (非交互环境).";
+            return "talk_to_client: Error: cannot get user input (non-interactive environment).";
         }
         reply = reply.strip();
         if (reply.isEmpty()) {
-            return "talk_to_client: 甲方未输入内容 (空回复).";
+            return "talk_to_client: the client did not enter anything (empty reply).";
         }
-        return "talk_to_client: 甲方回复: " + reply;
+        return "talk_to_client: client reply: " + reply;
     }
 }

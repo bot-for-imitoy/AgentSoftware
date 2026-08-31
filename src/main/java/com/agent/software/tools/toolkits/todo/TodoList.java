@@ -38,16 +38,16 @@ public class TodoList extends Tool {
         String status = ostatus instanceof String s && !s.strip().isEmpty() ? s.strip() : null;
         List<Map<String, Object>> items = this.todoStore.list(status);
         if (items.isEmpty()) {
-            String hint = status != null ? " (状态=" + status + ")" : "";
-            return "todo_list: (暂无待办" + hint + ")";
+            String hint = status != null ? " (status=" + status + ")" : "";
+            return "todo_list: (no todos" + hint + ")";
         }
         List<String> lines = new ArrayList<>();
         for (Map<String, Object> i : items) {
             lines.add("- " + fmt(i));
         }
-        String head = "待办清单 (" + items.size() + " 项";
+        String head = "Todo list (" + items.size() + " items";
         if (status != null) {
-            head += ", 状态=" + status;
+            head += ", status=" + status;
         }
         return head + "):\n" + String.join("\n", lines);
     }

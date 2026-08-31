@@ -40,7 +40,7 @@ class NoteReminderTest {
         assertEquals(1, tasks.size());
         assertEquals(50, tasks.get(0).targetTick);
         assertEquals("写周报", tasks.get(0).payload.get("note_title"));
-        assertTrue(tasks.get(0).description.contains("[笔记提醒]"));
+        assertTrue(tasks.get(0).description.contains("[Note Reminder]"));
         Map<String, Object> reminder = store.getReminder("写周报");
         assertEquals(1, ((Number) reminder.get("day")).intValue());
         assertEquals(50, ((Number) reminder.get("tick")).intValue());

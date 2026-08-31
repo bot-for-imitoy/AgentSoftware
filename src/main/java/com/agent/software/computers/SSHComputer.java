@@ -46,7 +46,7 @@ public class SSHComputer extends Computer {
             ProcessResult r = runProcess(cmd, null, timeout);
             return formatResult(r, maxChars);
         } catch (Exception e) {
-            return "错误: ssh 执行失败 - " + e.getMessage();
+            return "Error: ssh execution failed - " + e.getMessage();
         }
     }
 
@@ -78,21 +78,21 @@ public class SSHComputer extends Computer {
         String r = ssh("echo ok", 60, 2000);
         if (r.contains("ok")) {
             on = true;
-            return "电脑[" + roleId + "] (ssh " + host + ") 已连接. 工作目录: " + workdir();
+            return "Computer [" + roleId + "] (ssh " + host + ") connected. Work directory: " + workdir();
         }
-        return "错误: 无法连接 " + host + ": " + r;
+        return "Error: cannot connect to " + host + ": " + r;
     }
 
     @Override
     public String powerOff() {
         on = false;
-        return "电脑[" + roleId + "] (ssh) 已断开.";
+        return "Computer [" + roleId + "] (ssh) disconnected.";
     }
 
     @Override
     public String runCommand(String command, int timeout, int maxChars) {
         if (!on) {
-            return "错误: 电脑未开机.";
+            return "Error: computer is not powered on.";
         }
         return ssh(command, timeout, maxChars);
     }
@@ -105,7 +105,7 @@ public class SSHComputer extends Computer {
     @Override
     public String writeFile(String path, String content) {
         if (!on) {
-            return "错误: 电脑未开机.";
+            return "Error: computer is not powered on.";
         }
         String q = PodmanComputer.shlexQuote(path);
         String parent = path.contains("/") ? PodmanComputer.shlexQuote(
@@ -117,9 +117,9 @@ public class SSHComputer extends Computer {
             if (r.returnCode != 0) {
                 return "[exit " + r.returnCode + "] " + truncate(output, 2000);
             }
-            return output.isEmpty() ? "(无输出)" : truncate(output, 2000);
+            return output.isEmpty() ? "(no output)" : truncate(output, 2000);
         } catch (Exception e) {
-            return "错误: ssh 执行失败 - " + e.getMessage();
+            return "Error: ssh execution failed - " + e.getMessage();
         }
     }
 

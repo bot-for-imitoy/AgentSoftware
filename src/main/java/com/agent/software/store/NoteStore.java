@@ -117,7 +117,7 @@ public class NoteStore {
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("note_title", title);
-        return timeManager.scheduleTask("[笔记提醒] " + title, roleId, tick, day, payload);
+        return timeManager.scheduleTask("[Note Reminder] " + title, roleId, tick, day, payload);
     }
 
     /** 取消该标题笔记的提醒. */

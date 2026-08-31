@@ -40,6 +40,6 @@ public class TakeRest extends Tool {
             agentRole.setState(Types.AgentState.ON_DUTY_IDLE);
             logger.info("[{}] 开始休息 (状态 ON_DUTY_IDLE, 等待事件唤醒)", agentRole.roleId);
         }
-        return "take_rest: 已开始休息 (状态 ON_DUTY_IDLE). 有任务或事件到来时会自动唤醒.";
+        return "take_rest: rest started (state ON_DUTY_IDLE). You will be automatically woken up when tasks or events arrive.";
     }
 }

@@ -38,11 +38,11 @@ public class TalkTo extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("target", "目标成员姓名 (团队名单请先通过 list_roles 获取, 花名册里的姓名).");
-        schema.put("message", "要发送的消息或委托的任务, 描述要具体.");
-        schema.put("urgency", "(Optional) 紧急程度: LOW / NORMAL / HIGH / CRITICAL (生产事故用 CRITICAL).");
-        schema.put("wait", "(Optional, default false) 是否等待对方回复. true = 同步等待, 收到回复后继续.");
-        schema.put("attachment", "(Optional) 企业云盘文件路径 (如 'Public/方案.md'), 作为附件随消息发送.");
+        schema.put("target", "Target member name (get the team roster first via list_roles; use the names from the roster).");
+        schema.put("message", "The message or delegated task to send; describe it specifically.");
+        schema.put("urgency", "(Optional) Urgency level: LOW / NORMAL / HIGH / CRITICAL (use CRITICAL for production incidents).");
+        schema.put("wait", "(Optional, default false) Whether to wait for the other party's reply. true = wait synchronously and continue once a reply is received.");
+        schema.put("attachment", "(Optional) Company cloud drive file path (e.g. 'Public/proposal.md') to attach to the message.");
         return schema;
     }
 
@@ -63,7 +63,7 @@ public class TalkTo extends Tool {
         String target = ((String) otarget).strip();
         String message = (String) omessage;
         if (target.isEmpty() || message.isEmpty()) {
-            return "talk: Error: 'target' 和 'message' 为必填参数.";
+            return "talk: Error: 'target' and 'message' are required parameters.";
         }
         Object ourgency = args.get("urgency");
         String urgencyStr = ourgency instanceof String s ? s : "NORMAL";
@@ -76,7 +76,7 @@ public class TalkTo extends Tool {
         // target 是人名 (LLM 视角); 内部按人名→role_id 映射 (兼容 role_id 回退)
         AgentRole targetRole = pool.getRoleByName(target);
         if (targetRole == null) {
-            return "talk: Error: 团队中找不到 '" + target + "'。请先调用 list_roles 查看当前成员姓名, 再用人名发送。";
+            return "talk: Error: cannot find '" + target + "' in the team. Please call list_roles first to see the current member names, then send using a member name.";
         }
         AgentRole.Urgency urgency;
         try {
@@ -91,30 +91,30 @@ public class TalkTo extends Tool {
             String sGroup = (agentRole.group == null ? "" : agentRole.group).strip();
             String tGroup = (targetRole.group == null ? "" : targetRole.group).strip();
             if (!sGroup.isEmpty() && !tGroup.isEmpty() && !sGroup.equals(tGroup)) {
-                return "talk: Error: talk 工具仅限同组成员之间交流。"
-                        + agentRole.name + " 属于「" + sGroup + "」, "
-                        + targetRole.name + " 属于「" + tGroup + "」。"
-                        + "跨组沟通请使用邮件 send_email 发送邮件 "
-                        + "(可用 mail_address_book 查对方邮箱)。";
+                return "talk: Error: the talk tool is only for communication within the same group. "
+                        + agentRole.name + " belongs to \"" + sGroup + "\", "
+                        + targetRole.name + " belongs to \"" + tGroup + "\". "
+                        + "For cross-group communication, please use the email tool send_email "
+                        + "(you can use mail_address_book to look up the recipient's email address).";
             }
         }
 
         // ── 附件校验: 云盘路径必须存在且当前角色可读 ──
         if (attachment != null) {
             if (agentRole == null) {
-                return "talk: Error: 当前角色未绑定, 无法发送附件 (attachment).";
+                return "talk: Error: current role is not bound, cannot send attachment (attachment).";
             }
             if (attachment.contains("..") || attachment.startsWith("/") || attachment.endsWith("/")) {
-                return "talk: Error: 附件路径非法: '" + attachment + "' (须为云盘相对路径)";
+                return "talk: Error: invalid attachment path: '" + attachment + "' (must be a relative cloud drive path)";
             }
             try {
                 Computer comp = agentRole.computer();
                 String content = comp.readFile(comp.driveRoot() + "/" + attachment);
                 if (Types.isFailureText(content)) {
-                    return "talk: Error: 附件无效: 云盘文件不存在或不可读 '" + attachment + "'";
+                    return "talk: Error: invalid attachment: cloud drive file does not exist or is not readable '" + attachment + "'";
                 }
             } catch (Exception exc) {
-                return "talk: Error: 附件不可读: " + exc.getMessage();
+                return "talk: Error: attachment not readable: " + exc.getMessage();
             }
         }
 
@@ -125,18 +125,18 @@ public class TalkTo extends Tool {
             if (agentRole != null) {
                 agentRole.journal("回复了等待中的 " + targetRole.name + ": " + truncate(message, 80));
             }
-            return "talk: 已回复给正在等待的 " + targetRole.name + ".";
+            return "talk: replied to " + targetRole.name + " who was waiting.";
         }
 
         // 构造任务: wait=true 时在消息中明确告知对方"提问者正在等待"
         String waitingHint = "";
         if (wait && agentRole != null) {
-            waitingHint = "\n\n⚠️ " + agentRole.name + " 正在等待你的回复 (wait=true)。"
-                    + "请优先处理这条消息, 尽快用 talk 工具回复对方。";
+            waitingHint = "\n\n⚠️ " + agentRole.name + " is waiting for your reply (wait=true). "
+                    + "Please prioritize this message and reply to them promptly using the talk tool.";
         }
         String attachHint = "";
         if (attachment != null) {
-            attachHint = "\n[附件: " + attachment + "] (公司云盘文件, 在 /mnt/drive 下可直接读取)";
+            attachHint = "\n[Attachment: " + attachment + "] (company cloud drive file, readable directly under /mnt/drive)";
         }
         Map<String, Object> ctx = new LinkedHashMap<>();
         ctx.put("message", message);
@@ -148,17 +148,17 @@ public class TalkTo extends Tool {
         // ── 2) wait=true: 无限等待对方回复 ──
         if (wait) {
             if (agentRole == null) {
-                return "talk: Error: 当前角色未绑定, 无法使用 wait=true。";
+                return "talk: Error: current role is not bound, cannot use wait=true.";
             }
             if (targetRole.state == Types.AgentState.WAIT
                     && wouldDeadlock(pool, targetRole, agentRole.roleId)) {
-                return "talk: Error: 检测到互相等待死锁 (对方的等待链成环回到你)。"
-                        + "请勿使用 wait=true, 改为普通消息或稍后再询问。";
+                return "talk: Error: mutual-wait deadlock detected (the other party's wait chain loops back to you). "
+                        + "Do not use wait=true; send a normal message or ask again later.";
             }
             agentRole.journal("发消息给 " + targetRole.name + " (" + urgency.name() + ", 等待回复): "
                     + truncate(message, 80));
             String reply = agentRole.talkWait(targetRole.roleId, task, null);  // 无限等待
-            return "talk: 已收到 " + targetRole.name + " 的回复: " + reply;
+            return "talk: received reply from " + targetRole.name + ": " + reply;
         }
 
         // ── 3) 普通消息: 入目标队列, 立即返回 ──
@@ -167,8 +167,8 @@ public class TalkTo extends Tool {
             agentRole.journal("发消息给 " + targetRole.name + " (" + urgency.name() + "): "
                     + truncate(message, 80));
         }
-        return "talk: 消息已发送给 " + targetRole.name + ", 紧急度=" + urgency.name()
-                + ", 对方队列现有 " + targetRole.queueDepth() + " 个任务.";
+        return "talk: message sent to " + targetRole.name + ", urgency=" + urgency.name()
+                + ", recipient queue now has " + targetRole.queueDepth() + " tasks.";
     }
 
     /** 沿 WAIT 等待链查环: startRole 的等待链上若绕回 senderId 则成环 (互等死锁). */

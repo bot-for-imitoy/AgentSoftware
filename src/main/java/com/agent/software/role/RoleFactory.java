@@ -37,33 +37,33 @@ public class RoleFactory {
     }
 
     private static final String CREATE_ROLE_PROMPT = """
-            你是一个 HR 专员，需要根据用人需求创建一个新的团队成员角色。
+            You are an HR specialist. Create a new team member role based on the hiring requirement.
 
-            现有角色模板（参考格式）：
+            Existing role templates (for format reference):
             {existing_templates}
 
-            用人需求：
+            Hiring requirement:
             {requirement}
 
-            请根据需求创建一个新角色，输出 JSON 格式：
+            Create a new role based on the requirement, and output JSON in the following format:
             ```json
             {{
-                "role_id": "英文小写下划线，如 rust_engineer",
-                "title": "职位名称",
-                "responsibilities": "职责描述（中文，一句话概括主要工作内容）",
-                "personality": "性格特点（中文，2-3句）",
-                "skills": ["技能1", "技能2", ...],
-                "interest_keywords": ["关键词1", "关键词2", ...],
-                "system_prompt_extra": "额外的系统提示（可选，如输出格式要求）"
+                "role_id": "lowercase English with underscores, e.g. rust_engineer",
+                "title": "job title",
+                "responsibilities": "responsibilities (one sentence summarizing the main work)",
+                "personality": "personality (2-3 sentences)",
+                "skills": ["skill1", "skill2", ...],
+                "interest_keywords": ["keyword1", "keyword2", ...],
+                "system_prompt_extra": "extra system prompt (optional, e.g. output format requirements)"
             }}
             ```
 
-            注意：
-            1. role_id 不要与现有模板重复
-            2. interest_keywords 要包含中英文关键词
-            3. skills 至少 5 个
-            4. 关键词至少 6 个
-            5. 仅输出 JSON，不要其他内容""";
+            Notes:
+            1. role_id must not duplicate existing templates
+            2. interest_keywords should include both English and Chinese keywords
+            3. at least 5 skills
+            4. at least 6 keywords
+            5. output only JSON, nothing else""";
 
     /** 从用人需求创建新角色. */
     public AgentRole createRole(String requirement) {
@@ -86,7 +86,7 @@ public class RoleFactory {
 
         logger.info("RoleFactory: generating role for requirement: {}", truncate(requirement, 80));
         LLM.ChatResponse resp = llm.chat(
-                "你是一个专业的 HR 专员，擅长根据需求创建精准的角色定义。仅输出 JSON。",
+                "You are a professional HR specialist who excels at creating precise role definitions from requirements. Output only JSON.",
                 prompt, 0.3, 512);
 
         Map<String, Object> roleConfig = parseJson(resp.text);

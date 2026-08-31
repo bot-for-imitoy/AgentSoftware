@@ -76,7 +76,7 @@ class TalkGroupTest {
                 role("顾承宇", "frontend_dev_1", "前端开发组"),
                 role("陈思远", "frontend_lead", "前端开发组"));
         String result = talk(tks, "frontend_dev_1", "陈思远", "组件重构完成", false);
-        assertTrue(result.contains("消息已发送给 陈思远"));
+        assertTrue(result.contains("message sent to 陈思远"));
         assertEquals(1, pool.getRole("frontend_lead").queueDepth());
     }
 
@@ -93,14 +93,14 @@ class TalkGroupTest {
         try {
             assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
             String reply = talk(tks, "frontend_lead", "顾承宇", "进度 80%", false);
-            assertTrue(reply.contains("已回复给正在等待的"));
+            assertTrue(reply.contains("replied to 顾承宇 who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("已收到 陈思远 的回复: 进度 80%"));
+        assertTrue(result.get().contains("received reply from 陈思远: 进度 80%"));
     }
 
     // ── 跨组拒绝 ───────────────────────────────────────────
@@ -112,7 +112,7 @@ class TalkGroupTest {
                 role("郭晓东", "tester_1", "测试组"),
                 role("王建国", "architect", "架构与版本组"));
         String result = talk(tks, "tester_1", "王建国", "有个架构问题", false);
-        assertTrue(result.contains("仅限同组成员"));
+        assertTrue(result.contains("only for communication within the same group"));
         assertTrue(result.contains("测试组") && result.contains("架构与版本组"));
         assertTrue(result.contains("send_email"));
         assertEquals(0, pool.getRole("architect").queueDepth());  // 未送达
@@ -126,7 +126,7 @@ class TalkGroupTest {
                 role("方谨言", "release_manager", "架构与版本组"));
         AgentRole roleA = pool.getRole("tester_1");
         String result = talk(tks, "tester_1", "方谨言", "有急事", true);
-        assertTrue(result.contains("仅限同组成员"));
+        assertTrue(result.contains("only for communication within the same group"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // 未进入 WAIT
     }
 
@@ -139,9 +139,9 @@ class TalkGroupTest {
                 role("新人", "newbie_1", ""),
                 role("顾承宇", "frontend_dev_1", "前端开发组"));
         String r1 = talk(tks, "newbie_1", "顾承宇", "你好", false);
-        assertTrue(r1.contains("消息已发送给 顾承宇"));
+        assertTrue(r1.contains("message sent to 顾承宇"));
         String r2 = talk(tks, "frontend_dev_1", "新人", "欢迎", false);
-        assertTrue(r2.contains("消息已发送给 新人"));
+        assertTrue(r2.contains("message sent to 新人"));
     }
 
     // ── 花名册显示分组 ─────────────────────────────────────
@@ -153,9 +153,9 @@ class TalkGroupTest {
         pool.addRole(role("林总", "CEO", "领导组"));
         pool.addRole(role("新人", "newbie_1", ""));
         String roster = ListRoles.buildTeamRoster(pool);
-        assertTrue(roster.contains("(组: 前端开发组)"));
-        assertTrue(roster.contains("(组: 领导组)"));
-        assertTrue(roster.contains("(组: 未分组)"));
+        assertTrue(roster.contains("(Group: 前端开发组)"));
+        assertTrue(roster.contains("(Group: 领导组)"));
+        assertTrue(roster.contains("(Group: Unassigned)"));
         assertFalse(roster.contains("frontend_dev_1"));
     }
 }

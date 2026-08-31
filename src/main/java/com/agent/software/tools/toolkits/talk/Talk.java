@@ -24,7 +24,7 @@ public class Talk extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "角色间通信工具类: 给团队成员发消息/委托任务 (talk), 查看团队成员 (list_roles)";
+        return "Role communication toolkit: send messages / delegate tasks to team members (talk), view team members (list_roles)";
     }
 
 }

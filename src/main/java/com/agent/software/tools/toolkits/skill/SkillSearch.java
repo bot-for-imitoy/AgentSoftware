@@ -28,7 +28,7 @@ public class SkillSearch extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("keyword", "Search keyword, e.g. ppt/video/pdf/写作.");
+        schema.put("keyword", "Search keyword, e.g. ppt/video/pdf/writing.");
         return schema;
     }
 
@@ -46,10 +46,10 @@ public class SkillSearch extends Tool {
         }
         List<Map<String, String>> hits = this.manager.searchSkills(kw);
         if (hits.isEmpty()) {
-            return "skill_search: 没有匹配 '" + kw + "' 的技能. 可用 skill_list 查看全部.";
+            return "skill_search: no skill matching '" + kw + "'. Use skill_list to see all.";
         }
         List<String> lines = new ArrayList<>();
-        lines.add("skill_search: 搜索 '" + kw + "' 找到 " + hits.size() + " 个技能:");
+        lines.add("skill_search: found " + hits.size() + " skills matching '" + kw + "':");
         for (Map<String, String> h : hits) {
             lines.add("- " + h.get("name") + ": " + h.get("description"));
         }

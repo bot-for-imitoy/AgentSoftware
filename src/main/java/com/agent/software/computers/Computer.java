@@ -110,7 +110,7 @@ public abstract class Computer {
         if (r.returnCode != 0) {
             return "[exit " + r.returnCode + "] " + truncate(output, maxChars);
         }
-        return truncate(output, maxChars).isEmpty() ? "(无输出)" : truncate(output, maxChars);
+        return truncate(output, maxChars).isEmpty() ? "(no output)" : truncate(output, maxChars);
     }
 
     protected static String truncate(String s, int n) {
@@ -192,10 +192,10 @@ public abstract class Computer {
 
             return new ProcessResult(stdoutBuffer.toString(), stderrBuffer.toString(), rc);
         } catch (IOException e) {
-            return new ProcessResult("", "错误: 进程启动失败 - " + e.getMessage(), -2);
+            return new ProcessResult("", "Error: process failed to start - " + e.getMessage(), -2);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new ProcessResult("", "错误: 进程被中断", -3);
+            return new ProcessResult("", "Error: process interrupted", -3);
         }
     }
 
@@ -245,7 +245,7 @@ public abstract class Computer {
                         String.valueOf(tool.getOrDefault("description", "")),
                         mapOf(tool.get("inputSchema")),
                         args -> server.callTool(tname, args),
-                        "mcp:" + server.packageName + " (本电脑)");
+                        "mcp:" + server.packageName + " (this computer)");
                 mcpTools.put(tname, td);
             }
             logger.info("电脑[{}] 独立 MCP 服务器已安装, {} 个工具: {}",
@@ -290,18 +290,18 @@ public abstract class Computer {
     public String runMcpTool(String toolName, Map<String, Object> args) {
         ToolRegistry.ToolDef td = mcpTools.get(toolName);
         if (td == null) {
-            return "错误: MCP 工具 '" + toolName + "' 未安装到本电脑. 已安装: "
-                    + (listInstalledMcpTools().isEmpty() ? "(无)" : listInstalledMcpTools())
-                    + ". 可用 mcp_search / mcp_list 查看可用工具, 用 mcp_add 安装.";
+            return "Error: MCP tool '" + toolName + "' is not installed on this computer. Installed: "
+                    + (listInstalledMcpTools().isEmpty() ? "(none)" : listInstalledMcpTools())
+                    + ". Use mcp_search / mcp_list to view available tools, and mcp_add to install.";
         }
         if (td.handler == null) {
-            return "错误: 工具 '" + toolName + "' 缺少可执行 handler.";
+            return "Error: tool '" + toolName + "' has no executable handler.";
         }
         try {
             return String.valueOf(td.handler.handle(args));
         } catch (Exception exc) {
             logger.error("MCP 工具 {} 执行失败", toolName, exc);
-            return "错误: 工具 '" + toolName + "' 执行失败 - " + exc.getMessage();
+            return "Error: tool '" + toolName + "' execution failed - " + exc.getMessage();
         }
     }
 
@@ -315,7 +315,7 @@ public abstract class Computer {
     public String reboot() {
         String off = powerOff();
         String on = powerOn();
-        return "电脑[" + roleId + "] 已重启.\n- " + off + "\n- " + on;
+        return "Computer [" + roleId + "] has been rebooted.\n- " + off + "\n- " + on;
     }
 
     /** 个人工作目录 (电脑上的路径). 子类可覆盖. */
@@ -330,8 +330,8 @@ public abstract class Computer {
 
     /** 电脑状态描述 (供 LLM 查看). */
     public String describe() {
-        return "电脑[" + roleId + "] (" + getClass().getSimpleName() + "): "
-                + "状态=" + (on ? "开机" : "关机") + ", 工作目录=" + workdir();
+        return "Computer [" + roleId + "] (" + getClass().getSimpleName() + "): "
+                + "status=" + (on ? "powered on" : "powered off") + ", work directory=" + workdir();
     }
 
     // ── LocalComputer (本地目录模拟) ──────────────────────────
@@ -383,13 +383,13 @@ public abstract class Computer {
                 Files.createDirectories(dir);
             } catch (IOException ignored) {
             }
-            return "电脑[" + roleId + "] (本地模拟) 已开机. 工作目录: " + dir;
+            return "Computer [" + roleId + "] (local simulation) powered on. Work directory: " + dir;
         }
 
         @Override
         public String powerOff() {
             on = false;
-            return "电脑[" + roleId + "] (本地模拟) 已关机.";
+            return "Computer [" + roleId + "] (local simulation) powered off.";
         }
 
         private Path resolve(String path) {
@@ -403,7 +403,7 @@ public abstract class Computer {
         @Override
         public String runCommand(String command, int timeout, int maxChars) {
             if (!on) {
-                return "错误: 电脑未开机.";
+                return "Error: computer is not powered on.";
             }
             ProcessResult r = runProcess(List.of("sh", "-c", command), null, timeout);
             return formatResult(r, maxChars);
@@ -413,12 +413,12 @@ public abstract class Computer {
         public String readFile(String path) {
             Path p = resolve(path);
             if (!Files.exists(p)) {
-                return "文件不存在: " + p;
+                return "File not found: " + p;
             }
             try {
                 return Files.readString(p, StandardCharsets.UTF_8);
             } catch (IOException e) {
-                return "错误: 读取失败 - " + e.getMessage();
+                return "Error: read failed - " + e.getMessage();
             }
         }
 
@@ -430,7 +430,7 @@ public abstract class Computer {
                 Files.writeString(p, content, StandardCharsets.UTF_8);
                 return p.toString();
             } catch (IOException e) {
-                return "错误: 写入失败 - " + e.getMessage();
+                return "Error: write failed - " + e.getMessage();
             }
         }
 
@@ -438,15 +438,15 @@ public abstract class Computer {
         public String listDir(String path) {
             Path p = resolve(path == null || path.isEmpty() ? "" : path);
             if (!Files.exists(p) || !Files.isDirectory(p)) {
-                return "目录不存在: " + p;
+                return "Directory not found: " + p;
             }
             try (var stream = Files.list(p)) {
                 List<String> names = new ArrayList<>();
                 stream.forEach(f -> names.add(f.getFileName().toString()));
                 names.sort(String::compareTo);
-                return names.isEmpty() ? "(空目录)" : String.join("\n", names);
+                return names.isEmpty() ? "(empty directory)" : String.join("\n", names);
             } catch (IOException e) {
-                return "错误: 列出目录失败 - " + e.getMessage();
+                return "Error: failed to list directory - " + e.getMessage();
             }
         }
 
@@ -454,13 +454,13 @@ public abstract class Computer {
         public String deleteFile(String path) {
             Path p = resolve(path);
             if (!Files.exists(p)) {
-                return "文件不存在: " + p;
+                return "File not found: " + p;
             }
             try {
                 Files.delete(p);
-                return "已删除: " + p;
+                return "Deleted: " + p;
             } catch (IOException e) {
-                return "错误: 删除失败 - " + e.getMessage();
+                return "Error: delete failed - " + e.getMessage();
             }
         }
     }

@@ -179,23 +179,23 @@ public final class SkillManager {
         ensureLoaded();
         SkillInfo info = skills.get(skillName);
         if (info == null) {
-            return "错误: 技能库中没有名为 '" + skillName + "' 的技能. 可用 skill_search / skill_list 查看全部技能.";
+            return "Error: no skill named '" + skillName + "' exists in the skill library. Use skill_search / skill_list to see all skills.";
         }
         String roleId = role.roleId;
         Set<String> mine = roleSkills.computeIfAbsent(roleId, k -> new LinkedHashSet<>());
         if (mine.contains(skillName)) {
-            return "技能 '" + skillName + "' 已添加给 " + roleId + ", 无需重复添加.";
+            return "Skill '" + skillName + "' is already added to " + roleId + ", no need to add it again.";
         }
         SkillInfo infoRef = info;
         role.addSingleTool(info.toolName(),
                 truncate(info.description == null || info.description.isEmpty()
-                        ? "技能: " + info.name : info.description, 300),
+                        ? "Skill: " + info.name : info.description, 300),
                 emptySchema(),
                 args -> readSkillContent(infoRef),
                 "skill:" + info.name);
         mine.add(skillName);
         logger.info("[{}] 技能工具已添加: {} (来自 {})", roleId, skillName, info.path);
-        return "成功: 技能 '" + skillName + "' 已安装到 " + roleId + " (" + truncate(info.description, 60) + "...)";
+        return "Success: skill '" + skillName + "' installed to " + roleId + " (" + truncate(info.description, 60) + "...)";
     }
 
     /** 从角色移除一个技能工具. */
@@ -203,7 +203,7 @@ public final class SkillManager {
         String roleId = role.roleId;
         Set<String> mine = roleSkills.getOrDefault(roleId, new LinkedHashSet<>());
         if (!mine.contains(skillName)) {
-            return "技能 '" + skillName + "' 尚未添加给 " + roleId + ", 无需移除.";
+            return "Skill '" + skillName + "' has not been added to " + roleId + ", nothing to remove.";
         }
         SkillInfo info = skills.get(skillName);
         if (info != null) {
@@ -211,7 +211,7 @@ public final class SkillManager {
         }
         mine.remove(skillName);
         logger.info("[{}] 技能工具已移除: {}", roleId, skillName);
-        return "成功: 技能 '" + skillName + "' 已从 " + roleId + " 移除.";
+        return "Success: skill '" + skillName + "' has been removed from " + roleId + ".";
     }
 
     /** 列出角色已添加的技能工具. */
@@ -233,20 +233,20 @@ public final class SkillManager {
         String body = info.readSkillMd();
         List<String> related = info.listRelatedFiles();
         List<String> parts = new ArrayList<>();
-        parts.add("技能: " + info.name);
-        parts.add("目录: " + info.path);
-        parts.add("描述: " + info.description);
+        parts.add("Skill: " + info.name);
+        parts.add("Directory: " + info.path);
+        parts.add("Description: " + info.description);
         parts.add("");
-        parts.add("════ SKILL.md 全文 ════");
-        parts.add(body.isEmpty() ? "(SKILL.md 为空)" : body);
+        parts.add("════ SKILL.md Full Text ════");
+        parts.add(body.isEmpty() ? "(SKILL.md is empty)" : body);
         if (!related.isEmpty()) {
             parts.add("");
-            parts.add("════ 相关文件 (可用 run_command / 文件工具访问) ════");
+            parts.add("════ Related Files (accessible via run_command / file tools) ════");
             for (String p : related) {
                 parts.add("- " + p);
             }
         }
-        parts.add("(技能指引结束, 请按上述步骤执行; 需要执行脚本时用个人电脑的 run_command 工具)");
+        parts.add("(End of skill instructions. Follow the steps above; when you need to run scripts, use the run_command tool on your personal computer.)");
         return String.join("\n", parts);
     }
 

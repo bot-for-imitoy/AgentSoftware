@@ -26,7 +26,7 @@ public class Todo extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "Todo 清单工具类: 添加/列出/更新/删除自己的待办事项";
+        return "Todo toolkit: add/list/update/delete your own todo items";
     }
 
 }

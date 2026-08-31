@@ -288,15 +288,15 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 
 | 分组 | 成员 |
 |------|------|
-| 领导组 | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 / 需求分析师 徐若楠 |
-| 前端开发组 | frontend_lead 陈思远 + frontend_dev_1~3 |
-| 后端开发组 | backend_lead 王宇轩 + backend_dev_1~3 |
-| 移动开发组 | mobile_lead 张雅婷 + mobile_dev_1~3 |
-| 全栈开发组 | fullstack_lead 李俊杰 + fullstack_dev_1~3 |
-| 测试组 | test_lead 刘子涵 + tester_1~20 |
-| 安全组 | attacker_1~3（红蓝对抗/审计） |
-| 架构与版本组 | architect 王建国 + release_manager 方谨言 |
-| 运维组 / 市场组 / 数据组 / 客服组 | ops_engineer 赵强 / content_marketer 陈静 / data_analyst 孙晓 / support_agent 周梅 |
+| Leadership Group | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 / 需求分析师 徐若楠 |
+| Frontend Development Group | frontend_lead 陈思远 + frontend_dev_1~3 |
+| Backend Development Group | backend_lead 王宇轩 + backend_dev_1~3 |
+| Mobile Development Group | mobile_lead 张雅婷 + mobile_dev_1~3 |
+| Full-Stack Development Group | fullstack_lead 李俊杰 + fullstack_dev_1~3 |
+| Testing Group | test_lead 刘子涵 + tester_1~20 |
+| Security Group | attacker_1~3（红蓝对抗/审计） |
+| Architecture & Release Group | architect 王建国 + release_manager 方谨言 |
+| Operations Group / Marketing Group / Data Group / Support Group | ops_engineer 赵强 / content_marketer 陈静 / data_analyst 孙晓 / support_agent 周梅 |
 
 - **talk 工具仅限同组成员之间交流**：跨组发送会被拒绝，并提示改用邮件
   （招聘入职的新人未分组，不受限制，可与任何人 talk）。

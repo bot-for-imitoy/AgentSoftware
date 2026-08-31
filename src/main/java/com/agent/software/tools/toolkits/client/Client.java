@@ -18,7 +18,7 @@ public class Client extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "甲方交流工具类: 与甲方(用户)实时交流";
+        return "Client communication toolkit: communicate in real time with the client (user)";
     }
 
 }

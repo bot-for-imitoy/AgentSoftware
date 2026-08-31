@@ -25,7 +25,7 @@ public class Time extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "时间工具类: 查看当前作息时间 (get_time), 休息 (take_rest)";
+        return "Time toolkit: check the current schedule time (get_time), take a rest (take_rest)";
     }
 
 }

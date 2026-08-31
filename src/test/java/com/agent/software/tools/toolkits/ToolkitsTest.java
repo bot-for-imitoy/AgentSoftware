@@ -112,7 +112,7 @@ class ToolkitsTest {
         assertTrue(time.trigger("get_time", Map.of()).contains("Tick"));
         role.setState(Types.AgentState.ON_DUTY_BUSY);
         String r = time.trigger("take_rest", Map.of());
-        assertTrue(r.contains("休息"));
+        assertTrue(r.contains("rest"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, role.state);
     }
 
@@ -123,13 +123,13 @@ class ToolkitsTest {
         TodoStore store = new TodoStore("tester", tmp.resolve("todos.json").toString());
         Todo todo = new Todo(store);
         String r1 = todo.trigger("todo_add", Map.of("title", "写周报", "detail", "本周小结"));
-        assertTrue(r1.startsWith("todo_add: 已添加待办 [ID="));
+        assertTrue(r1.startsWith("todo_add: Added todo [ID="));
         String tid = r1.split("ID=")[1].split("]")[0];
         assertTrue(todo.trigger("todo_list", Map.of()).contains("写周报"));
         assertTrue(todo.trigger("todo_update", Map.of("todo_id", tid, "status", "in_progress"))
                 .contains("→ in_progress"));
-        assertTrue(todo.trigger("todo_delete", Map.of("todo_id", tid)).contains("已删除"));
-        assertTrue(todo.trigger("todo_list", Map.of()).contains("暂无待办"));
+        assertTrue(todo.trigger("todo_delete", Map.of("todo_id", tid)).contains("Todo deleted"));
+        assertTrue(todo.trigger("todo_list", Map.of()).contains("no todos"));
         assertTrue(todo.trigger("todo_add", Map.of()).contains("Error"));
     }
 
@@ -142,7 +142,7 @@ class ToolkitsTest {
         TaskView taskView = new TaskView(role);
         String r = taskView.trigger("my_tasks", Map.of());
         assertTrue(r.contains("还没开始的任务"));
-        assertTrue(taskView.trigger("my_tasks", Map.of("scope", "pending")).contains("待处理"));
+        assertTrue(taskView.trigger("my_tasks", Map.of("scope", "pending")).contains("Pending"));
     }
 
     // ── pc 工具类 (pc = computer 工具) ─────────────────────
@@ -154,7 +154,7 @@ class ToolkitsTest {
                 "测试", "agent", 1100);
         Pc pc = new Pc(comp);
         assertEquals("pc", pc.getName());
-        assertTrue(pc.trigger("computer_status", Map.of()).contains("电脑"));
+        assertTrue(pc.trigger("computer_status", Map.of()).contains("Computer"));
         String out = pc.trigger("run_command", Map.of("command", "echo pc-toolkit-ok"));
         assertTrue(out.contains("pc-toolkit-ok"), "run_command 输出: " + out);
         assertTrue(pc.trigger("run_command", Map.of()).contains("Error"));

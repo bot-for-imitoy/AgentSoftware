@@ -36,10 +36,10 @@ public class McpMyTools extends Tool {
     public String handler(Map<String, Object> args) {
         List<Map<String, String>> mine = this.manager.listRoleTools(agentRole);
         if (mine.isEmpty()) {
-            return "mcp_my_tools: 你还没有添加任何 MCP 工具. 可用 mcp_search / mcp_list 寻找, 用 mcp_add 添加.";
+            return "mcp_my_tools: you have not added any MCP tools yet. Use mcp_search / mcp_list to find tools and mcp_add to add them.";
         }
         List<String> lines = new ArrayList<>();
-        lines.add("mcp_my_tools: 你已添加 " + mine.size() + " 个 MCP 工具:");
+        lines.add("mcp_my_tools: you have added " + mine.size() + " MCP tools:");
         for (Map<String, String> m : mine) {
             lines.add("- " + m.get("name") + ": " + m.get("description"));
         }

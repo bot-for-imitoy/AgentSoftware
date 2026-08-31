@@ -17,7 +17,7 @@ public class TaskView extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "任务列表工具类: 查看分配给我的任务 (待处理队列 + 最近完成/失败历史)";
+        return "Task list toolkit: view tasks assigned to me (pending queue + recent completed/failed history)";
     }
 
 }

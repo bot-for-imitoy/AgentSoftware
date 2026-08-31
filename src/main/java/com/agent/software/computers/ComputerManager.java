@@ -344,7 +344,7 @@ public class ComputerManager {
             d.put("person", names.getOrDefault(roleId, roleId));
             d.put("role_id", roleId);
             d.put("computer", computerName);
-            d.put("ip", ip.isEmpty() ? "(无内网IP)" : ip);
+            d.put("ip", ip.isEmpty() ? "(no LAN IP)" : ip);
             devices.add(d);
         }
         return devices;

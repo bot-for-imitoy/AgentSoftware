@@ -30,7 +30,7 @@ public class Pc extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "个人电脑工具类 (pc): 运行命令, 查看电脑状态, 查看内网设备, 重启电脑";
+        return "Personal computer toolkit (pc): run commands, view computer status, view LAN devices, reboot computer";
     }
 
 }

@@ -21,7 +21,7 @@ public class Hr extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "人力资源工具类: 发布招聘启事 (招聘即入职), 列出角色模板池中的候选人";
+        return "HR toolkit: post job postings (hire-to-onboard), list candidates from the role template pool";
     }
 
 }

@@ -31,7 +31,7 @@ public class McpManager extends Toolkit {
 
     @Override
     public String getDescription(){
-        return "MCP 工具管理: 搜索/列出/添加/移除本地 MCP 工具, 查看已添加的工具";
+        return "MCP tool management: search/list/add/remove local MCP tools and view added tools";
     }
 
 }

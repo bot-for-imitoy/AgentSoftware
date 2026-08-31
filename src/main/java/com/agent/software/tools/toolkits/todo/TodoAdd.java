@@ -46,7 +46,7 @@ public class TodoAdd extends Tool {
         Object odetail = args.get("detail");
         String detail = odetail instanceof String s ? s.strip() : "";
         Map<String, Object> item = this.todoStore.add(title, detail);
-        return "todo_add: 已添加待办 [ID=" + item.get("id") + "]: " + item.get("title")
-                + " (状态 pending)";
+        return "todo_add: Added todo [ID=" + item.get("id") + "]: " + item.get("title")
+                + " (status pending)";
     }
 }

@@ -175,7 +175,7 @@ public class MCPServer {
     /** 调用服务器上的工具. 返回结果文本. */
     public String callTool(String name, Map<String, Object> arguments) {
         if (!connected) {
-            return "错误: MCP 服务器 '" + packageName + "' 未连接";
+            return "Error: MCP server '" + packageName + "' is not connected";
         }
         try {
             Map<String, Object> params = new LinkedHashMap<>();
@@ -183,7 +183,7 @@ public class MCPServer {
             params.put("arguments", arguments != null ? arguments : new LinkedHashMap<>());
             Map<String, Object> result = request("tools/call", params);
             if (result == null) {
-                return "错误: 调用 " + name + " 失败 - " + (connectError != null ? connectError : "无响应");
+                return "Error: calling " + name + " failed - " + (connectError != null ? connectError : "no response");
             }
             // 提取文本内容
             StringBuilder parts = new StringBuilder();
@@ -199,12 +199,12 @@ public class MCPServer {
                 }
             }
             if (Boolean.TRUE.equals(result.get("isError"))) {
-                return "[MCP 错误] " + parts;
+                return "[MCP Error] " + parts;
             }
             return parts.length() == 0 ? String.valueOf(result) : parts.toString();
         } catch (Exception exc) {
             logger.error("MCP '{}' 调用 {} 失败: {}", packageName, name, exc.getMessage());
-            return "错误: 调用 " + name + " 失败 - " + exc.getMessage();
+            return "Error: calling " + name + " failed - " + exc.getMessage();
         }
     }
 

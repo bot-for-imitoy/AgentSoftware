@@ -69,14 +69,14 @@ class TodoTaskViewTest {
 
         assertTrue(h.handle(Map.of("detail", "x")).contains("Error"));
         String r1 = h.handle(Map.of("title", "写周报", "detail", "本周小结"));
-        assertTrue(r1.startsWith("todo_add: 已添加待办 [ID="));
+        assertTrue(r1.startsWith("todo_add: Added todo [ID="));
         String tid = r1.split("ID=")[1].split("]")[0];
         String lst = tk.getTool("todo_list").handler.handle(Map.of());
         assertTrue(lst.contains("写周报") && lst.contains("pending"));
         String r2 = tk.getTool("todo_update").handler.handle(Map.of("todo_id", tid, "status", "in_progress"));
         assertTrue(r2.contains("→ in_progress"));
-        assertTrue(tk.getTool("todo_delete").handler.handle(Map.of("todo_id", tid)).contains("已删除"));
-        assertTrue(tk.getTool("todo_list").handler.handle(Map.of()).contains("(暂无待办"));
+        assertTrue(tk.getTool("todo_delete").handler.handle(Map.of("todo_id", tid)).contains("Todo deleted"));
+        assertTrue(tk.getTool("todo_list").handler.handle(Map.of()).contains("(no todos"));
     }
 
     // ── 任务列表工具 ─────────────────────────────────────
@@ -88,7 +88,7 @@ class TodoTaskViewTest {
         ToolRegistry.ToolHandler myTasks = tk.getTool("my_tasks").handler;
 
         String empty = myTasks.handle(Map.of());
-        assertTrue(empty.contains("待处理 (队列 0 个)"));
+        assertTrue(empty.contains("Pending (queue 0)"));
 
         role.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "还没开始的任务", "", new LinkedHashMap<>()));
         AgentRole.Task done = new AgentRole.Task(AgentRole.Urgency.HIGH.value, "已完成的任务", "", new LinkedHashMap<>());
