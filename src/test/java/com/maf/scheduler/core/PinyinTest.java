@@ -29,15 +29,6 @@ class PinyinTest {
     }
 
     @Test
-    void testPinyinMapCoversDefaultRoster() {
-        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleTemplates.TEMPLATES.entrySet()) {
-            AgentRole r = e.getValue().get();
-            assertTrue(PinyinMap.NAME_PINYIN.containsKey(r.name),
-                    e.getKey() + " 名字 '" + r.name + "' 未收录拼音表");
-        }
-    }
-
-    @Test
     void testUnknownNameFallsBackToRoleId() {
         AgentRole r = AgentRole.builder().name("外星人").roleId("alien_1").build();
         assertEquals("alien_1", r.username);

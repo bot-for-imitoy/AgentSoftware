@@ -50,7 +50,7 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
 | `core/mail_service.py` | `core/MailService.java` | 公司邮件 (虚拟 / SMTP via jakarta.mail) |
 | `core/role_templates.py` | `core/RoleTemplates.java` | 54 个角色模板 (JSON 描述: `src/main/resources/role_templates.json`) |
 | `core/role_factory.py` | `core/RoleFactory.java` | LLM 驱动招聘 |
-| `core/pinyin_map.py` | `core/PinyinMap.java` | 中文名 → 拼音 |
+| `core/pinyin_map.py` | — (已并入 `role_templates.json` 的 `username` 字段) | 中文名 → 拼音用户名 |
 | `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
 | `core/config_store.py` | `core/ConfigStore.java` | JSON 配置 (点号路径) |
 | `python_tools/*.py` | `tools/toolkits/**` (模板风格: 每域一个 Toolkit + 每函数一个 Tool) | 全部工具类 (memory/note/time/todo/task_view/pc/mcp_manager/skill/email/talk/hr/client/hermes), 见 §8.1 |
@@ -69,7 +69,8 @@ mvn exec:java -Dexec.mainClass=com.maf.scheduler.demo.McpDemo  # MCP 工具演�
   (顶层 `role_id → 角色配置` 映射) 描述; `RoleTemplates` 类加载时自动载入注册表。
   另提供 `RoleTemplates.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
   等方法, 从任意 JSON (字符串/文件, 支持映射/数组/单对象三种形态) 加载或导出 `AgentRole` 角色对象
-  (测试见 `RoleTemplatesJsonTest`)。
+  (测试见 `RoleTemplatesJsonTest`)。原 `PinyinMap` 已删除: 各角色的拼音用户名直接写入 JSON 的
+  `username` 字段, 未显式给出时回退 `role_id`。
 
 ---
 

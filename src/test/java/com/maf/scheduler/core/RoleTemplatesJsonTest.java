@@ -54,6 +54,9 @@ class RoleTemplatesJsonTest {
             String id = e.getKey();
             Map<String, Object> conf = (Map<String, Object>) e.getValue();
             assertNotNull(conf.get("name"), id + " 缺 name");
+            // username: 每个模板都显式给出拼音用户名 (替代原 PinyinMap), 合法格式小写 ASCII
+            String username = Json.str(conf, "username", "");
+            assertTrue(username.matches("[a-z0-9_]+"), id + " 的 username '" + username + "' 非法或缺失");
             assertNotNull(conf.get("title"), id + " 缺 title");
             assertNotNull(conf.get("responsibilities"), id + " 缺 responsibilities");
             assertNotNull(conf.get("personality"), id + " 缺 personality");
@@ -255,9 +258,9 @@ class RoleTemplatesJsonTest {
         assertEquals(Types.AgentState.WAIT, r.state);
     }
 
-    /** 未显式给出 username/uid 时, 由 name/role_id 自动派生 (拼音用户名 + 容器 uid). */
+    /** JSON 未给 username/uid 时: username 回退 role_id, uid 用默认值 (PinyinMap 已并入 JSON). */
     @Test
-    void testFromJsonMapDerivesUsernameAndUid() throws IOException {
+    void testFromJsonMapFallsBackUsernameToRoleId() throws IOException {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("role_id", "derived");
         m.put("name", "王建国");
@@ -267,8 +270,8 @@ class RoleTemplatesJsonTest {
         m.put("skills", List.of("s"));
         m.put("interest_keywords", List.of("k"));
         AgentRole r = RoleTemplates.fromJsonMap(m);
-        assertFalse(r.username.isEmpty(), "应自动派生拼音用户名");
-        assertEquals(PinyinMap.toPinyin("王建国", "derived"), r.username);
+        assertEquals("derived", r.username);
+        assertEquals(1100, r.uid);
     }
 
     // ── JSON 序列化往返 ──────────────────────────────────────

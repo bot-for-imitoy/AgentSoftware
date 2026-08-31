@@ -1,6 +1,7 @@
 {
   "architect" : {
     "name" : "王建国",
+    "username" : "wangjianguo",
     "role_id" : "architect",
     "title" : "System Architect",
     "responsibilities" : "系统架构设计、技术选型、架构评审、技术债务管理、跨团队技术协调",
@@ -12,6 +13,7 @@
   },
   "fullstack_dev" : {
     "name" : "李明",
+    "username" : "liming",
     "role_id" : "fullstack_dev",
     "title" : "Full-Stack Developer",
     "responsibilities" : "编写前后端代码、实现新功能、修复Bug、Code Review、性能优化",
@@ -22,6 +24,7 @@
   },
   "reviewer" : {
     "name" : "张伟",
+    "username" : "zhangwei",
     "role_id" : "reviewer",
     "title" : "Code Review & Security Lead",
     "responsibilities" : "代码审查、安全审计、漏洞扫描、威胁建模、安全规范制定",
@@ -33,6 +36,7 @@
   },
   "qa_engineer" : {
     "name" : "刘洋",
+    "username" : "liuyang",
     "role_id" : "qa_engineer",
     "title" : "QA Engineer",
     "responsibilities" : "测试用例设计、自动化测试、回归测试、性能测试、Bug跟踪与验证",
@@ -44,6 +48,7 @@
   },
   "ops_engineer" : {
     "name" : "赵强",
+    "username" : "zhaoqiang",
     "role_id" : "ops_engineer",
     "title" : "SRE / DevOps Engineer",
     "responsibilities" : "服务器运维、故障排查、监控告警、CI/CD流水线、容器化部署",
@@ -55,6 +60,7 @@
   },
   "content_marketer" : {
     "name" : "陈静",
+    "username" : "chenjing",
     "role_id" : "content_marketer",
     "title" : "Content & Marketing Specialist",
     "responsibilities" : "技术博客撰写、产品发布文案、SEO优化、社交媒体运营、邮件营销",
@@ -65,6 +71,7 @@
   },
   "data_analyst" : {
     "name" : "孙晓",
+    "username" : "sunxiao",
     "role_id" : "data_analyst",
     "title" : "Data Analyst",
     "responsibilities" : "数据分析、报表开发、A/B测试、用户行为分析、KPI监控、数据可视化",
@@ -76,6 +83,7 @@
   },
   "support_agent" : {
     "name" : "周梅",
+    "username" : "zhoumei",
     "role_id" : "support_agent",
     "title" : "Customer Support Specialist",
     "responsibilities" : "用户问题解答、工单处理、故障升级、知识库维护、用户反馈收集",
@@ -87,6 +95,7 @@
   },
   "CEO" : {
     "name" : "林总",
+    "username" : "linzong",
     "role_id" : "CEO",
     "title" : "CEO / 用户对齐官",
     "responsibilities" : "接收用户模糊需求并转化为战略目标、任务完成后汇总产物呈交用户",
@@ -99,6 +108,7 @@
   },
   "COO" : {
     "name" : "陈总",
+    "username" : "chenzong",
     "role_id" : "COO",
     "title" : "COO / 任务调度官",
     "responsibilities" : "拆解战略目标为工作流图、盘点现有员工能力、发现缺口时向HR发起招聘申请",
@@ -111,6 +121,7 @@
   },
   "HR" : {
     "name" : "王人事",
+    "username" : "wangrenshi",
     "role_id" : "HR",
     "title" : "CHRO / 首席人才官",
     "responsibilities" : "接收COO招聘申请、发布招聘启事、新人入职登记",
@@ -123,6 +134,7 @@
   },
   "CFO" : {
     "name" : "钱财",
+    "username" : "qiancai",
     "role_id" : "CFO",
     "title" : "CFO / 预算管控官",
     "responsibilities" : "批复招聘预算、设定Token日薪上限、审批高风险高成本操作",
@@ -135,6 +147,7 @@
   },
   "frontend_dev_1" : {
     "name" : "顾承宇",
+    "username" : "guchengyu",
     "role_id" : "frontend_dev_1",
     "title" : "Frontend Developer (React)",
     "responsibilities" : "React 前端开发、组件库维护、前端性能优化、与后端接口联调",
@@ -146,6 +159,7 @@
   },
   "frontend_dev_2" : {
     "name" : "唐思远",
+    "username" : "tangsiyuan",
     "role_id" : "frontend_dev_2",
     "title" : "Frontend Developer (Vue)",
     "responsibilities" : "Vue 前端开发、SSR 页面、后台管理系统、前端工程化",
@@ -157,6 +171,7 @@
   },
   "frontend_dev_3" : {
     "name" : "罗子涵",
+    "username" : "luozihan",
     "role_id" : "frontend_dev_3",
     "title" : "Frontend Developer (UI/UX)",
     "responsibilities" : "UI 还原、设计系统、响应式与无障碍、前端性能指标优化",
@@ -168,6 +183,7 @@
   },
   "backend_dev_1" : {
     "name" : "彭志强",
+    "username" : "pengzhiqiang",
     "role_id" : "backend_dev_1",
     "title" : "Backend Developer (Java)",
     "responsibilities" : "Java 后端服务、微服务接口、业务逻辑实现、数据库设计",
@@ -179,6 +195,7 @@
   },
   "backend_dev_2" : {
     "name" : "萧文博",
+    "username" : "xiaowenbo",
     "role_id" : "backend_dev_2",
     "title" : "Backend Developer (Go)",
     "responsibilities" : "Go 高并发服务、gRPC 接口、消息队列、性能调优",
@@ -190,6 +207,7 @@
   },
   "backend_dev_3" : {
     "name" : "邓立群",
+    "username" : "dengliqun",
     "role_id" : "backend_dev_3",
     "title" : "Backend Developer (Python)",
     "responsibilities" : "Python 后端服务、数据接口、异步任务、爬虫与数据处理",
@@ -201,6 +219,7 @@
   },
   "mobile_dev_1" : {
     "name" : "曾子墨",
+    "username" : "zengzimo",
     "role_id" : "mobile_dev_1",
     "title" : "Mobile Developer (Android)",
     "responsibilities" : "Android 应用开发、Jetpack Compose 界面、性能与耗电优化",
@@ -212,6 +231,7 @@
   },
   "mobile_dev_2" : {
     "name" : "卢俊豪",
+    "username" : "lujunhao",
     "role_id" : "mobile_dev_2",
     "title" : "Mobile Developer (iOS)",
     "responsibilities" : "iOS 应用开发、SwiftUI 界面、App Store 上架与审核",
@@ -223,6 +243,7 @@
   },
   "mobile_dev_3" : {
     "name" : "蔡文静",
+    "username" : "caiwenjing",
     "role_id" : "mobile_dev_3",
     "title" : "Mobile Developer (React Native)",
     "responsibilities" : "React Native 跨端开发、双端发布、原生模块桥接",
@@ -234,6 +255,7 @@
   },
   "fullstack_dev_1" : {
     "name" : "谭志远",
+    "username" : "tanzhiyuan",
     "role_id" : "fullstack_dev_1",
     "title" : "Full-Stack Developer (Flutter)",
     "responsibilities" : "Flutter 跨端应用 + 后端服务全栈开发",
@@ -245,6 +267,7 @@
   },
   "fullstack_dev_2" : {
     "name" : "范晓峰",
+    "username" : "fanxiaofeng",
     "role_id" : "fullstack_dev_2",
     "title" : "Full-Stack Developer (Node.js)",
     "responsibilities" : "TypeScript 全栈 (前端 + Node 后端) 开发",
@@ -256,6 +279,7 @@
   },
   "fullstack_dev_3" : {
     "name" : "高梦洁",
+    "username" : "gaomengjie",
     "role_id" : "fullstack_dev_3",
     "title" : "Full-Stack Developer (Python)",
     "responsibilities" : "Python 全栈 (前端 + FastAPI 后端) 开发",
@@ -267,6 +291,7 @@
   },
   "tester_1" : {
     "name" : "郭晓东",
+    "username" : "guoxiaodong",
     "role_id" : "tester_1",
     "title" : "QA Engineer (功能测试)",
     "responsibilities" : "功能测试、用例设计、验收测试、缺陷跟踪",
@@ -278,6 +303,7 @@
   },
   "tester_2" : {
     "name" : "马春燕",
+    "username" : "machunyan",
     "role_id" : "tester_2",
     "title" : "QA Engineer (自动化测试)",
     "responsibilities" : "自动化测试框架搭建、pytest 用例编写、CI 集成",
@@ -289,6 +315,7 @@
   },
   "tester_3" : {
     "name" : "宋佳琪",
+    "username" : "songjiaqi",
     "role_id" : "tester_3",
     "title" : "QA Engineer (移动端测试)",
     "responsibilities" : "移动端功能/兼容/弱网测试、真机矩阵验证",
@@ -300,6 +327,7 @@
   },
   "tester_4" : {
     "name" : "袁明轩",
+    "username" : "yuanmingxuan",
     "role_id" : "tester_4",
     "title" : "QA Engineer (接口测试)",
     "responsibilities" : "接口/集成测试、契约测试、Mock 服务",
@@ -311,6 +339,7 @@
   },
   "tester_5" : {
     "name" : "胡婷婷",
+    "username" : "hutingting",
     "role_id" : "tester_5",
     "title" : "QA Engineer (回归测试)",
     "responsibilities" : "回归测试策略、冒烟集维护、版本发布验证",
@@ -322,6 +351,7 @@
   },
   "tester_6" : {
     "name" : "石景山",
+    "username" : "shijingshan",
     "role_id" : "tester_6",
     "title" : "QA Engineer (性能测试)",
     "responsibilities" : "性能/压力/容量测试、瓶颈定位、压测报告",
@@ -333,6 +363,7 @@
   },
   "tester_7" : {
     "name" : "程雪梅",
+    "username" : "chengxuemei",
     "role_id" : "tester_7",
     "title" : "QA Engineer (E2E 测试)",
     "responsibilities" : "端到端 E2E 测试、Playwright 自动化、UI 回归",
@@ -344,6 +375,7 @@
   },
   "tester_8" : {
     "name" : "陆一帆",
+    "username" : "luyifan",
     "role_id" : "tester_8",
     "title" : "QA Engineer (用例设计)",
     "responsibilities" : "测试用例设计、边界/异常场景、测试数据构造",
@@ -355,6 +387,7 @@
   },
   "tester_9" : {
     "name" : "孟浩然",
+    "username" : "menghaoran",
     "role_id" : "tester_9",
     "title" : "QA Engineer (前端测试)",
     "responsibilities" : "前端组件/页面测试、交互异常、跨浏览器验证",
@@ -366,6 +399,7 @@
   },
   "tester_10" : {
     "name" : "沈佳宜",
+    "username" : "shenjiayi",
     "role_id" : "tester_10",
     "title" : "QA Engineer (后端测试)",
     "responsibilities" : "后端单元/集成测试、数据一致性验证、故障注入",
@@ -377,6 +411,7 @@
   },
   "tester_11" : {
     "name" : "田晓慧",
+    "username" : "tianxiaohui",
     "role_id" : "tester_11",
     "title" : "QA Engineer (探索性测试)",
     "responsibilities" : "探索性测试、用户场景模拟、发布前风险探测",
@@ -388,6 +423,7 @@
   },
   "tester_12" : {
     "name" : "魏莱",
+    "username" : "weilai",
     "role_id" : "tester_12",
     "title" : "QA Engineer (兼容性测试)",
     "responsibilities" : "浏览器/操作系统/分辨率兼容矩阵、跨平台验证",
@@ -399,6 +435,7 @@
   },
   "tester_13" : {
     "name" : "姜文博",
+    "username" : "jiangwenbo",
     "role_id" : "tester_13",
     "title" : "QA Engineer (安全测试)",
     "responsibilities" : "安全测试配合、越权/注入类用例、安全回归",
@@ -410,6 +447,7 @@
   },
   "tester_14" : {
     "name" : "谢婉婷",
+    "username" : "xiewanting",
     "role_id" : "tester_14",
     "title" : "QA Engineer (移动自动化)",
     "responsibilities" : "Appium 移动自动化、录制回放、真机集群",
@@ -421,6 +459,7 @@
   },
   "tester_15" : {
     "name" : "邹明",
+    "username" : "zouming",
     "role_id" : "tester_15",
     "title" : "QA Engineer (数据库测试)",
     "responsibilities" : "数据迁移验证、SQL 正确性、数据一致性校验",
@@ -432,6 +471,7 @@
   },
   "tester_16" : {
     "name" : "苏韵",
+    "username" : "suyun",
     "role_id" : "tester_16",
     "title" : "QA Engineer (测试环境)",
     "responsibilities" : "测试环境管理、CI 流水线集成、测试数据准备",
@@ -443,6 +483,7 @@
   },
   "tester_17" : {
     "name" : "潘志远",
+    "username" : "panzhiyuan",
     "role_id" : "tester_17",
     "title" : "QA Engineer (混沌测试)",
     "responsibilities" : "混沌/异常场景测试、依赖故障注入、恢复验证",
@@ -454,6 +495,7 @@
   },
   "tester_18" : {
     "name" : "葛天宇",
+    "username" : "getianyu",
     "role_id" : "tester_18",
     "title" : "QA Engineer (测试报告)",
     "responsibilities" : "测试报告汇总、缺陷分析、质量度量、发布门禁",
@@ -465,6 +507,7 @@
   },
   "tester_19" : {
     "name" : "薛静怡",
+    "username" : "xuejingyi",
     "role_id" : "tester_19",
     "title" : "QA Engineer (可用性测试)",
     "responsibilities" : "可用性测试、用户旅程验证、产品体验反馈",
@@ -476,6 +519,7 @@
   },
   "tester_20" : {
     "name" : "阮志明",
+    "username" : "ruanzhiming",
     "role_id" : "tester_20",
     "title" : "QA Engineer (全链路测试)",
     "responsibilities" : "全链路 E2E 验证、跨系统联调测试、发布演练",
@@ -487,6 +531,7 @@
   },
   "attacker_1" : {
     "name" : "白鹏",
+    "username" : "baipeng",
     "role_id" : "attacker_1",
     "title" : "Red Team (Web 渗透)",
     "responsibilities" : "红队攻击方: Web 渗透测试、漏洞利用、攻击路径演练",
@@ -498,6 +543,7 @@
   },
   "attacker_2" : {
     "name" : "严冬",
+    "username" : "yandong",
     "role_id" : "attacker_2",
     "title" : "Security Auditor (代码审计)",
     "responsibilities" : "白盒审计: 源码安全审计、供应链风险、0day 挖掘",
@@ -509,6 +555,7 @@
   },
   "attacker_3" : {
     "name" : "纪安",
+    "username" : "jian",
     "role_id" : "attacker_3",
     "title" : "Blue Team (安全防守)",
     "responsibilities" : "蓝队防守方: 应急响应、日志溯源、加固与红蓝对抗复盘",
@@ -520,6 +567,7 @@
   },
   "release_manager" : {
     "name" : "方谨言",
+    "username" : "fangjinyan",
     "role_id" : "release_manager",
     "title" : "Release Manager (版本管理)",
     "responsibilities" : "Git 分支与版本管理、合并冲突协调、发布流程、跨团队沟通确认",
@@ -531,6 +579,7 @@
   },
   "CTO" : {
     "name" : "高远",
+    "username" : "gaoyuan",
     "role_id" : "CTO",
     "title" : "CTO / 首席技术官",
     "responsibilities" : "公司技术战略与架构方向、跨技术团队协调、重大技术决策、向 CEO 汇报技术风险",
@@ -542,6 +591,7 @@
   },
   "frontend_lead" : {
     "name" : "陈思远",
+    "username" : "chensiyuan",
     "role_id" : "frontend_lead",
     "title" : "前端负责人",
     "responsibilities" : "前端技术方向、代码质量把关、审核前端成员的 git 提交并报告版本管理角色",
@@ -553,6 +603,7 @@
   },
   "backend_lead" : {
     "name" : "王宇轩",
+    "username" : "wangyuxuan",
     "role_id" : "backend_lead",
     "title" : "后端负责人",
     "responsibilities" : "后端技术方向、代码质量把关、审核后端成员的 git 提交并报告版本管理角色",
@@ -564,6 +615,7 @@
   },
   "fullstack_lead" : {
     "name" : "李俊杰",
+    "username" : "lijunjie",
     "role_id" : "fullstack_lead",
     "title" : "全栈负责人",
     "responsibilities" : "全栈技术方向、代码质量把关、审核全栈成员的 git 提交并报告版本管理角色",
@@ -575,6 +627,7 @@
   },
   "mobile_lead" : {
     "name" : "张雅婷",
+    "username" : "zhangyating",
     "role_id" : "mobile_lead",
     "title" : "移动开发负责人",
     "responsibilities" : "移动端技术方向、代码质量把关、审核移动成员的 git 提交并报告版本管理角色",
@@ -586,6 +639,7 @@
   },
   "test_lead" : {
     "name" : "刘子涵",
+    "username" : "liuzihan",
     "role_id" : "test_lead",
     "title" : "测试负责人",
     "responsibilities" : "测试策略与质量体系、审核测试成员的 git 提交并报告版本管理角色",

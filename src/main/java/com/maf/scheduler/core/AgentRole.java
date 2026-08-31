@@ -282,10 +282,14 @@ public class AgentRole {
         }
     }
 
-    /** 补齐派生字段: username (拼音用户名) 与 uid (容器内用户号). */
+    /**
+     * 补齐派生字段: username (未显式指定时回退 role_id) 与 uid (容器内用户号).
+     * 模板角色的拼音用户名由 role_templates.json 的 username 字段直接提供
+     * (PinyinMap 已并入 JSON), 此处只处理程序化创建的角色.
+     */
     private void postInit() {
         if (username == null || username.isEmpty()) {
-            username = PinyinMap.toPinyin(name, !roleId.isEmpty() ? roleId : "agent");
+            username = !roleId.isEmpty() ? roleId : "agent";
         }
         if (uid <= 0) {
             uid = 1100;  // 由 RolePool.addRole 注册时分配 (1100 + 注册序号)
