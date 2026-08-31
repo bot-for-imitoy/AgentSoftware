@@ -104,14 +104,14 @@ public class OpenAICompatLLM implements LLM {
                 ? provider.toLowerCase() : resolveProvider(env, props);
         applyProvider(this.provider);
         this.label = label != null ? label : "";
-        this.apiKey = first(apiKey, LayeredConfig.get(apiKeyEnv, configStore,
+        this.apiKey = first(apiKey, LayeredConfig.get(apiKeyEnv, this.configStore,
                 storeKeys("api_key"), "", env, props));
-        this.baseUrl = stripSlash(first(baseUrl, LayeredConfig.get(baseUrlEnv, configStore,
+        this.baseUrl = stripSlash(first(baseUrl, LayeredConfig.get(baseUrlEnv, this.configStore,
                 storeKeys("base_url"), defaultBaseUrl, env, props)));
-        this.model = first(model, LayeredConfig.get(modelEnv, configStore,
+        this.model = first(model, LayeredConfig.get(modelEnv, this.configStore,
                 storeKeys("model"), defaultModel, env, props));
         this.thinking = "deepseek".equals(this.provider)
-                ? LayeredConfig.getBool("DEEPSEEK_THINKING", configStore,
+                ? LayeredConfig.getBool("DEEPSEEK_THINKING", this.configStore,
                         storeKeys("thinking"), true, env, props)
                 : false;
         if (requiresApiKey && (this.apiKey == null || this.apiKey.isEmpty())) {
