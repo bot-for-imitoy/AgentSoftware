@@ -2,6 +2,7 @@ package com.agent.software.services;
 
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
+import com.agent.software.role.RoleTemplates;
 import com.agent.software.role.ToolRegistry;
 import com.agent.software.tools.ToolkitBridge;
 import com.agent.software.tools.toolkits.email.Email;
