@@ -176,14 +176,14 @@ public class TalkTo extends Tool {
     }
 
     /**
-     * 记录组内 talk 消息到聊天存储 (Web 界面展示). 发送方未绑定系统上下文
+     * 记录组内 talk 消息到聊天存储 (Web 界面展示). 发送方未绑定系统
      * (无 ChatStore) 时静默跳过 — 独立角色/单元测试行为不变.
      * 消息归属组: 发送方组优先, 否则取接收方组 (未分组新人发给某组成员时
      * 显示在接收方组).
      */
     private void recordTalk(AgentRole targetRole, String message, String urgency) {
-        ChatStore store = agentRole != null && agentRole.context() != null
-                ? agentRole.context().chatStore : null;
+        ChatStore store = agentRole != null && agentRole.system() != null
+                ? agentRole.system().chatStore : null;
         if (store == null || targetRole == null) {
             return;
         }

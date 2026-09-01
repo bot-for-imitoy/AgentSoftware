@@ -1,16 +1,24 @@
 package com.agent.software;
 
 import com.agent.software.computers.Computer;
+import com.agent.software.computers.ComputerManager;
 import com.agent.software.core.Types;
 import com.agent.software.event.EventDispatcher;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
+import com.agent.software.services.MailService;
 import com.agent.software.store.ConfigStore;
+import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
+import com.agent.software.tools.toolkits.mcp.MCPManager;
+import com.agent.software.tools.toolkits.skill.SkillManager;
+import com.agent.software.web.ChatStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,43 +29,64 @@ import java.util.concurrent.TimeUnit;
 /**
  * 系统管理类 (AgentSystem) — 统一管理 TimeEventBus + RolePool + 事件分发
  * (Python 版 agent_system.py).
+ *
+ * <p><b>自包含设计</b>: 每套 {@code AgentSystem} 直接持有自己的一套协作对象
+ * (时钟 / 配置 / 电脑注册表 / 邮箱 / MCP 与技能管理器 / 甲方对话锁 / 聊天存储)
+ * 与数据根目录, 不依赖进程级全局单例. 因此一套系统可独立运行, 同一进程内也可
+ * 创建多套系统互不干扰 (见 docs/agent-system-multi-instance.md).
  */
 public class AgentSystem {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentSystem.class);
 
-    public final TimeEventBus timeManager;   // 共享时间源 (本系统 context 持有)
+    public final TimeEventBus timeManager;   // 共享时间源
     public final RolePool pool;
     public final EventDispatcher dispatcher;
     public final boolean autoToolkits;
     public final ConfigStore configStore;
 
-    /** 本系统运行时上下文: 每系统独立的协作对象 (电脑/邮箱/MCP/技能/对话锁) 与数据目录. */
-    private final AgentSystemContext context;
+    // ── 每系统独立协作对象 (多实例互不干扰) ────────────────────
+    /** 本系统角色电脑注册表 (role_id → Computer). */
+    public final ComputerManager computerManager;
+    /** 本系统公司邮箱 (数据落 dataDir/mail). */
+    public final MailService mailService;
+    /** 本系统 MCP 工具管理器. */
+    public final MCPManager mcpManager;
+    /** 本系统技能库管理器 (数据落 dataDir/skills). */
+    public final SkillManager skillManager;
+    /** 本系统与甲方沟通互斥锁. */
+    public final ClientCommunicationLock clientLock;
+    /** 本系统聊天消息存储 + 甲方对话协调 (Web 界面数据源). */
+    public final ChatStore chatStore;
 
-    /**
-     * 默认上下文构造 (数据目录 ./data, 所有协作对象每系统独立实例).
-     * 多实例场景请使用 {@link #AgentSystem(AgentSystemContext, List, List, double, boolean)}.
-     */
+    /** 本系统数据根目录 (默认 ./data), 全部持久化文件都落在其下. */
+    private final Path dataDir;
+
+    /** 默认数据目录 (./data) 构造, 行为与历史版本一致. */
     public AgentSystem(List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
-        this(AgentSystemContext.createDefault(), roles, roleIds, checkInterval, autoToolkits);
+        this(Paths.get("data"), roles, roleIds, checkInterval, autoToolkits);
     }
 
     /**
-     * 显式上下文构造: 每套 {@link AgentSystem} 拥有自己的时钟/电脑注册表/邮箱/
-     * 工具管理器/对话锁与数据目录, 多个系统可在同一进程内安全共存
-     * (见 docs/agent-system-multi-instance.md).
+     * 显式数据目录构造: 每套 {@code AgentSystem} 的持久化文件 (日志/笔记/待办/
+     * 邮件/存档/技能) 全部落在各自 dataDir 下. 多套系统传入不同目录即可安全共存.
      */
-    public AgentSystem(AgentSystemContext context, List<AgentRole> roles, List<String> roleIds,
+    public AgentSystem(Path dataDir, List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
-        this.context = context;
-        this.timeManager = context.timeManager;
+        this.dataDir = dataDir != null ? dataDir : Paths.get("data");
+        this.timeManager = new TimeEventBus();
         this.timeManager.checkInterval = checkInterval;
-        this.pool = new RolePool(null, null, timeManager, autoToolkits, context);
+        this.configStore = new ConfigStore();
+        this.computerManager = new ComputerManager();
+        this.mailService = new MailService(null, this.dataDir.resolve("mail").toString());
+        this.mcpManager = new MCPManager();
+        this.skillManager = new SkillManager(this.dataDir.resolve("skills").toString());
+        this.clientLock = new ClientCommunicationLock();
+        this.chatStore = new ChatStore();
+        this.pool = new RolePool(null, null, timeManager, autoToolkits, this);
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
-        this.configStore = context.configStore;
 
         // 时间线程的事件 → 事件分发器 (作息事件统一入口)
         this.timeManager.setEventSender(this::onTimeEvent);
@@ -82,20 +111,61 @@ public class AgentSystem {
         this(null, null, 30.0, true);
     }
 
-    /** 本系统运行时上下文 (每系统独立的协作对象与数据目录). */
-    public AgentSystemContext context() {
-        return context;
+    // ── 数据目录 (全部以 dataDir 为根) ────────────────────────
+
+    public Path dataDir() {
+        return dataDir;
+    }
+
+    /** 角色活动日志目录. */
+    public Path journalDir() {
+        return dataDir.resolve("journals");
+    }
+
+    /** 角色笔记/每日总结目录. */
+    public Path notesDir() {
+        return dataDir.resolve("notes");
+    }
+
+    /** 角色待办清单目录. */
+    public Path todosDir() {
+        return dataDir.resolve("todos");
+    }
+
+    /** 公司邮箱数据目录. */
+    public Path mailDir() {
+        return dataDir.resolve("mail");
+    }
+
+    /** 角色个人电脑目录 (local 模拟用). */
+    public Path computersDir() {
+        return dataDir.resolve("computers");
+    }
+
+    /** 企业云盘挂载目录. */
+    public Path driveDir() {
+        return dataDir.resolve("drive");
+    }
+
+    /** 技能库目录. */
+    public Path skillsDir() {
+        return dataDir.resolve("skills");
+    }
+
+    /** 全量状态存档文件. */
+    public Path stateFile() {
+        return dataDir.resolve("state.json");
     }
 
     // ── 角色管理 ──────────────────────────────────────────
 
     /** 批量注册角色: 耗时装配 (电脑创建 + MCP 服务器启动) 多线程并行. */
     public List<AgentRole> addRoles(List<AgentRole> roles) {
-        // 先统一绑定共享时间源与系统上下文 (快, 串行) — 保证角色所有惰性依赖
-        // (电脑/邮箱/笔记/待办/日志) 都落在本系统, 而非进程级全局单例
+        // 先统一绑定共享时间源与本系统引用 (快, 串行) — 保证角色所有惰性依赖
+        // (电脑/邮箱/笔记/待办/日志/聊天) 都落在本系统, 而非进程级全局单例
         for (AgentRole role : roles) {
             role.bindTimeManager(timeManager);
-            role.bindContext(context);
+            role.bindSystem(this);
         }
         if (autoToolkits) {
             // 并行装配: 每角色一个虚拟线程 (Java 21+), 用信号量限制并发数,

@@ -143,9 +143,9 @@ public class TalkToClient extends Tool {
         return "talk_to_client: client reply: " + reply;
     }
 
-    /** 本角色所属系统的聊天存储 (未绑定上下文的独立角色为 null). */
+    /** 本角色所属系统的聊天存储 (未绑定系统的独立角色为 null). */
     private ChatStore chatStore() {
-        return agentRole != null && agentRole.context() != null
-                ? agentRole.context().chatStore : null;
+        return agentRole != null && agentRole.system() != null
+                ? agentRole.system().chatStore : null;
     }
 }

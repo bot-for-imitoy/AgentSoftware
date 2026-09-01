@@ -1,6 +1,6 @@
 package com.agent.software.role;
 
-import com.agent.software.AgentSystemContext;
+import com.agent.software.AgentSystem;
 import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.toolkits.talk.Talk;
 import com.agent.software.computers.Computer;
@@ -11,12 +11,12 @@ import com.agent.software.llm.LLM;
 import com.agent.software.services.MailService;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.TodoStore;
-import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.Toolkits;
 import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.utils.Json;
+import com.agent.software.web.ChatStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,7 +201,7 @@ public class AgentRole {
     private LLM llm = null;                              // 惰性初始化
     private ToolRegistry tools = null;                   // 惰性初始化
     private RolePool pool = null;                        // talk 用回引
-    private AgentSystemContext context = null;           // 所属系统上下文 (电脑/邮箱/数据目录等)
+    private AgentSystem system = null;                   // 所属 AgentSystem (电脑/邮箱/数据目录等来源)
     private NoteStore noteStore = null;
     private TodoStore todoStore = null;
     private TimeEventBus timeManager = null;
@@ -504,45 +504,50 @@ public class AgentRole {
         return currentTask != null;
     }
 
-    // ── System context (每系统独立协作对象) ────────────────
+    // ── 所属 AgentSystem (每系统独立协作对象) ────────────────
 
     /**
-     * 绑定所属系统上下文: 电脑/邮箱/笔记/待办/活动日志等惰性依赖全部解析到
+     * 绑定所属 AgentSystem: 电脑/邮箱/笔记/待办/活动日志/聊天等惰性依赖全部解析到
      * 本系统实例 (而非进程级全局单例), 使多个 AgentSystem 可安全共存.
      * 由 {@code AgentSystem.addRoles} / {@code RolePool.setupRole} 注入; 幂等.
      */
-    public void bindContext(AgentSystemContext ctx) {
-        this.context = ctx;
+    public void bindSystem(AgentSystem system) {
+        this.system = system;
     }
 
-    /** 所属系统上下文 (独立创建未入池的角色为 null, 此时各依赖回退全局默认). */
-    public AgentSystemContext context() {
-        return context;
+    /** 所属 AgentSystem (独立创建未入池的角色为 null, 此时各依赖回退全局默认). */
+    public AgentSystem system() {
+        return system;
     }
 
-    /** 本角色电脑注册表: 有上下文用上下文实例, 否则回退进程级默认单例. */
+    /** 本角色电脑注册表: 有所属系统用系统实例, 否则回退进程级默认单例. */
     public ComputerManager computerManager() {
-        return context != null ? context.computerManager : ComputerManager.getInstance();
+        return system != null ? system.computerManager : ComputerManager.getInstance();
     }
 
-    /** 本角色公司邮箱服务: 有上下文用上下文实例, 否则回退进程级默认单例. */
+    /** 本角色公司邮箱服务: 有所属系统用系统实例, 否则回退进程级默认单例. */
     public MailService mailService() {
-        return context != null ? context.mailService : MailService.getMailService();
+        return system != null ? system.mailService : MailService.getMailService();
     }
 
-    /** 本角色与甲方沟通互斥锁: 有上下文用上下文实例, 否则回退进程级默认单例. */
+    /** 本角色与甲方沟通互斥锁: 有所属系统用系统实例, 否则回退进程级默认单例. */
     public ClientCommunicationLock clientLock() {
-        return context != null ? context.clientLock : ClientCommunicationLock.getInstance();
+        return system != null ? system.clientLock : ClientCommunicationLock.getInstance();
     }
 
-    /** 本角色 MCP 工具管理器: 有上下文用上下文实例, 否则回退进程级默认单例. */
+    /** 本角色 MCP 工具管理器: 有所属系统用系统实例, 否则回退进程级默认单例. */
     public MCPManager mcpManager() {
-        return context != null ? context.mcpManager : Toolkits.getMcpManager();
+        return system != null ? system.mcpManager : Toolkits.getMcpManager();
     }
 
-    /** 本角色技能库管理器: 有上下文用上下文实例, 否则回退进程级默认单例. */
+    /** 本角色技能库管理器: 有所属系统用系统实例, 否则回退进程级默认单例. */
     public SkillManager skillManager() {
-        return context != null ? context.skillManager : Toolkits.getSkillManager();
+        return system != null ? system.skillManager : Toolkits.getSkillManager();
+    }
+
+    /** 本角色聊天消息存储 (Web 界面数据源); 未绑定系统的独立角色为 null. */
+    public ChatStore chatStore() {
+        return system != null ? system.chatStore : null;
     }
 
     // ── Personal computer (per-role) ───────────────────────
@@ -567,7 +572,7 @@ public class AgentRole {
     /** 获取该角色的笔记存储实例 (惰性初始化, 按 role_id 隔离, 落本系统数据目录). */
     public NoteStore noteStore() {
         if (noteStore == null) {
-            noteStore = new NoteStore(context != null ? context.notesDir().toString() : null,
+            noteStore = new NoteStore(system != null ? system.notesDir().toString() : null,
                     roleId, timeManager());
         }
         return noteStore;
@@ -581,8 +586,8 @@ public class AgentRole {
     /** 获取该角色的 Todo 清单存储 (惰性初始化, 落本系统数据目录). */
     public TodoStore todoStore() {
         if (todoStore == null) {
-            todoStore = new TodoStore(roleId, context != null
-                    ? context.todosDir().resolve(NoteStore.sanitizeTitle(roleId) + ".json").toString()
+            todoStore = new TodoStore(roleId, system != null
+                    ? system.todosDir().resolve(NoteStore.sanitizeTitle(roleId) + ".json").toString()
                     : null);
         }
         return todoStore;
@@ -606,8 +611,8 @@ public class AgentRole {
             tick = 0;
         }
         String ts = new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date());
-        // 活动日志目录: 有上下文落本系统数据目录, 否则用进程级静态默认 (旧行为)
-        Path journalDir = context != null ? context.journalDir() : JOURNAL_DIR;
+        // 活动日志目录: 有所属系统落本系统数据目录, 否则用进程级静态默认 (旧行为)
+        Path journalDir = system != null ? system.journalDir() : JOURNAL_DIR;
         try {
             synchronized (JOURNAL_LOCK) {
                 Path path = journalDir.resolve(NoteStore.sanitizeTitle(

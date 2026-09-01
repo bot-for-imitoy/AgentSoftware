@@ -114,7 +114,7 @@ public class StateStore {
             String kind = comp.getClass().getSimpleName().replace("Computer", "").toLowerCase();
             c.put("kind", kind);
             c.put("auto_mcp", comp.isAutoMcp());
-            c.put("name", system.context().computerManager.nameOf(role.roleId, role.name));
+            c.put("name", system.computerManager.nameOf(role.roleId, role.name));
             computers.put(role.roleId, c);
         }
 
@@ -311,7 +311,7 @@ public class StateStore {
                     if (!List.of("podman", "local", "ssh").contains(kind)) {
                         kind = "podman";
                     }
-                    Computer comp = system.context().computerManager.create(kind, rid,
+                    Computer comp = system.computerManager.create(kind, rid,
                             Json.str(cdata, "name", role.name),
                             Json.boolVal(cdata, "auto_mcp", true),
                             new LinkedHashMap<>());

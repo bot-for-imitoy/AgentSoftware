@@ -134,7 +134,7 @@ class ChatWebServerTest {
 
     @Test
     void testFullClientReplyFlow() throws Exception {
-        ChatStore store = system.context().chatStore;
+        ChatStore store = system.chatStore;
         assertNotNull(store);
         store.markAttached();
 

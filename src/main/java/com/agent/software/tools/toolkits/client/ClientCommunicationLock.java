@@ -8,8 +8,8 @@ package com.agent.software.tools.toolkits.client;
  * 避免多人同时抢占控制台输入.
  *
  * 进程级默认单例由 {@link #getInstance()} 获取; 每个 {@link
- * com.agent.software.AgentSystem} 通过 {@link com.agent.software.AgentSystemContext}
- * 持有自己的锁实例, 多系统互不阻塞. 构造器公开, 便于测试与多实例场景创建独立实例.
+ * com.agent.software.AgentSystem} 直接持有自己的锁实例, 多系统互不阻塞.
+ * 构造器公开, 便于测试与多实例场景创建独立实例.
  */
 public final class ClientCommunicationLock {
 

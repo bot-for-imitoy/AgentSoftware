@@ -635,7 +635,7 @@ Java 版内置零依赖 Web 界面 (`com.sun.net.httpserver` + Jackson, 不新�
 
 | 类 | 说明 |
 |---|---|
-| `web/ChatStore` | 聊天消息存储 (talk / client 两类消息, 单调 seq) + 甲方对话协调 (beginClientWait / awaitClientReply / postClientReply), 每套 `AgentSystem` 一份 (`AgentSystemContext.chatStore`) |
+| `web/ChatStore` | 聊天消息存储 (talk / client 两类消息, 单调 seq) + 甲方对话协调 (beginClientWait / awaitClientReply / postClientReply), 每套 `AgentSystem` 自持一份 (`AgentSystem.chatStore`) |
 | `web/ChatWebServer` | HTTP 服务器: 静态资源 `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; 端口 `AGENTCOMPANY_WEB_PORT` (默认 8787) |
 | `demo/WebDemo` | 轻量演示: 最小团队 + 预置消息 + 一次甲方对话 |
 

@@ -134,29 +134,29 @@ HTTP API (同源, 无鉴权, 供 Web 前端轮询):
 > 安全运行一个 `AgentSystem`, 否则会出现角色/电脑互相覆盖、事件串扰、存档互踩等
 > 不可预知异常 (完整评估见 `docs/agent-system-multi-instance.md`)。
 
-自本版起, 每套 `AgentSystem` 通过 **`AgentSystemContext`** 持有自己的协作对象与
-数据目录, 多个系统可在同一进程内安全共存:
+自本版起, 每套 `AgentSystem` **直接持有自己的协作对象** (时钟/电脑注册表/邮箱/
+MCP 与技能管理器/甲方对话锁/聊天存储) 与数据目录, 一套系统可独立运行, 多个系统
+也可在同一进程内安全共存:
 
 ```java
 import com.agent.software.AgentSystem;
-import com.agent.software.AgentSystemContext;
 import java.nio.file.Paths;
 
-// 每套系统一个独立上下文 (时钟/电脑注册表/邮箱/工具管理器/对话锁 + 数据目录)
-AgentSystem companyA = new AgentSystem(AgentSystemContext.create(Paths.get("data/company-a")), null, roleIds, 30.0, true);
-AgentSystem companyB = new AgentSystem(AgentSystemContext.create(Paths.get("data/company-b")), null, roleIds, 30.0, true);
+// 每套系统自持协作对象 + 独立数据目录 (日志/笔记/待办/邮件/存档/技能全落其下)
+AgentSystem companyA = new AgentSystem(Paths.get("data/company-a"), null, roleIds, 30.0, true);
+AgentSystem companyB = new AgentSystem(Paths.get("data/company-b"), null, roleIds, 30.0, true);
 ```
 
-- 无参/默认构造 (`new AgentSystem(...)`) 行为不变: 使用默认上下文, 数据仍落在 `./data/*`
+- 无参/默认构造 (`new AgentSystem(...)`) 行为不变: 数据仍落在 `./data/*`
   (角色笔记默认目录从用户主目录统一到 `data/notes`, 与 `.gitignore` 及全项目布局一致)。
 - 每系统的持久化文件 (日志/笔记/待办/邮件/存档/技能) 全部落在各自的 `dataDir` 下。
-- 角色通过 `bindContext` 绑定本系统上下文; 未绑定上下文的独立角色/角色池继续回退
+- 角色通过 `bindSystem` 绑定所属系统; 未绑定系统的独立角色/角色池继续回退
   进程级默认单例 (旧行为, 演示与单元测试兼容)。
 - 仍属进程级共享 (有意为之): 角色模板注册表 (`RoleLoader.TEMPLATES`)、默认 LLM 配置
   (ConfigStore)、podman 网络/基础镜像/容器名等宿主机基础设施。
   **多实例部署约束**: 同一宿主机上两套系统若使用相同 `role_id` 的 podman 电脑,
   容器名会冲突; 多实例场景应使用 `local` 电脑 (每系统独立 `base_dir`) 或互不重叠的角色集。
-- 新增 `AgentSystemIsolationTest` 覆盖两套系统在时钟/电脑/邮箱/对话锁/数据文件上的隔离。
+- 新增 `AgentSystemIsolationTest` 覆盖两套系统在时钟/电脑/邮箱/对话锁/聊天存储/数据文件上的隔离。
 
 ---
 

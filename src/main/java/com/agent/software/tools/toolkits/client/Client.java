@@ -14,9 +14,9 @@ public class Client extends Toolkit {
     public Client(AgentRole agentRole) {
         this.agentRole = agentRole;
         // 互斥锁优先取角色所属系统的实例 (每系统一把锁, 多系统互不阻塞),
-        // 未绑定上下文的独立角色回退到进程级默认单例
-        ClientCommunicationLock lock = agentRole != null && agentRole.context() != null
-                ? agentRole.context().clientLock : ClientCommunicationLock.getInstance();
+        // 未绑定系统的独立角色回退到进程级默认单例
+        ClientCommunicationLock lock = agentRole != null && agentRole.system() != null
+                ? agentRole.system().clientLock : ClientCommunicationLock.getInstance();
         addTool(new TalkToClient(agentRole, lock));
     }
 

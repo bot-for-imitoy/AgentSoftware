@@ -67,7 +67,7 @@ public class WebDemo {
         talkCeo.handler(Map.of("target", "陈总", "message", "收到甲方新需求, 我会先确认范围, 稍后同步给你。", "urgency", "NORMAL"));
 
         // 5. 模拟甲方对话: CEO 调用 talk_to_client (Web 模式), 3 秒后甲方在"网页上"回复
-        ChatStore store = system.context().chatStore;
+        ChatStore store = system.chatStore;
         store.markAttached();
         AtomicReference<String> result = new AtomicReference<>();
         Thread ceoThread = new Thread(() -> result.set(

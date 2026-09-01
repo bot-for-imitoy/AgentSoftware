@@ -8,8 +8,7 @@ import java.util.Map;
 /**
  * 聊天消息存储 + 与甲方对话协调 (Web 界面数据源).
  *
- * <p>每套 {@link com.agent.software.AgentSystem} 通过
- * {@link com.agent.software.AgentSystemContext} 持有自己的 ChatStore 实例,
+ * <p>每套 {@link com.agent.software.AgentSystem} 直接持有自己的 ChatStore 实例,
  * 记录两类消息:
  * <ul>
  *   <li>{@code talk}  — 组内角色间 talk 消息 (TalkTo 投递成功后记录);</li>

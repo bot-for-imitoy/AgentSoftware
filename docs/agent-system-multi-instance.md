@@ -83,47 +83,50 @@
 
 ## 3. 改造方案 (按本报告实施)
 
-核心思路: **把"进程级全局单例"改为"每 AgentSystem 一个实例", 并显式注入**。
-引入一个轻量的**系统上下文 (AgentSystemContext)**, 打包一套 AgentSystem 专属的
-协作对象与数据目录, 由 `AgentSystem` 创建并贯穿 `RolePool → AgentRole → 工具类`。
+核心思路: **把"进程级全局单例"改为"每 AgentSystem 一个实例", 由 AgentSystem
+直接持有**。不引入额外的打包类: `AgentSystem` 在构造时自建并直接持有自己的一套
+协作对象与数据根目录, 通过 `RolePool → AgentRole → 工具类` 显式注入, 一套系统
+可独立运行, 多套系统互不干扰。
 
-### 3.1 新增 `AgentSystemContext`
+### 3.1 `AgentSystem` 自包含协作对象与数据目录
 
-字段 (全部每系统独立实例):
+`AgentSystem` 新增直接字段 (全部每系统独立实例, 多实例互不干扰):
 
-- `timeManager` (TimeEventBus) — 每系统一个时钟
+- `timeManager` (TimeEventBus) — 每系统一个时钟 (原有)
 - `configStore` (ConfigStore)
 - `computerManager` (ComputerManager) — 每系统一份角色电脑注册表
 - `mailService` (MailService) — 每系统一份邮箱 (数据落 `dataDir/mail`)
 - `mcpManager` (MCPManager) / `skillManager` (SkillManager) — 每系统一份
 - `clientLock` (ClientCommunicationLock) — 每系统一把与甲方对话锁
+- `chatStore` (ChatStore) — 每系统一份聊天存储 (Web 界面数据源)
 - `dataDir` (Path) — 每系统数据根目录, 默认 `./data`
 
 派生的数据目录 (均以 `dataDir` 为根): `journalDir/notesDir/todosDir/mailDir/
 computersDir/driveDir/skillsDir/stateFile`。
 
-工厂方法: `AgentSystemContext.create(Path dataDir)` 与 `createDefault()`。
-多实例用法: 每个 `AgentSystem` 传入不同的 `dataDir`, 文件层面完全隔离。
+多实例用法: 每个 `AgentSystem` 传入不同的 `dataDir`, 文件层面完全隔离:
+`new AgentSystem(Paths.get("data/company-a"), null, roleIds, 30.0, true)`。
 
 ### 3.2 各模块改动
 
 | 文件 | 改动 |
 |---|---|
-| `AgentSystem` | 构造器改为基于 context (`AgentSystemContext.createDefault()` 保持旧签名兼容); 新增 `AgentSystem(AgentSystemContext, ...)` 重载; `addRoles` 无条件绑定 `bindTimeManager` + `bindContext`; 暴露 `context()` |
-| `RolePool` | 新增携带 context 的构造重载; `setupRole` 绑定 context; 默认 MCP 组用 `role` 上下文的管理器; `removeRole`/`newLlm` 改用上下文对象 |
-| `AgentRole` | 新增 `context` 字段与 `bindContext()/context()`; 新增 `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()` 解析助手 (有上下文用上下文, 否则回退全局默认, 保证旧用法兼容); `computer()/mailAddress()/noteStore()/todoStore()/journal()` 全部改走上下文 |
-| `Toolkits.defaultToolkits` | 用 `role.context()` 的 MCP/Skill/Mail 管理器构造工具类 |
-| `toolkits/client/Client` | 用 `role.context().clientLock` (无上下文回退全局单例) |
-| `toolkits/pc/Pc` + `LanDevices` | `LanDevices` 支持注入 `ComputerManager`; `Pc(AgentRole)` 用角色上下文的管理器 |
+| `AgentSystem` | 新增 `computerManager/mailService/mcpManager/skillManager/clientLock/chatStore/dataDir` 直接字段并在构造时自建; 新增 `AgentSystem(Path dataDir, ...)` 重载 (原签名保持兼容); `addRoles` 无条件绑定 `bindTimeManager` + `bindSystem(this)`; 新增各数据目录访问方法 |
+| `RolePool` | 新增携带 `AgentSystem owner` 的构造重载 (可为 null = 独立角色池); `setupRole` 绑定 `bindSystem`; 默认 MCP 组用 `role.mcpManager()`; `removeRole` 用 `role.computerManager()`; `newLlm` 用 `owner.configStore` |
+| `AgentRole` | 新增 `system` 字段与 `bindSystem()/system()`; 新增 `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()/chatStore()` 解析助手 (有所属系统用系统实例, 否则回退全局默认, 保证旧用法兼容); `computer()/mailAddress()/noteStore()/todoStore()/journal()` 全部改走所属系统 |
+| `Toolkits.defaultToolkits` | 用 `role.mcpManager()/skillManager()/mailService()` 构造工具类 (系统内角色即每系统实例) |
+| `toolkits/client/Client` + `TalkToClient` | 用 `role.system().clientLock` / `.chatStore` (未绑定系统回退全局默认/无聊天存储) |
+| `toolkits/talk/TalkTo` | `recordTalk` 用 `role.system().chatStore` |
+| `web/ChatWebServer` + `WebDemo` | 改用 `system.chatStore` |
 | `store/NoteStore` | 默认基础目录改为 `data/notes` (与 .gitignore 及全项目布局一致; 显式传参行为不变) |
-| `store/StateStore` | `collect/restoreComputers` 改用 `system.context().computerManager` |
+| `store/StateStore` | `collect/restoreComputers` 改用 `system.computerManager` |
 | `computers/ComputerManager` | 构造器改为 public (允许每系统 new 实例); `getInstance()` 保留为默认回退 |
 
 ### 3.3 保留的进程级共享 (有意为之, 文档化)
 
 - **`RoleLoader.TEMPLATES` / 名字池**: 角色模板是 classpath 上的"公司组织架构定义",
   属于进程级共享目录; HR 招聘注册的新模板进程内可见 (与单系统语义一致)。如需隔离,
-  可在 context 上扩展每系统模板表 (本期不做)。
+  可在 `AgentSystem` 上扩展每系统模板表 (本期不做)。
 - **podman 网络 / 基础镜像 / 容器名**: `maf-net` 网络、`maf-base:latest` 镜像、
   `maf-<role_id>` 容器名是宿主机级基础设施, 跨系统共享 (幂等创建)。
   **多实例部署约束**: 同一宿主机上两个 AgentSystem 若使用相同 `role_id` 的
@@ -135,23 +138,24 @@ computersDir/driveDir/skillsDir/stateFile`。
 ### 3.4 兼容性
 
 - `AgentSystem` / `RolePool` / `AgentRole` 的既有公开构造器与字段全部保留;
-  `Main.java`、演示程序、既有测试无需结构性改动。
+  `Main.java`、演示程序、既有测试无需结构性改动 (仅 Web 相关测试改为直接访问
+  `system.chatStore`)。
 - 单系统用法行为不变 (数据仍在 `./data/*`), 仅 `NoteStore` 默认目录从用户主目录
   统一到 `data/notes`。
-- 未绑定 context 的独立角色/池 (演示、单元测试) 继续回退到全局默认, 与改造前一致。
+- 未绑定系统的独立角色/池 (演示、单元测试) 继续回退到全局默认, 与改造前一致。
 
 ---
 
 ## 4. 验证
 
-- `mvn test` 全绿 (含新增的多实例隔离测试 `AgentSystemIsolationTest`)。
-- 新增测试覆盖: 两套系统角色/时钟/电脑注册表/邮箱/互斥锁/数据目录互不干扰;
-  同 `role_id` 在两套系统中各自独立。
+- `mvn test` 全绿 (含多实例隔离测试 `AgentSystemIsolationTest` 与 Web 测试)。
+- 新增测试覆盖: 两套系统角色/时钟/电脑注册表/邮箱/互斥锁/聊天存储/数据目录互不
+  干扰; 同 `role_id` 在两套系统中各自独立; 未绑定系统的独立角色回退全局默认。
 
 ## 5. 后续建议 (本期范围外)
 
 - 若需要"同进程多公司"级别的完全隔离, 可将 `RoleLoader.TEMPLATES`、`ConfigStore`
-  也迁入 `AgentSystemContext`。
+  也改为 `AgentSystem` 自持。
 - podman 容器名支持 per-system 前缀 (如 `maf-<system>-<role_id>`), 消除同宿主机
   多实例的容器名冲突。
 - 为 `AgentSystem` 增加 `close()`/资源回收语义, 使多个系统的生命周期可独立管理。

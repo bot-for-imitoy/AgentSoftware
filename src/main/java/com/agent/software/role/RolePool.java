@@ -1,13 +1,11 @@
 package com.agent.software.role;
 
-import com.agent.software.AgentSystemContext;
-import com.agent.software.computers.ComputerManager;
+import com.agent.software.AgentSystem;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.llm.LLM;
 import com.agent.software.llm.OpenAICompatLLM;
 import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.Toolkits;
-import com.agent.software.tools.toolkits.mcp.MCPManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +38,7 @@ public class RolePool {
     private String llmModel;
     private TimeEventBus timeManager;                        // 共享时间源 (AgentSystem 注入)
     private boolean autoToolkits = true;                     // 默认工具装配开关
-    private final AgentSystemContext context;                // 本池所属系统上下文 (可为 null)
+    private final AgentSystem owner;                         // 所属 AgentSystem (可为 null = 独立角色池)
 
     public RolePool(String llmApiKey, String llmModel,
                     TimeEventBus timeManager, boolean autoToolkits) {
@@ -48,18 +46,18 @@ public class RolePool {
     }
 
     /**
-     * 携带系统上下文构造: 角色装配/离职/LLM 配置均走上下文内每系统独立的
-     * 协作对象 (电脑注册表/邮箱/MCP/技能/对话锁/数据目录), 使多个 AgentSystem
-     * 可在同一进程内安全共存. context 为 null 时回退进程级全局默认 (旧行为).
+     * 携带所属 AgentSystem 构造: 角色装配/离职/LLM 配置均走该系统的独立协作对象
+     * (电脑注册表/邮箱/MCP/技能/对话锁/数据目录), 使多个 AgentSystem 可在同一进程内
+     * 安全共存. owner 为 null 时回退进程级全局默认 (独立角色池, 旧行为).
      */
     public RolePool(String llmApiKey, String llmModel,
                     TimeEventBus timeManager, boolean autoToolkits,
-                    AgentSystemContext context) {
+                    AgentSystem owner) {
         this.llmApiKey = llmApiKey;
         this.llmModel = llmModel;
         this.timeManager = timeManager;
         this.autoToolkits = autoToolkits;
-        this.context = context;
+        this.owner = owner;
         // 每角色一个常驻 worker: 用 Java 21+ 虚拟线程 — 不再受固定线程池
         // max_workers 上限约束 (46 角色完整团队也无需担心平台线程数),
         // 角色 worker 大量阻塞在 LLM HTTP 等待/队列轮询上, 虚拟线程开销极小.
@@ -89,16 +87,16 @@ public class RolePool {
     }
 
     /**
-     * 角色装配 (唯一入口): 绑定共享时钟与系统上下文 → 默认工具 → 默认 MCP 组. 幂等.
+     * 角色装配 (唯一入口): 绑定共享时钟与所属系统 → 默认工具 → 默认 MCP 组. 幂等.
      */
     public void setupRole(AgentRole role) {
         // 绑定共享时间源: 必须早于 addToolkit(time)
         if (timeManager != null) {
             role.bindTimeManager(timeManager);
         }
-        // 绑定系统上下文: 电脑/邮箱/笔记/待办/日志等依赖全部走本系统实例
-        if (context != null) {
-            role.bindContext(context);
+        // 绑定所属系统: 电脑/邮箱/笔记/待办/日志等依赖全部走本系统实例
+        if (owner != null) {
+            role.bindSystem(owner);
         }
         // 默认工具 (memory/note/time/todo/task_view/pc/mcp_manager/skill_manager/email)
         for (Toolkit toolkit : Toolkits.defaultToolkits(role)) {
@@ -106,14 +104,14 @@ public class RolePool {
         }
         // 默认 MCP 工具组 (如 file_ops 文件操作, 装到角色个人电脑)
         for (String group : Toolkits.DEFAULT_MCP_GROUPS) {
-            mcpManagerFor(role).installGroupDefaults(role, group);
+            role.mcpManager().installGroupDefaults(role, group);
         }
     }
 
     /** 按角色创建 LLM 客户端 (带角色日志前缀); 配置走 OpenAI 统一分层解析. */
     public LLM newLlm(String roleId) {
         return new OpenAICompatLLM(llmApiKey, null, llmModel, roleId,
-                context != null ? context.configStore : null);
+                owner != null ? owner.configStore : null);
     }
 
     /** 动态入职: 注册新角色并立即启动其 worker 线程 (招聘流程用). */
@@ -176,7 +174,7 @@ public class RolePool {
         futures.remove(roleId);
         // 离职: 销毁个人电脑 (走本系统电脑注册表, 不影响其他系统的同名角色)
         try {
-            computerManagerFor(role).destroy(roleId);
+            role.computerManager().destroy(roleId);
         } catch (Exception e) {
             logger.warn("[{}] 离职销毁电脑失败", roleId, e);
         }
@@ -342,20 +340,8 @@ public class RolePool {
         return timeManager;
     }
 
-    /** 本池所属系统上下文 (独立角色池为 null). */
-    public AgentSystemContext context() {
-        return context;
-    }
-
-    // ── 系统上下文解析 (有上下文用上下文, 否则回退进程级全局默认) ──
-
-    private static ComputerManager computerManagerFor(AgentRole role) {
-        AgentSystemContext c = role != null ? role.context() : null;
-        return c != null ? c.computerManager : ComputerManager.getInstance();
-    }
-
-    private static MCPManager mcpManagerFor(AgentRole role) {
-        AgentSystemContext c = role != null ? role.context() : null;
-        return c != null ? c.mcpManager : Toolkits.getMcpManager();
+    /** 本池所属 AgentSystem (独立角色池为 null). */
+    public AgentSystem owner() {
+        return owner;
     }
 }

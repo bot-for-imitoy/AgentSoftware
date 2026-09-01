@@ -128,7 +128,7 @@ public final class ChatWebServer {
     /** 显式 host/port 创建 (port=0 时使用随机端口, 便于测试). */
     public ChatWebServer(AgentSystem system, String host, int port) throws IOException {
         this.system = system;
-        this.store = system.context() != null ? system.context().chatStore : null;
+        this.store = system.chatStore;  // 每套 AgentSystem 自持 ChatStore
         this.host = host;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.port = server.getAddress().getPort();

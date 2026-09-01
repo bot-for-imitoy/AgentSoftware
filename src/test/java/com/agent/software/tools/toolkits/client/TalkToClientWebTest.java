@@ -40,7 +40,7 @@ class TalkToClientWebTest {
     void testWebModeRoundtrip() throws Exception {
         AgentSystem system = new AgentSystem(List.of(RoleLoader.getTemplate("CEO")), null, 30.0, false);
         AgentRole ceo = system.getRole("CEO");
-        ChatStore store = system.context().chatStore;
+        ChatStore store = system.chatStore;
         store.markAttached();   // 模拟 Web 前端已挂载
 
         Tool talkToClient = new Client(ceo).getTools().stream()

@@ -1,6 +1,5 @@
 package com.agent.software.tools;
 
-import com.agent.software.AgentSystemContext;
 import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.email.Email;
 import com.agent.software.tools.toolkits.mcp.McpManager;
@@ -66,13 +65,12 @@ public final class Toolkits {
      * 直接注册到 ToolRegistry 暴露给 LLM).
      *
      * <p>工具类使用的协作对象 (MCP/技能/邮箱/对话锁) 优先取角色所属
-     * {@link AgentSystemContext} 的每系统实例, 未绑定上下文的独立角色
+     * {@link com.agent.software.AgentSystem} 的每系统实例, 未绑定系统的独立角色
      * 回退到本类的进程级默认单例 (旧行为).
      */
     public static List<Toolkit> defaultToolkits(AgentRole role) {
-        AgentSystemContext ctx = role != null ? role.context() : null;
-        MCPManager mcpManager = ctx != null ? ctx.mcpManager : MCP_MANAGER;
-        SkillManager skillManager = ctx != null ? ctx.skillManager : SKILL_MANAGER;
+        MCPManager mcpManager = role != null ? role.mcpManager() : MCP_MANAGER;
+        SkillManager skillManager = role != null ? role.skillManager() : SKILL_MANAGER;
         List<Toolkit> out = new ArrayList<>();
         out.add(new Memory(role));
         out.add(new Note(role));
@@ -82,7 +80,7 @@ public final class Toolkits {
         out.add(new Pc(role));
         out.add(new McpManager(role, mcpManager));
         out.add(new Skill(role, skillManager));
-        out.add(new Email(role, ctx != null ? ctx.mailService : null));
+        out.add(new Email(role, role != null ? role.mailService() : null));
         // 领导组全员装备与甲方沟通工具 (talk_to_client, 全局互斥)
         if (role != null && LEADERSHIP_GROUP.equals(role.group)) {
             out.add(new Client(role));

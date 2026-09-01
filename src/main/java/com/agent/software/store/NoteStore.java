@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
  *   data/notes/&lt;role_id&gt;/summaries/&lt;day&gt;.md   # 每日总结
  *
  * 默认基础目录为项目内 data/notes (与 .gitignore 及全项目 ./data/* 布局一致);
- * 多 AgentSystem 场景下由 AgentSystemContext 传入每系统数据目录, 各系统互不干扰.
+ * 多 AgentSystem 场景下由 AgentSystem 传入每系统数据目录, 各系统互不干扰.
  */
 public class NoteStore {
 
