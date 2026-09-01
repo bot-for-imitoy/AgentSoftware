@@ -233,7 +233,7 @@ public class PodmanComputer extends Computer {
         // 员工用户级初始化 (幂等, 毫秒级)
         String u = shlexQuote(username);
         String wd = shlexQuote(workdir());
-        String setup = "id -u " + u + " >/dev/null 2>&1 || useradd -m -s /bin/bash -u " + uid
+        String setup = "id -u " + u + " >/dev/null 2>&1 || useradd -s /bin/bash -u " + uid
                 + " -G sudo " + u + "; "
                 + "[ -f /etc/sudoers.d/" + u + " ] || echo '" + username + " ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/" + u + "; "
                 + "mkdir -p " + wd + "; chown -R " + uid + ":" + uid + " " + wd;

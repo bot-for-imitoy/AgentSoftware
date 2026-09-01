@@ -1,5 +1,8 @@
 # Shift & Event-Driven Agent Scheduler 接口文档
+# Shift & Event-Driven Agent Scheduler 接口文档
 
+**多角色、事件驱动、Tick 作息制的 Agent 调度框架**（Shift & Event-Driven Agent Scheduler）。
+本文档覆盖全部核心类与工具类的接口、用途、参数与使用示例。
 **多角色、事件驱动、Tick 作息制的 Agent 调度框架**（Shift & Event-Driven Agent Scheduler）。
 本文档覆盖全部核心类与工具类的接口、用途、参数与使用示例。
 
@@ -11,6 +14,7 @@
 2. [核心类型 types.py](#核心类型)
 3. [时间系统 time_manager.py](#时间系统)
 4. [存储 NoteStore](#存储)
+4. [存储 NoteStore](#存储)
 5. [角色系统 roles.py](#角色系统)
 6. [事件系统 EventBus / EventDispatcher](#事件系统)
 7. [系统管理 AgentSystem](#系统管理)
@@ -18,6 +22,8 @@
 9. [工具系统 tools.py](#工具系统)
 10. [Python 工具类 python_tools/](#python-工具类)
 11. [MCP 加载器 mcp_toolkit.py](#mcp-加载器)
+12. [LLM 客户端 llm.py](#llm-客户端)
+13. [完整示例](#完整示例)
 12. [LLM 客户端 llm.py](#llm-客户端)
 13. [完整示例](#完整示例)
 
@@ -28,6 +34,7 @@
 ```
 ┌─────────────────────────────────────────────┐
 │ AgentSystem (统一入口)                       │
+│  ├── TimeEventBus   (独占线程, Tick 制)      │
 │  ├── TimeEventBus   (独占线程, Tick 制)      │
 │  ├── RolePool         (每角色独立线程)       │
 │  └── EventDispatcher  (事件广播/定向投递)    │
@@ -81,6 +88,7 @@ Event(
     timestamp: datetime = now,
     target_role: Optional[str] = None,  # 定向投递: 只发给该角色; None=广播
     trigger_tick: Optional[int] = None, # 触发绝对 Tick (None=立即, 由 TimeEventBus 设置)
+    trigger_tick: Optional[int] = None, # 触发绝对 Tick (None=立即, 由 TimeEventBus 设置)
 )
 ```
 
@@ -91,6 +99,7 @@ Event(
 文件: `src/core/time_manager.py`
 
 ### `ScheduledTask`（dataclass）
+定时任务，注册到 TimeEventBus。
 定时任务，注册到 TimeEventBus。
 
 | 字段 | 说明 |
@@ -107,11 +116,16 @@ Event(
 ### `TimeEventBus`
 作息时间管理器（= 事件总线子类，`EventBus` + 时间线程），**独占一个后台线程**。
 （旧名 `TimeManager` 兼容别名已于 2026-08 移除，统一用 `TimeEventBus`。）
+### `TimeEventBus`
+作息时间管理器（= 事件总线子类，`EventBus` + 时间线程），**独占一个后台线程**。
+（旧名 `TimeManager` 兼容别名已于 2026-08 移除，统一用 `TimeEventBus`。）
 
 **常量**: `MINUTES_PER_TICK=10`、`TICKS_PER_DAY=144`、`SHIFT_START_TICK=0`、`SHIFT_END_TICK=60`、`EVENT_SHIFT_START/SHIFT_END/TASK_DUE`、`TASK_TICK_MIN/MAX=0/60`
 
 **构造**:
 ```python
+TimeEventBus(minutes_per_tick=10, shift_start_tick=0, shift_end_tick=60,
+             ticks_per_day=144, check_interval=30)
 TimeEventBus(minutes_per_tick=10, shift_start_tick=0, shift_end_tick=60,
              ticks_per_day=144, check_interval=30)
 ```
@@ -144,15 +158,20 @@ TimeEventBus(minutes_per_tick=10, shift_start_tick=0, shift_end_tick=60,
 
 **生命周期**: `start()` 启动线程（Tick 0 / 第 1 天）、`stop()` 停止、`is_running` 属性。
 Tick 为显式状态：不随真实时间流逝，仅在全部角色空闲时快进跳变（`set_fast_forward(enabled, idle_seconds)` 可调）。
+**生命周期**: `start()` 启动线程（Tick 0 / 第 1 天）、`stop()` 停止、`is_running` 属性。
+Tick 为显式状态：不随真实时间流逝，仅在全部角色空闲时快进跳变（`set_fast_forward(enabled, idle_seconds)` 可调）。
 
 **自动事件**: 每天第 0 Tick → `SHIFT_START`（EMERGENCY）；每天 ≥60 Tick → `SHIFT_END`（EMERGENCY，instruction 提示调 summary）；到期任务 → `TASK_DUE`（NORMAL，`target_role=owner`）。
 
 ```python
 from src.core.time_manager import TimeEventBus
 tm = TimeEventBus(check_interval=1)
+from src.core.time_manager import TimeEventBus
+tm = TimeEventBus(check_interval=1)
 tm.set_event_sender(lambda ev: dispatcher.trigger(ev))  # 接入总线
 tm.start()
 print(tm.describe())          # 第 1 天, Tick 0 (上班中...)
+task = tm.schedule_task("写周报", owner_role="CEO", target_tick=45)
 task = tm.schedule_task("写周报", owner_role="CEO", target_tick=45)
 tm.cancel_task(task.task_id)
 tm.stop()
@@ -168,8 +187,15 @@ tm.stop()
 
 **笔记与定时任务已统一**: 笔记 = 内容 + 可选提醒时间。`write_note` 填入
 `remind_tick` 后, 到点系统像任务一样向该角色发送提醒事件 (TASK_DUE)。
+### `NoteStore` — 笔记 (含提醒 = 定时任务统一) 与总结
+文件: `src/core/note_store.py`。每角色独立目录（有个人电脑时在电脑工作目录
+`<workdir>/notes/`，否则本地 `data/notes/<role_id>/`）。
+
+**笔记与定时任务已统一**: 笔记 = 内容 + 可选提醒时间。`write_note` 填入
+`remind_tick` 后, 到点系统像任务一样向该角色发送提醒事件 (TASK_DUE)。
 
 ```python
+NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 ```
 
@@ -177,14 +203,42 @@ NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 |------|------|------|------|
 | `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 写笔记（存在则覆盖；`remind_tick` 填了则注册提醒，到点发事件） |
 | `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 编辑笔记（提供 `remind_tick` 则重置提醒，否则保留原提醒） |
+| `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 写笔记（存在则覆盖；`remind_tick` 填了则注册提醒，到点发事件） |
+| `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 编辑笔记（提供 `remind_tick` 则重置提醒，否则保留原提醒） |
 | `list_notes()` | — | list[str] | 笔记标题列表（不含总结） |
 | `read_note(title)` | str | Optional[str] | 读笔记，不存在返回 None |
+| `delete_note(title)` | str | bool | 删笔记（真实删除文件 + 取消关联提醒） |
+| `get_reminder(title)` | str | Optional[dict] | 查询笔记提醒 `{"day", "tick"}`，无提醒返回 None |
 | `delete_note(title)` | str | bool | 删笔记（真实删除文件 + 取消关联提醒） |
 | `get_reminder(title)` | str | Optional[dict] | 查询笔记提醒 `{"day", "tick"}`，无提醒返回 None |
 | `save_summary(content, day=None)` | str,int\|None | str(路径) | 保存第 N 天总结 `_summary_day_N.md` |
 | `get_summary(day=None)` | int\|None | Optional[str] | 读指定天总结 |
 | `get_latest_summary(before_day=None)` | int\|None | Optional[str] | 最近一次总结（严格早于 before_day） |
 
+---
+
+## 公司邮件
+
+文件: `src/core/mail_service.py`（核心）+ `src/python_tools/email_toolkit.py`（LLM 工具）。
+
+**邮箱地址**: 每位成员一个邮箱 `username@<后缀>`，后缀由环境变量 `MAIL_SUFFIX` 定义（默认 `company.com`）；角色显式 `email` 字段优先。`AgentRole.mail_address` 与工具类走同一分配规则。
+
+**投递方式**: 默认**虚拟实现**（投递到内部邮箱并持久化 `data/mail/mailboxes.json`）；配置 `SMTP_HOST` 后自动切换 **smtplib 真实发送**，同时保留内部收件人邮箱副本（标记 `via_smtp`）。
+
+```python
+MailService(config=MailConfig.from_env())
+```
+
+| 方法 | 参数 | 返回 | 说明 |
+|------|------|------|------|
+| `email_for(role)` | AgentRole | str | 角色 → 邮箱地址（`username@后缀`，显式 email 优先） |
+| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(摘要) | 发送邮件（虚拟投递 / SMTP 真实发送 + 内部副本） |
+| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | 收件箱（新到优先） |
+| `unread_count(email)` | str | int | 未读邮件数 |
+| `read(email, message_id)` | str,str | Optional[MailMessage] | 打开邮件（标记已读） |
+| `describe()` | — | str | 投递方式描述（虚拟 / SMTP） |
+
+**LLM 工具**（每个角色自动装配，`email` 工具类）: `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`。
 ---
 
 ## 公司邮件
@@ -238,6 +292,8 @@ MailService(config=MailConfig.from_env())
 | `is_default` | 是否默认角色 |
 | `group` | 所属分组（如 前端开发组/领导组；空 = 未分组，talk 不受组限制） |
 | `email` | 显式公司邮箱（可选；默认 `username@<MAIL_SUFFIX>`，见 `mail_address`） |
+| `group` | 所属分组（如 前端开发组/领导组；空 = 未分组，talk 不受组限制） |
+| `email` | 显式公司邮箱（可选；默认 `username@<MAIL_SUFFIX>`，见 `mail_address`） |
 | `state` | AgentState（默认 ON_DUTY_IDLE） |
 | `interest_keywords` | 事件过滤关键词 |
 
@@ -246,7 +302,10 @@ MailService(config=MailConfig.from_env())
 **队列**: `add_task(task)` / `pop_task()` / `peek_next_urgency()` / `queue_depth` / `current_task` / `is_busy`。
 **存储与时间**: `note_store` 属性（惰性 NoteStore）、`get_latest_summary(before_day=None)`、`time_manager` 属性、`bind_time_manager(tm)`。
 **活动日志**: `journal(entry)` — 追加一行到 `data/journals/<role_id>.md`（角色上下文更新自动写入：收到任务/执行/工具调用/笔记/消息）。
+**活动日志**: `journal(entry)` — 追加一行到 `data/journals/<role_id>.md`（角色上下文更新自动写入：收到任务/执行/工具调用/笔记/消息）。
 **工具**: `add_mcp_tool(name, description, input_schema, handler)`、`add_toolkit(toolkit) -> int`、`mcp_tool_names`。
+**交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; **talk 仅限同组成员之间交流**（跨组被拒绝, 提示改用邮件）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
+**邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
 **交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; **talk 仅限同组成员之间交流**（跨组被拒绝, 提示改用邮件）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
 **邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
 
@@ -267,6 +326,7 @@ RolePool(llm_api_key=None, llm_model=None)  # 配置: 显式参数 > -D 系统�
 | `shutdown(wait=True)` | bool | None | 停止 |
 | `assign_task(role_name, task)` | str, Task | None | 投递任务 |
 | `journal_all(entry)` | str | None | 全局通知，写入每个角色的活动日志 |
+| `journal_all(entry)` | str | None | 全局通知，写入每个角色的活动日志 |
 | `get_status()` | — | dict | {role_id: {busy, queue_depth, current_task, next_urgency}} |
 
 ```python
@@ -286,15 +346,26 @@ pool.shutdown()
 ## 事件系统
 
 ### `EventBus` — 定时事件调度表
+### `EventBus` — 定时事件调度表
 文件: `src/core/event_bus.py`
+
+只承担"定时事件注册 / 取消 / 到期取出"的调度表职责；**不含过滤管线**
+（3 层过滤是每角色独立的 `AgentRole.evaluate_event`，见角色系统章）。
 
 只承担"定时事件注册 / 取消 / 到期取出"的调度表职责；**不含过滤管线**
 （3 层过滤是每角色独立的 `AgentRole.evaluate_event`，见角色系统章）。
 
 ```python
 EventBus()   # TimeEventBus 是其子类 (time_manager.py), 提供时间线程
+EventBus()   # TimeEventBus 是其子类 (time_manager.py), 提供时间线程
 ```
 
+| 方法 | 参数 | 返回 | 说明 |
+|------|------|------|------|
+| `register_event(event, tick)` | Event, int | str(事件ID) | 注册定时事件到调度表（tick 必须显式；立即触发用 TimeEventBus） |
+| `cancel_event(event_id)` | str | bool | 取消定时事件 |
+| `list_scheduled_events()` | — | list[dict] | 待触发事件（按 tick 排序） |
+| `_check_due_events(current_tick)` | int | list[Event] | 取出到期事件（时间线程调用） |
 | 方法 | 参数 | 返回 | 说明 |
 |------|------|------|------|
 | `register_event(event, tick)` | Event, int | str(事件ID) | 注册定时事件到调度表（tick 必须显式；立即触发用 TimeEventBus） |
@@ -330,6 +401,7 @@ results = dispatcher.trigger(Event(source="github", event_type="new_pr",
 AgentSystem(roles=None, role_ids=None, check_interval=30, auto_toolkits=True)
 ```
 - `roles`：预构建 AgentRole 列表；`role_ids`：模板 id 列表
+- `auto_toolkits=True`：自动注册 memory/time/task 工具 + 绑定共享 TimeEventBus
 - `auto_toolkits=True`：自动注册 memory/time/task 工具 + 绑定共享 TimeEventBus
 
 | 方法/属性 | 说明 |
@@ -414,7 +486,13 @@ tk.tool_names / tk.tool_count / tk.get_tool(name) / __iter__ / __contains__
 |--------|------|------|
 | `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | 角色间异步通信（投递到对方队列；**仅限同组成员**，跨组请用邮件） |
 | `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | 公司邮件（员工之间邮件交流；虚拟邮箱默认，配 SMTP 后真实发送；邮箱 = username@用户后缀） |
+| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | 角色间异步通信（投递到对方队列；**仅限同组成员**，跨组请用邮件） |
+| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | 公司邮件（员工之间邮件交流；虚拟邮箱默认，配 SMTP 后真实发送；邮箱 = username@用户后缀） |
 | `hr_toolkit` | `post_job_posting(requirement)` / `list_candidates()` | 发布招聘启事 / 列出候选人（后台完成新角色创建与入职登记） |
+| `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | 每日总结（保存后切 OFF_DUTY）+ 笔记（**带 remind_tick = 定时提醒**，已合并原定时任务工具） |
+| `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo 清单（个人待办, id+状态 pending/in_progress/completed, 持久化 data/todos/<role_id>.json） |
+| `task_view_toolkit` | `my_tasks(scope?)` | 任务列表（待处理队列 + 最近完成/失败历史, 只读视图） |
+| `hermes_toolkit` | `hermes_new_conversation()` / `hermes_send(conversation_id, content)` | 调用电脑上安装的 Hermes Agent：新建对话返回对话 id, 发送对话同步等待 Hermes 跑完返回全部结果 |
 | `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | 每日总结（保存后切 OFF_DUTY）+ 笔记（**带 remind_tick = 定时提醒**，已合并原定时任务工具） |
 | `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo 清单（个人待办, id+状态 pending/in_progress/completed, 持久化 data/todos/<role_id>.json） |
 | `task_view_toolkit` | `my_tasks(scope?)` | 任务列表（待处理队列 + 最近完成/失败历史, 只读视图） |
@@ -478,6 +556,7 @@ OpenAICompatLLM(api_key=None, base_url=None, model=None)   # 配置: 显式参�
 | `chat(system, user, max_tokens=512)` | str, str, int | `(text, tokens)` |
 | `summarize(text)` | str | `(summary, tokens)` |
 | `chat_with_tools(messages, tools)` | list, list | `(content, tool_calls, usage)` |
+| `chat_with_tools(messages, tools)` | list, list | `(content, tool_calls, usage)` |
 
 环境变量: `OPENAI_API_KEY`（API 密钥，免 Key 的本地端点可省略）、`OPENAI_BASE_URL`（默认 https://api.openai.com）、
 `OPENAI_MODEL`（默认 gpt-4o-mini）；也可用配置文件键 `llm.api_key` / `llm.base_url` / `llm.model`。
@@ -506,6 +585,9 @@ system.trigger(Event(source="client", event_type="requirements",
                      priority=Priority.HIGH, target_role="ceo",
                      payload={"instruction": "收集需求"}))
 
+# CEO 笔记提醒: 第 2 天 Tick 30 (笔记与定时任务统一)
+system.get_role("ceo").note_store.write_note(
+    "开始写周报", "周报模板与本周工作小结", remind_tick=30, remind_day=2)
 # CEO 笔记提醒: 第 2 天 Tick 30 (笔记与定时任务统一)
 system.get_role("ceo").note_store.write_note(
     "开始写周报", "周报模板与本周工作小结", remind_tick=30, remind_day=2)
