@@ -544,3 +544,20 @@ OPENAI_API_KEY=sk-xxx python -m src.main        # 多日循环演示
 OPENAI_API_KEY=sk-xxx python -m src.role_demo   # 角色并发演示
 OPENAI_API_KEY=sk-xxx python -m src.talk_demo   # 角色通信演示
 ```
+
+---
+
+## Web 界面 (Java 版, 分组聊天 + 甲方对话)
+
+Java 版内置零依赖 Web 界面 (`com.sun.net.httpserver` + Jackson, 不新增依赖):
+
+| 类 | 说明 |
+|---|---|
+| `web/ChatStore` | 聊天消息存储 (talk / client 两类消息, 单调 seq) + 甲方对话协调 (beginClientWait / awaitClientReply / postClientReply), 每套 `AgentSystem` 一份 (`AgentSystemContext.chatStore`) |
+| `web/ChatWebServer` | HTTP 服务器: 静态资源 `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; 端口 `AGENTCOMPANY_WEB_PORT` (默认 8787) |
+| `demo/WebDemo` | 轻量演示: 最小团队 + 预置消息 + 一次甲方对话 |
+
+消息来源: `talk` 工具投递成功时记录组内消息; `talk_to_client` 记录领导组与甲方
+的对话。输入框启用条件 (Web 前端): 选中「领导组」且 `clientTalk.active` 为 true
+(有成员正等待甲方回复)。`talk_to_client` 有 Web 挂载时走网页回复 (超时
+`AGENTCOMPANY_CLIENT_REPLY_TIMEOUT`, 默认 20 分钟), 否则回退控制台 `System.in`。

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCompany 协作平台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">
+        <span class="logo">AC</span>
+        <div class="brand-text">
+          <h1>AgentCompany 多角色协作平台</h1>
+          <div class="sub" id="sysInfo">连接中…</div>
+        </div>
+      </div>
+    </header>
+
+    <div id="main">
+      <aside id="sidebar">
+        <div class="sidebar-title">分组</div>
+        <ul id="groupList"></ul>
+        <div class="sidebar-foot">消息实时同步 · 仅展示当前分组内成员的对话</div>
+      </aside>
+
+      <section id="chat">
+        <div id="chatHeader">
+          <div class="chat-title" id="chatTitle">请选择左侧分组</div>
+          <div class="chat-members" id="chatMembers"></div>
+        </div>
+
+        <div id="talkBanner" class="hidden">
+          <span class="pulse-dot"></span>
+          <span id="talkBannerText"></span>
+        </div>
+
+        <div id="messageList">
+          <div class="empty-tip">暂无消息 — 选择左侧分组查看该组成员之间的聊天</div>
+        </div>
+
+        <div id="inputBar">
+          <textarea id="replyInput" rows="2" maxlength="2000"
+                    placeholder="输入框已禁用 — 仅当「领导组」成员与您对话时启用"
+                    disabled></textarea>
+          <div class="input-actions">
+            <span class="input-hint" id="inputHint">已禁用</span>
+            <button id="sendBtn" disabled>发送</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

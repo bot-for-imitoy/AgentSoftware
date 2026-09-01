@@ -5,6 +5,7 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
 import com.agent.software.core.Types;
 import com.agent.software.tools.Tool;
+import com.agent.software.web.ChatStore;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -125,6 +126,7 @@ public class TalkTo extends Tool {
             if (agentRole != null) {
                 agentRole.journal("回复了等待中的 " + targetRole.name + ": " + truncate(message, 80));
             }
+            recordTalk(targetRole, message, urgency.name());
             return "talk: replied to " + targetRole.name + " who was waiting.";
         }
 
@@ -157,6 +159,7 @@ public class TalkTo extends Tool {
             }
             agentRole.journal("发消息给 " + targetRole.name + " (" + urgency.name() + ", 等待回复): "
                     + truncate(message, 80));
+            recordTalk(targetRole, message, urgency.name());
             String reply = agentRole.talkWait(targetRole.roleId, task, null);  // 无限等待
             return "talk: received reply from " + targetRole.name + ": " + reply;
         }
@@ -167,8 +170,29 @@ public class TalkTo extends Tool {
             agentRole.journal("发消息给 " + targetRole.name + " (" + urgency.name() + "): "
                     + truncate(message, 80));
         }
+        recordTalk(targetRole, message, urgency.name());
         return "talk: message sent to " + targetRole.name + ", urgency=" + urgency.name()
                 + ", recipient queue now has " + targetRole.queueDepth() + " tasks.";
+    }
+
+    /**
+     * 记录组内 talk 消息到聊天存储 (Web 界面展示). 发送方未绑定系统上下文
+     * (无 ChatStore) 时静默跳过 — 独立角色/单元测试行为不变.
+     * 消息归属组: 发送方组优先, 否则取接收方组 (未分组新人发给某组成员时
+     * 显示在接收方组).
+     */
+    private void recordTalk(AgentRole targetRole, String message, String urgency) {
+        ChatStore store = agentRole != null && agentRole.context() != null
+                ? agentRole.context().chatStore : null;
+        if (store == null || targetRole == null) {
+            return;
+        }
+        String group = agentRole.group;
+        if (group == null || group.isBlank()) {
+            group = targetRole.group == null ? "" : targetRole.group;
+        }
+        store.record(ChatStore.KIND_TALK, group, agentRole.roleId, agentRole.name,
+                targetRole.roleId, targetRole.name, message, urgency);
     }
 
     /** 沿 WAIT 等待链查环: startRole 的等待链上若绕回 senderId 则成环 (互等死锁). */

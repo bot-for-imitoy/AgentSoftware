@@ -7,6 +7,7 @@ import com.agent.software.store.ConfigStore;
 import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.skill.SkillManager;
+import com.agent.software.web.ChatStore;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -57,13 +58,16 @@ public final class AgentSystemContext {
     /** 本系统与甲方沟通互斥锁 (跨系统互不阻塞). */
     public final ClientCommunicationLock clientLock;
 
+    /** 本系统聊天消息存储 + 甲方对话协调 (Web 界面数据源). */
+    public final ChatStore chatStore;
+
     /** 本系统数据根目录 (默认 ./data), 全部持久化文件都落在其下. */
     private final Path dataDir;
 
     private AgentSystemContext(TimeEventBus timeManager, ConfigStore configStore,
                                ComputerManager computerManager, MailService mailService,
                                MCPManager mcpManager, SkillManager skillManager,
-                               ClientCommunicationLock clientLock, Path dataDir) {
+                               ClientCommunicationLock clientLock, ChatStore chatStore, Path dataDir) {
         this.timeManager = timeManager;
         this.configStore = configStore;
         this.computerManager = computerManager;
@@ -71,6 +75,7 @@ public final class AgentSystemContext {
         this.mcpManager = mcpManager;
         this.skillManager = skillManager;
         this.clientLock = clientLock;
+        this.chatStore = chatStore;
         this.dataDir = dataDir;
     }
 
@@ -88,6 +93,7 @@ public final class AgentSystemContext {
                 new MCPManager(),
                 new SkillManager(root.resolve("skills").toString()),
                 new ClientCommunicationLock(),
+                new ChatStore(),
                 root);
     }
 

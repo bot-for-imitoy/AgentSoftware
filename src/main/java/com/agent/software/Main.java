@@ -6,6 +6,7 @@ import com.agent.software.role.RoleLoader;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.StateStore;
 import com.agent.software.core.Types;
+import com.agent.software.web.ChatWebServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,9 @@ public class Main {
     private static final int DAY_BOUNDARY_HOURS = 24;
 
     private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleLoader.DEFAULT_ROLES);
+
+    /** Web 界面 URL (启动时填充, runOneDay 提示用). */
+    static volatile String webUrl = "";
 
     // ── 终端 UI ─────────────────────────────────────────────
 
@@ -127,6 +131,9 @@ public class Main {
                     () -> system.timeManager.currentTick() >= fireTick,
                     (TICK1_MINUTES + 5) * 60L);
             info("请在上方 [CEO] 提示处输入项目要求 (例如: 帮我开发一个支付系统)");
+            if (!webUrl.isEmpty()) {
+                info("或打开 Web 界面 " + webUrl + " → 左侧选择「领导组」→ 在输入框回复 CEO (领导组与您对话时输入框自动启用)");
+            }
             sleep(10_000);
         } else {
             step("今天没有甲方沟通任务, 直接进入日常工作...");
@@ -222,6 +229,19 @@ public class Main {
         ok("领导组已装备 talk_to_client (与甲方实时交流, 同一时间仅一人可与甲方对话)");
         ok("HR 已装备招聘工具 (post_job_posting / list_candidates)");
 
+        // 1.5 Web 界面: 分组聊天监控 + 甲方对话 (领导组与您对话时输入框自动启用)
+        ChatWebServer web = null;
+        try {
+            web = new ChatWebServer(system);
+            web.start();
+            webUrl = "http://127.0.0.1:" + web.port() + "/";
+            ok("Web 界面已启动: " + webUrl);
+            ok("  ├─ 左侧: 分组选择器 (领导组/前端开发组/后端开发组/... )");
+            ok("  └─ 右侧: 聊天窗口 — 输入框默认禁用; 仅当「领导组」且有人与您(甲方)对话时才启用");
+        } catch (Exception e) {
+            warn("Web 界面启动失败 (不影响主流程): " + e.getMessage());
+        }
+
         // 0. 恢复上次进度 (StateStore)
         StateStore store = new StateStore();
         int restored = store.exists() ? store.restore(system) : 0;
@@ -264,6 +284,12 @@ public class Main {
                 logger.error("保存状态失败", e);
             }
             system.stop();
+            if (web != null) {
+                try {
+                    web.stop();
+                } catch (Exception ignored) {
+                }
+            }
             consolePrint("\n" + BOLD + GREEN + "演示结束 ✓ (运行到第 " + day + " 天, 进度已保存)" + RESET + "\n");
         }
     }

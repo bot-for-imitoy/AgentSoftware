@@ -17,7 +17,7 @@
 ```bash
 # 前置: JDK 25+, Maven 3.8+ (OpenAI API Key: export OPENAI_API_KEY=sk-...)
 mvn compile          # 编译
-mvn test             # 运行全部 JUnit 测试 (84 个用例)
+mvn test             # 运行全部 JUnit 测试 (135 个用例)
 mvn package          # 打包 target/agent-company.jar
 ```
 
@@ -29,6 +29,55 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.RoleDemo # 单角色演�
 mvn exec:java -Dexec.mainClass=demo.com.agent.software.TalkDemo # talk 协作链演示
 mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演示
 ```
+
+### Web 界面 (分组聊天 + 甲方对话)
+
+Java 版内置一个零依赖 Web 界面 (`com.sun.net.httpserver`, 无需额外框架),
+**主入口 `Main` 启动时自动开启**, 也可单独运行轻量演示:
+
+```bash
+# 方式一: 主入口 (完整多角色模拟, 启动时自动打印 Web 地址)
+mvn exec:java -Dexec.mainClass=com.agent.software.Main
+
+# 方式二: 轻量演示 (最小团队 + 预置几条消息, 不创建电脑/不调 LLM)
+mvn exec:java -Dexec.mainClass=com.agent.software.demo.WebDemo
+```
+
+打开控制台打印的地址 (默认 `http://127.0.0.1:8787/`):
+
+- **左侧** — 分组选择器 (领导组 / 前端开发组 / 后端开发组 / …),
+  每个分组显示成员人数; 有新消息时显示未读角标。
+- **右侧** — QQ 风格聊天窗口: 头像 + 昵称 + 消息气泡, 只展示**当前分组内成员**之间
+  的 `talk` 消息; 领导组还展示与**甲方 (您)** 的对话 (甲方消息右对齐蓝色气泡)。
+- **输入框默认禁用** — 仅当同时满足两个条件才启用:
+  1. 当前选中分组为**领导组**;
+  2. 有领导组成员正在调用 `talk_to_client` 与您对话 (等待您的回复)。
+  启用时顶部出现提示条, 输入内容回车或点「发送」即回复该成员。
+- 消息通过轮询实时刷新 (`/api/state` 每 2s, `/api/messages` 每 1.5s)。
+
+**与甲方对话的输入通道**: `talk_to_client` 优先走 Web (消息显示在领导组聊天窗,
+输入框自动启用, 回复超时默认 20 分钟); 若浏览器未打开 (无 Web 心跳), 自动回退到
+原控制台 `System.in` 交互, 行为与之前完全一致。
+
+| 配置 (环境变量 / `-D` 系统属性) | 默认值 | 说明 |
+|------|--------|------|
+| `AGENTCOMPANY_WEB_HOST` | `0.0.0.0` | Web 界面监听地址 |
+| `AGENTCOMPANY_WEB_PORT` | `8787` | Web 界面端口 |
+| `AGENTCOMPANY_CLIENT_REPLY_TIMEOUT` | `1200000` (20 分钟) | Web 模式下等待甲方回复的超时毫秒数 |
+
+HTTP API (同源, 无鉴权, 供 Web 前端轮询):
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/state` | 分组花名册 + 系统时间 + 甲方对话状态 (`clientTalk.active` = 是否有人在等您回复) |
+| `GET /api/messages?since=N` | seq 大于 N 的新消息 (增量拉取) |
+| `POST /api/reply` `{"text":"…"}` | 甲方提交回复 (仅在领导组有人等待时成功, 否则 409) |
+| `POST /api/attach` | Web 挂载心跳 |
+
+实现: `web/ChatStore.java` (消息存储 + 甲方对话协调, 每套 AgentSystem 一份) +
+`web/ChatWebServer.java` (HTTP 服务器 + 静态资源 `src/main/resources/web/`),
+`talk_to_client` / `talk` 工具自动记录消息; 测试见 `ChatStoreTest` /
+`ChatWebServerTest` / `TalkToClientWebTest`。
 
 ### Python → Java 模块映射
 
