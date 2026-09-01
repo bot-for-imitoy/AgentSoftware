@@ -1,6 +1,8 @@
 package com.agent.software.role;
 
 import com.agent.software.core.MCPServer;
+import com.agent.software.tools.Tool;
+import com.agent.software.tools.Toolkit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -171,6 +173,21 @@ public class ToolRegistry {
         logger.info("ToolRegistry: loaded toolkit '{}' — {} tools ({} new, {} skipped)",
                 toolkit.name, toolkit.toolCount(), added, toolkit.toolCount() - added);
         return added;
+    }
+
+    /**
+     * 直接导入模板风格工具类 (tools.Toolkit / tools.Tool, 见 toolkits.* 实现).
+     * 每个 Tool 注册为 Python 原生工具: 工具名/描述取自 Tool,
+     * 扁平参数说明由 {@link Tool#getInputSchema()} 转为 OpenAI 风格 input_schema,
+     * handler 即 Tool 的执行方法.
+     */
+    public int addToolkit(Toolkit toolkit) {
+        ToolKit tk = new ToolKit(toolkit.getName(), toolkit.getDescription());
+        for (Tool tool : toolkit.getTools()) {
+            tk.addPythonTool(tool.getToolName(), tool.getDescription(),
+                    tool.getInputSchema(), tool::handler);
+        }
+        return addToolkit(tk);
     }
 
     /** 移除一个工具类及其全部工具. 返回移除的工具数. */

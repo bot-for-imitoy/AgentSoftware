@@ -323,10 +323,10 @@ Java 版默认装配已切换到模板风格实现：每个业务域一个 `Tool
 | `toolkits.hr.Hr` | `post_job_posting` / `list_candidates` | 招聘即入职（HR 专属） |
 | `toolkits.client.Client` | `talk_to_client` | 甲方交流（CEO 专属） |
 
-基类：`tools.Tool`（getToolName / getSchema / handler）与 `tools.Toolkit`
-（addTool / getTools / trigger）。`tools.ToolkitBridge.toLegacy()` 把模板风格
-工具类桥接为旧版 `ToolRegistry.ToolKit` 供 LLM 调用
-（`AgentRole.addToolkit(Toolkit)` 已支持直接加载）。
+基类：`tools.Tool`（getToolName / getSchema / getInputSchema / handler）与
+`tools.Toolkit`（addTool / getTools / trigger）。`AgentRole.addToolkit(Toolkit)`
+直接注册模板风格工具类：每个 `Tool` 成为 Python 原生工具，扁平参数说明由
+`Tool.getInputSchema()` 自动转为 OpenAI 风格的 `input_schema` 供 LLM 调用。
 
 ### 9. 招聘即入职 (`src/core/hr_toolkit.py` + `src/core/roles.py`)
 

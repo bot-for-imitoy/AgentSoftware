@@ -3,8 +3,6 @@ package com.agent.software.services;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
-import com.agent.software.role.ToolRegistry;
-import com.agent.software.tools.ToolkitBridge;
 import com.agent.software.tools.toolkits.email.Email;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -127,10 +125,9 @@ class MailServiceTest {
 
     // ── email 工具类 (LLM 调用面) ─────────────────────────
 
-    private ToolRegistry.ToolKit mailToolkit(AgentRole sender, RolePool pool, MailService svc) {
-        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(new Email(sender, svc));
+    private Email mailToolkit(AgentRole sender, RolePool pool, MailService svc) {
         sender.setPool(pool);
-        return tk;
+        return new Email(sender, svc);
     }
 
     @Test
@@ -141,8 +138,8 @@ class MailServiceTest {
         pool.addRole(a);
         pool.addRole(b);
         MailService svc = service("company.com");
-        ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
-        String result = tk.getTool("send_email").handler.handle(
+        Email email = mailToolkit(a, pool, svc);
+        String result = email.trigger("send_email",
                 Map.of("to", "王建国", "subject", "跨组沟通", "body", "用邮件联系架构师"));
         assertTrue(result.contains("Email sent to"));
         List<MailService.MailMessage> inbox = svc.inbox(svc.emailFor(b), null);
@@ -156,8 +153,8 @@ class MailServiceTest {
         AgentRole a = role("郭晓东", "tester_1", "测试组");
         pool.addRole(a);
         MailService svc = service("company.com");
-        ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
-        String result = tk.getTool("send_email").handler.handle(
+        Email email = mailToolkit(a, pool, svc);
+        String result = email.trigger("send_email",
                 Map.of("to", "不存在的同事", "subject", "x", "body", "y"));
         assertTrue(result.contains("Error"));
         assertTrue(result.contains("mail_address_book"));
@@ -171,21 +168,21 @@ class MailServiceTest {
         pool.addRole(a);
         pool.addRole(b);
         MailService svc = service("company.com");
-        ToolRegistry.ToolKit tkA = mailToolkit(a, pool, svc);
-        ToolRegistry.ToolKit tkB = mailToolkit(b, pool, svc);
+        Email emailA = mailToolkit(a, pool, svc);
+        Email emailB = mailToolkit(b, pool, svc);
         svc.send(svc.emailFor(a), a.name, List.of(svc.emailFor(b)), "联调说明", "明天下午联调", null);
 
-        String listed = tkB.getTool("read_mail").handler.handle(Map.of("limit", 5));
+        String listed = emailB.trigger("read_mail", Map.of("limit", 5));
         assertTrue(listed.contains("联调说明"));
         assertTrue(listed.contains("unread"));
         assertTrue(listed.contains("id="));
 
-        String opened = tkB.getTool("open_mail").handler.handle(
+        String opened = emailB.trigger("open_mail",
                 Map.of("message_id", svc.inbox(svc.emailFor(b), null).get(0).messageId));
         assertTrue(opened.contains("明天下午联调"));
         assertEquals(0, svc.unreadCount(svc.emailFor(b)));
 
-        String bad = tkB.getTool("open_mail").handler.handle(Map.of("message_id", "nope"));
+        String bad = emailB.trigger("open_mail", Map.of("message_id", "nope"));
         assertTrue(bad.contains("Error"));
     }
 
@@ -199,9 +196,9 @@ class MailServiceTest {
         pool.addRole(b);
         pool.addRole(c);
         MailService svc = service("company.com");
-        ToolRegistry.ToolKit tk = mailToolkit(a, pool, svc);
+        Email email = mailToolkit(a, pool, svc);
 
-        String book = tk.getTool("mail_address_book").handler.handle(Map.of());
+        String book = email.trigger("mail_address_book", Map.of());
         assertTrue(book.contains("[前端开发组]"));
         assertTrue(book.contains("[领导组]"));
         assertTrue(book.contains("顾承宇 <guchengyu@company.com>"));
@@ -209,9 +206,9 @@ class MailServiceTest {
         assertTrue(book.contains("林总 <linzong@company.com>"));
         assertTrue(!book.contains("frontend_dev_1"));
 
-        String filtered = tk.getTool("mail_address_book").handler.handle(Map.of("group", "前端开发组"));
+        String filtered = email.trigger("mail_address_book", Map.of("group", "前端开发组"));
         assertTrue(!filtered.contains("[领导组]"));
-        String notFound = tk.getTool("mail_address_book").handler.handle(Map.of("group", "不存在组"));
+        String notFound = email.trigger("mail_address_book", Map.of("group", "不存在组"));
         assertTrue(notFound.contains("Error"));
     }
 }

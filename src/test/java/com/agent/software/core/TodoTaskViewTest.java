@@ -1,9 +1,7 @@
 package com.agent.software.core;
 
 import com.agent.software.role.AgentRole;
-import com.agent.software.role.ToolRegistry;
 import com.agent.software.store.TodoStore;
-import com.agent.software.tools.ToolkitBridge;
 import com.agent.software.tools.toolkits.taskview.TaskView;
 import com.agent.software.tools.toolkits.todo.Todo;
 import org.junit.jupiter.api.Test;
@@ -63,20 +61,18 @@ class TodoTaskViewTest {
     @Test
     void testTodoToolsViaHandler() {
         AgentRole role = AgentRole.builder().name("测试").roleId("tester_1").build();
-        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(
-                new Todo(new TodoStore("tester_1", tmp.resolve("todos.json").toString())));
-        ToolRegistry.ToolHandler h = tk.getTool("todo_add").handler;
+        Todo todo = new Todo(new TodoStore("tester_1", tmp.resolve("todos.json").toString()));
 
-        assertTrue(h.handle(Map.of("detail", "x")).contains("Error"));
-        String r1 = h.handle(Map.of("title", "写周报", "detail", "本周小结"));
+        assertTrue(todo.trigger("todo_add", Map.of("detail", "x")).contains("Error"));
+        String r1 = todo.trigger("todo_add", Map.of("title", "写周报", "detail", "本周小结"));
         assertTrue(r1.startsWith("todo_add: Added todo [ID="));
         String tid = r1.split("ID=")[1].split("]")[0];
-        String lst = tk.getTool("todo_list").handler.handle(Map.of());
+        String lst = todo.trigger("todo_list", Map.of());
         assertTrue(lst.contains("写周报") && lst.contains("pending"));
-        String r2 = tk.getTool("todo_update").handler.handle(Map.of("todo_id", tid, "status", "in_progress"));
+        String r2 = todo.trigger("todo_update", Map.of("todo_id", tid, "status", "in_progress"));
         assertTrue(r2.contains("→ in_progress"));
-        assertTrue(tk.getTool("todo_delete").handler.handle(Map.of("todo_id", tid)).contains("Todo deleted"));
-        assertTrue(tk.getTool("todo_list").handler.handle(Map.of()).contains("(no todos"));
+        assertTrue(todo.trigger("todo_delete", Map.of("todo_id", tid)).contains("Todo deleted"));
+        assertTrue(todo.trigger("todo_list", Map.of()).contains("(no todos"));
     }
 
     // ── 任务列表工具 ─────────────────────────────────────
@@ -84,10 +80,9 @@ class TodoTaskViewTest {
     @Test
     void testMyTasksTool() {
         AgentRole role = AgentRole.builder().name("测试").roleId("tester_1").build();
-        ToolRegistry.ToolKit tk = ToolkitBridge.toLegacy(new TaskView(role));
-        ToolRegistry.ToolHandler myTasks = tk.getTool("my_tasks").handler;
+        TaskView taskView = new TaskView(role);
 
-        String empty = myTasks.handle(Map.of());
+        String empty = taskView.trigger("my_tasks", Map.of());
         assertTrue(empty.contains("Pending (queue 0)"));
 
         role.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "还没开始的任务", "", new LinkedHashMap<>()));
@@ -100,12 +95,12 @@ class TodoTaskViewTest {
         failed.result = "[ERROR] x";
         role.appendTaskHistory(failed);
 
-        String out = myTasks.handle(Map.of());
+        String out = taskView.trigger("my_tasks", Map.of());
         assertTrue(out.contains("还没开始的任务"));
         assertTrue(out.contains("已完成的任务") && out.contains("123 tokens"));
         assertTrue(out.contains("失败的任务"));
 
-        String outPending = myTasks.handle(Map.of("scope", "pending"));
+        String outPending = taskView.trigger("my_tasks", Map.of("scope", "pending"));
         assertTrue(outPending.contains("还没开始的任务"));
         assertFalse(outPending.contains("已完成的任务"));
     }

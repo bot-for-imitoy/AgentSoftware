@@ -2,10 +2,8 @@ package com.agent.software.tools;
 
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
-import com.agent.software.role.ToolRegistry.ToolKit;
 import com.agent.software.tools.toolkits.talk.ListRoles;
 import com.agent.software.tools.toolkits.talk.Talk;
-import com.agent.software.role.ToolRegistry.ToolHandler;
 import com.agent.software.core.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -46,20 +44,19 @@ class TalkWaitTest {
         return false;
     }
 
-    private static Map<String, ToolKit> setupRoles(RolePool pool, String... roleIds) {
-        Map<String, ToolKit> toolkits = new LinkedHashMap<>();
+    private static Map<String, Talk> setupRoles(RolePool pool, String... roleIds) {
+        Map<String, Talk> toolkits = new LinkedHashMap<>();
         for (String rid : roleIds) {
             AgentRole role = AgentRole.builder().name("角色" + rid).roleId(rid).build();
             pool.addRole(role);
             role.setPool(pool);  // 模拟 start() 后的 back-reference
-            ToolKit tk = ToolkitBridge.toLegacy(new Talk(role, pool));
-            toolkits.put(rid, tk);
+            toolkits.put(rid, new Talk(role, pool));
         }
         return toolkits;
     }
 
-    /** 调用发送方 talk 处理器 (与 call_tool 同一逻辑). */
-    private static String talk(Map<String, ToolKit> toolkits, String senderId,
+    /** 调用发送方 talk 工具 (与 call_tool 同一逻辑). */
+    private static String talk(Map<String, Talk> toolkits, String senderId,
                                String target, String message, boolean wait) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("target", target);
@@ -67,7 +64,7 @@ class TalkWaitTest {
         if (wait) {
             args.put("wait", true);
         }
-        return toolkits.get(senderId).getTool("talk").handler.handle(args);
+        return toolkits.get(senderId).trigger("talk", args);
     }
 
     // ── 人名暴露 ──────────────────────────────────────────
@@ -87,7 +84,7 @@ class TalkWaitTest {
     @Test
     void testTalkByPersonName() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleB = pool.getRole("B");
         String result = talk(tks, "A", "角色B", "按名字发送测试", false);
         assertTrue(result.contains("message sent to 角色B"));
@@ -97,7 +94,7 @@ class TalkWaitTest {
     @Test
     void testTalkUnknownNameGivesHint() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
         String result = talk(tks, "A", "不存在的名字", "hi", false);
         assertTrue(result.contains("cannot find"));
         assertTrue(result.contains("list_roles"));
@@ -108,7 +105,7 @@ class TalkWaitTest {
     @Test
     void testWaitRoundtrip() throws InterruptedException {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleA = pool.getRole("A");
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "请问进度?", true)));
@@ -136,10 +133,9 @@ class TalkWaitTest {
         pool.addRole(b);
         a.setPool(pool);
         b.setPool(pool);
-        Map<String, ToolKit> tks = new LinkedHashMap<>();
+        Map<String, Talk> tks = new LinkedHashMap<>();
         for (AgentRole r : new AgentRole[]{a, b}) {
-            ToolKit tk = ToolkitBridge.toLegacy(new Talk(r, pool));
-            tks.put(r.roleId, tk);
+            tks.put(r.roleId, new Talk(r, pool));
         }
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "architect", "郭晓东", "进度?", true)));
@@ -164,7 +160,7 @@ class TalkWaitTest {
     @Test
     void testMutualWaitDecomposed() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleA = pool.getRole("A");
         AgentRole roleB = pool.getRole("B");
         roleA.beginWait("B");  // A 正在等 B 的回复
@@ -183,7 +179,7 @@ class TalkWaitTest {
     @Test
     void testDeadlockCycleRejected() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B", "C");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B", "C");
         AgentRole roleA = pool.getRole("A");
         AgentRole roleB = pool.getRole("B");
         AgentRole roleC = pool.getRole("C");
@@ -204,7 +200,7 @@ class TalkWaitTest {
     @Test
     void testWaitMessageCarriesWaitingHint() throws InterruptedException {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleA = pool.getRole("A");
         AgentRole roleB = pool.getRole("B");
         AtomicReference<String> result = new AtomicReference<>();
@@ -236,7 +232,7 @@ class TalkWaitTest {
     @Test
     void testThirdPartyMessageNotDeliveredAsReply() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool, "A", "B", "C");
+        Map<String, Talk> tks = setupRoles(pool, "A", "B", "C");
         AgentRole roleA = pool.getRole("A");
         roleA.beginWait("B");
         try {
@@ -267,16 +263,15 @@ class TalkWaitTest {
         // 郭晓东在云盘放附件
         a.computer().writeFile(a.computer().driveRoot() + "/郭晓东/设计稿.md", "附件内容");
 
-        ToolKit tkA = ToolkitBridge.toLegacy(new Talk(a, pool));
-        ToolKit tkB = ToolkitBridge.toLegacy(new Talk(b, pool));
-        ToolHandler talkA = tkA.getTool("talk").handler;
+        Talk talkA = new Talk(a, pool);
+        Talk talkB = new Talk(b, pool);
 
         // 无效附件 (不存在) → 拒绝
         Map<String, Object> badArgs = new LinkedHashMap<>();
         badArgs.put("target", "王建国");
         badArgs.put("message", "看下");
         badArgs.put("attachment", "郭晓东/不存在.md");
-        String r = talkA.handle(badArgs);
+        String r = talkA.trigger("talk", badArgs);
         assertTrue(r.contains("invalid attachment"));
         assertEquals(0, b.queueDepth());
 
@@ -285,7 +280,7 @@ class TalkWaitTest {
         okArgs.put("target", "王建国");
         okArgs.put("message", "看下设计稿");
         okArgs.put("attachment", "郭晓东/设计稿.md");
-        String r2 = talkA.handle(okArgs);
+        String r2 = talkA.trigger("talk", okArgs);
         assertTrue(r2.contains("message sent to 王建国"));
         AgentRole.Task task = b.popTask();
         assertTrue(task != null && task.description.contains("[Attachment: 郭晓东/设计稿.md]"));

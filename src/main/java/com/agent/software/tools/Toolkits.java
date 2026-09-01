@@ -63,7 +63,7 @@ public final class Toolkits {
      * 默认工具类注册表: 角色被添加进 AgentSystem 时 (autoToolkits=true)
      * 自动逐个加载 (RolePool.setupRole 调用, 传入具体角色以便工具类绑定).
      * 每个调用返回新的独立模板风格工具类实例 (AgentRole.addToolkit(Toolkit)
-     * 会自动桥接为旧版 ToolKit 供 LLM 调用).
+     * 直接注册到 ToolRegistry 暴露给 LLM).
      *
      * <p>工具类使用的协作对象 (MCP/技能/邮箱/对话锁) 优先取角色所属
      * {@link AgentSystemContext} 的每系统实例, 未绑定上下文的独立角色

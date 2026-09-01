@@ -12,7 +12,6 @@ import com.agent.software.services.MailService;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.TodoStore;
 import com.agent.software.tools.Toolkit;
-import com.agent.software.tools.ToolkitBridge;
 import com.agent.software.tools.Toolkits;
 import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
@@ -644,23 +643,17 @@ public class AgentRole {
 
     // ── MCP & Python Tool Management ────────────────────────
 
-    /** 导入整个工具类. 返回新增工具数 (跳过重复). */
-    public int addToolkit(ToolRegistry.ToolKit toolkit) {
-        if (tools == null) {
-            tools = new ToolRegistry();
-        }
-        return tools.addToolkit(toolkit);
-    }
-
     /**
-     * 导入模板风格工具类 (toolkits.*, Tool/Toolkit). 桥接为旧版 ToolKit 后加载.
-     * 模板工具类在构造时已注入依赖 (角色/存储/管理器), 无需走旧版 binder 绑定.
+     * 导入模板风格工具类 (toolkits.*, Tool/Toolkit).
+     * 每个 Tool 注册为 Python 原生工具: 扁平参数说明由 Tool.getInputSchema()
+     * 自动转为 OpenAI 风格 input_schema 供 LLM 调用.
+     * 模板工具类在构造时已注入依赖 (角色/存储/管理器), 无需额外绑定.
      */
     public int addToolkit(Toolkit toolkit) {
         if (tools == null) {
             tools = new ToolRegistry();
         }
-        return tools.addToolkit(ToolkitBridge.toLegacy(toolkit));
+        return tools.addToolkit(toolkit);
     }
 
     public List<String> mcpToolNames() {

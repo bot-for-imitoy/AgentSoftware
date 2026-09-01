@@ -2,7 +2,6 @@ package com.agent.software.tools;
 
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RolePool;
-import com.agent.software.role.ToolRegistry.ToolKit;
 import com.agent.software.tools.toolkits.talk.ListRoles;
 import com.agent.software.tools.toolkits.talk.Talk;
 import com.agent.software.core.Types;
@@ -45,18 +44,17 @@ class TalkGroupTest {
         return AgentRole.builder().name(name).roleId(rid).group(group).build();
     }
 
-    private static Map<String, ToolKit> setupRoles(RolePool pool, AgentRole... roles) {
-        Map<String, ToolKit> toolkits = new LinkedHashMap<>();
+    private static Map<String, Talk> setupRoles(RolePool pool, AgentRole... roles) {
+        Map<String, Talk> toolkits = new LinkedHashMap<>();
         for (AgentRole role : roles) {
             pool.addRole(role);
             role.setPool(pool);
-            ToolKit tk = ToolkitBridge.toLegacy(new Talk(role, pool));
-            toolkits.put(role.roleId, tk);
+            toolkits.put(role.roleId, new Talk(role, pool));
         }
         return toolkits;
     }
 
-    private static String talk(Map<String, ToolKit> toolkits, String senderId,
+    private static String talk(Map<String, Talk> toolkits, String senderId,
                                String target, String message, boolean wait) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("target", target);
@@ -64,7 +62,7 @@ class TalkGroupTest {
         if (wait) {
             args.put("wait", true);
         }
-        return toolkits.get(senderId).getTool("talk").handler.handle(args);
+        return toolkits.get(senderId).trigger("talk", args);
     }
 
     // ── 同组放行 ───────────────────────────────────────────
@@ -72,7 +70,7 @@ class TalkGroupTest {
     @Test
     void testSameGroupAllowed() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool,
+        Map<String, Talk> tks = setupRoles(pool,
                 role("顾承宇", "frontend_dev_1", "前端开发组"),
                 role("陈思远", "frontend_lead", "前端开发组"));
         String result = talk(tks, "frontend_dev_1", "陈思远", "组件重构完成", false);
@@ -83,7 +81,7 @@ class TalkGroupTest {
     @Test
     void testSameGroupWaitRoundtrip() throws InterruptedException {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool,
+        Map<String, Talk> tks = setupRoles(pool,
                 role("顾承宇", "frontend_dev_1", "前端开发组"),
                 role("陈思远", "frontend_lead", "前端开发组"));
         AgentRole roleA = pool.getRole("frontend_dev_1");
@@ -108,7 +106,7 @@ class TalkGroupTest {
     @Test
     void testCrossGroupRejected() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool,
+        Map<String, Talk> tks = setupRoles(pool,
                 role("郭晓东", "tester_1", "测试组"),
                 role("王建国", "architect", "架构与版本组"));
         String result = talk(tks, "tester_1", "王建国", "有个架构问题", false);
@@ -121,7 +119,7 @@ class TalkGroupTest {
     @Test
     void testCrossGroupWaitRejected() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool,
+        Map<String, Talk> tks = setupRoles(pool,
                 role("郭晓东", "tester_1", "测试组"),
                 role("方谨言", "release_manager", "架构与版本组"));
         AgentRole roleA = pool.getRole("tester_1");
@@ -135,7 +133,7 @@ class TalkGroupTest {
     @Test
     void testUngroupedRolesUnrestricted() {
         RolePool pool = new RolePool();
-        Map<String, ToolKit> tks = setupRoles(pool,
+        Map<String, Talk> tks = setupRoles(pool,
                 role("新人", "newbie_1", ""),
                 role("顾承宇", "frontend_dev_1", "前端开发组"));
         String r1 = talk(tks, "newbie_1", "顾承宇", "你好", false);

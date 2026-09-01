@@ -6,8 +6,8 @@ import com.agent.software.store.NoteStore;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.store.TodoStore;
 import com.agent.software.core.Types;
+import com.agent.software.tools.Tool;
 import com.agent.software.tools.Toolkit;
-import com.agent.software.tools.ToolkitBridge;
 import com.agent.software.tools.toolkits.memory.Memory;
 import com.agent.software.tools.toolkits.note.Note;
 import com.agent.software.tools.toolkits.pc.Pc;
@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 模板风格工具类 (toolkits.*) 测试:
- * 验证 note 与 memory 分离 / pc = computer / trigger 分发 / AgentRole 桥接.
+ * 验证 note 与 memory 分离 / pc = computer / trigger 分发 / AgentRole 加载.
  */
 class ToolkitsTest {
 
@@ -162,19 +162,19 @@ class ToolkitsTest {
         assertNotNull(pc.trigger("lan_devices", Map.of()));
     }
 
-    // ── ToolkitBridge: 新风格 → 旧版 ToolKit → AgentRole 加载 ──
+    // ── 模板风格工具类 → ToolRegistry → AgentRole 加载 ──
 
     @Test
-    void testAgentRoleLoadsBridgedToolkits() {
+    void testAgentRoleLoadsTemplateToolkits() {
         AgentRole role = AgentRole.builder().name("测试").roleId("tester").build();
         int added = role.addToolkit(new Note(role));
         assertTrue(added >= 5, "note 工具数: " + added);
         assertTrue(role.mcpToolNames().contains("write_note"));
         assertTrue(role.mcpToolNames().contains("read_note"));
-        // 通过旧版 ToolRegistry 调用
-        var result = role.tools().callTool("write_note", Map.of("name", "桥接笔记", "content", "内容"));
+        // 通过 ToolRegistry 调用
+        var result = role.tools().callTool("write_note", Map.of("name", "模板笔记", "content", "内容"));
         assertTrue(result.content.get(0).text.contains("successfully"));
-        // 桥接 schema: 扁平参数说明 → OpenAI input_schema
+        // input_schema: 扁平参数说明 → OpenAI 风格
         var def = role.tools().getToolDef("write_note");
         assertNotNull(def.inputSchema);
         assertEquals("object", def.inputSchema.get("type"));
@@ -190,11 +190,27 @@ class ToolkitsTest {
     }
 
     @Test
-    void testBridgeSchemaConversion() {
-        Map<String, Object> flat = new LinkedHashMap<>();
-        flat.put("name", "the note name");
-        flat.put("tick", Map.of("type", "integer", "description", "0~60"));
-        Map<String, Object> schema = ToolkitBridge.toInputSchema(flat);
+    void testToolInputSchemaConversion() {
+        Tool stub = new Tool() {
+            @Override
+            public String getToolName() {
+                return "stub";
+            }
+
+            @Override
+            public Map<String, Object> getSchema() {
+                Map<String, Object> flat = new LinkedHashMap<>();
+                flat.put("name", "the note name");
+                flat.put("tick", Map.of("type", "integer", "description", "0~60"));
+                return flat;
+            }
+
+            @Override
+            public String handler(Map<String, Object> args) {
+                return "ok";
+            }
+        };
+        Map<String, Object> schema = stub.getInputSchema();
         assertEquals("object", schema.get("type"));
         Map<?, ?> props = (Map<?, ?>) schema.get("properties");
         assertEquals("string", ((Map<?, ?>) props.get("name")).get("type"));
