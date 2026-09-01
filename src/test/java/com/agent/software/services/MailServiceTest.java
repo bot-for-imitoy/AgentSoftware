@@ -1,7 +1,6 @@
 package com.agent.software.services;
 
 import com.agent.software.role.AgentRole;
-import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
 import com.agent.software.role.ToolRegistry;
 import com.agent.software.tools.ToolkitBridge;
@@ -31,8 +30,8 @@ class MailServiceTest {
      */
     private static AgentRole role(String name, String roleId, String group) {
         AgentRole.Builder b = AgentRole.builder().name(name).roleId(roleId).group(group);
-        if (RoleLoader.TEMPLATES.containsKey(roleId)) {
-            AgentRole t = RoleLoader.getTemplate(roleId);
+        if (RoleTemplates.TEMPLATES.containsKey(roleId)) {
+            AgentRole t = RoleTemplates.getTemplate(roleId);
             if (t.name.equals(name)) {
                 b.username(t.username);
             }

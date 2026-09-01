@@ -4,6 +4,10 @@
 > Python 原版保存在 `master` 分支。架构、作息规则、工具语义与 Python 版完全一致,
 > 模块一一对应 (见下方「Java 重写说明」)。
 
+> **当前分支 `java`: 本分支为 Java 重写版** (Maven + JUnit 5)。
+> Python 原版保存在 `master` 分支。架构、作息规则、工具语义与 Python 版完全一致,
+> 模块一一对应 (见下方「Java 重写说明」)。
+
 > 项目还在开发中，按照 DeepSeek 的说法运行起来是没有问题的。但没有进行广泛测试。
 > 项目基于 Hermes + DeepSeek 开发，会优先适配 DeepSeek。现阶段还在搭框架与测试的早期阶段，后续会逐步建立并完善各模块。
 > 下面的部分是 Hermes 写的。其中带引用部分是作者补充的
@@ -79,6 +83,72 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 
 ---
 
+---
+
+## Java 重写说明 (java 分支)
+
+### 构建与测试
+
+```bash
+# 前置: JDK 25+, Maven 3.8+ (DeepSeek API Key: export DEEPSEEK_API_KEY=sk-...)
+mvn compile          # 编译
+mvn test             # 运行全部 JUnit 测试 (84 个用例)
+mvn package          # 打包 target/agent-company.jar
+```
+
+### 运行入口
+
+```bash
+mvn exec:java -Dexec.mainClass=com.agent.software.Main          # 主入口: 多日循环
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.RoleDemo # 单角色演示
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.TalkDemo # talk 协作链演示
+mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演示
+```
+
+### Python → Java 模块映射
+
+| Python 模块 | Java 类 | 说明 |
+|---|---|---|
+| `core/types.py` | `core/Types.java` | Event / AgentState / Priority |
+| `core/event_bus.py` | `core/EventBus.java` | 定时事件调度表 |
+| `core/time_manager.py` | `core/TimeEventBus.java` | 作息时间引擎 + 事件总线 (含 ScheduledTask) |
+| `core/dispatcher.py` | `core/EventDispatcher.java` | 事件广播 + 3 层过滤 |
+| `core/tools.py` | `core/ToolRegistry.java` | ToolDef / ToolKit / ToolRegistry |
+| `core/roles.py` | `core/AgentRole.java` + `core/RolePool.java` | 角色系统 (含 Task / Urgency / ToolLoopError) |
+| `core/agent_system.py` | `core/AgentSystem.java` | 统一管理 TimeEventBus + RolePool |
+| `core/llm.py` | `core/LLM.java` + `OpenAICompatLLM.java` + `DeepSeekLLM.java` + `OllamaLLM.java` | DeepSeek / Ollama 客户端 (Java HttpClient) |
+| `core/computer.py` | `core/Computer.java` + `PodmanComputer.java` + `SSHComputer.java` + `ComputerManager.java` | 个人电脑体系 |
+| `core/mcp_client.py` | `core/MCPServer.java` | MCP stdio JSON-RPC 客户端 (newline-delimited) |
+| `core/note_store.py` | `core/NoteStore.java` | 笔记 + 每日总结 |
+| `core/todo_store.py` | `core/TodoStore.java` | 个人待办 |
+| `core/state_store.py` | `core/StateStore.java` | 全量状态持久化 (data/state.json) |
+| `core/mail_service.py` | `core/MailService.java` | 公司邮件 (虚拟 / SMTP via jakarta.mail) |
+| `core/role_templates.py` | `core/RoleTemplates.java` | 54 个角色模板 (JSON 描述: `src/main/resources/role_templates.json`) |
+| `core/role_factory.py` | `core/RoleFactory.java` | LLM 驱动招聘 |
+| `core/pinyin_map.py` | — (已并入 `role_templates.json` 的 `username` 字段) | 中文名 → 拼音用户名 |
+| `core/path_manager.py` | `core/PathManager.java` | 跨平台路径 |
+| `core/config_store.py` | `core/ConfigStore.java` | JSON 配置 (点号路径) |
+| `python_tools/*.py` | `tools/toolkits/**` (模板风格: 每域一个 Toolkit + 每函数一个 Tool) | 全部工具类 (memory/note/time/todo/task_view/pc/mcp_manager/skill/email/talk/hr/client/hermes), 见 §8.1 |
+| `main.py` | `Main.java` | 主入口 |
+| `role_demo.py` / `talk_demo.py` / `mcp_demo.py` | `demo/RoleDemo.java` / `TalkDemo.java` / `McpDemo.java` | 演示 |
+| `tests/*.py` | `src/test/java/**` (JUnit 5) | 核心测试移植 (84 用例) |
+
+### 与 Python 版的差异说明
+
+- 构建/测试用 Maven (`pom.xml`), 依赖: Jackson (JSON)、slf4j (日志)、jakarta.mail (SMTP)。目标 JDK 25 (`maven.compiler.release=25`)。
+- 多线程全部使用 **Java 21+ 虚拟线程**: 角色 worker (`RolePool`)、角色并行装配 (`AgentSystem.addRoles`)、电脑并行恢复 (`StateStore.restoreComputers`) 均改为虚拟线程执行器; 需要限流处 (装配/恢复) 用 `Semaphore` 保持原并发上限语义。每个角色一个常驻虚拟线程, 不再受固定线程池 `max_workers` 约束。
+- LLM 请求用 JDK `java.net.http.HttpClient`, 重试语义 (429/5xx/超时重试, 4xx 立即失败) 与 Python 版一致。
+- MCP 客户端自行实现 newline-delimited JSON-RPC 2.0 走 stdio (不依赖 MCP SDK), 支持 `npx -y <包>` 与自定义命令 (容器内 `podman exec -i`)。
+- 环境变量覆盖路径解析同时支持系统属性 (`-DAGENTSCHEDULER_DATA_DIR=...` 等), 便于测试/容器注入。
+- 角色模板 JSON 化: 54 个角色模板的内容不再写死在 Java 里, 统一由 `src/main/resources/role_templates.json`
+  (顶层 `role_id → 角色配置` 映射) 描述; `RoleTemplates` 类加载时自动载入注册表。
+  另提供 `RoleTemplates.fromJsonMap / loadFromJson / templatesFromJson / registerFromJson / toJsonMap`
+  等方法, 从任意 JSON (字符串/文件, 支持映射/数组/单对象三种形态) 加载或导出 `AgentRole` 角色对象
+  (测试见 `RoleTemplatesJsonTest`)。原 `PinyinMap` 已删除: 各角色的拼音用户名直接写入 JSON 的
+  `username` 字段, 未显式给出时回退 `role_id`。
+
+---
+
 基于**企业作息与事件驱动**理念的多角色 AI Agent 调度框架。
 
 打破传统 Agent `while(true)` 循环，解决"长任务 Context 爆炸、状态不可恢复、Token 成本失控、权限无隔离"问题。
@@ -95,8 +165,11 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 │        TimeEventBus (时间 × 事件 深度绑定)                │
 │   (2026-08 起 TimeManager 已并入 EventBus, 统一此名)      │
 │   - 时钟/Tick/天 (1 Tick = 10 分钟换算, 上班 0~60 Tick)    │
+│   (2026-08 起 TimeManager 已并入 EventBus, 统一此名)      │
+│   - 时钟/Tick/天 (1 Tick = 10 分钟换算, 上班 0~60 Tick)    │
 │   - 3 层过滤管线 (状态掩码 → 显著性 → 唤醒)               │
 │   - 事件调度表: register_event(ev, tick) 定时触发          │
+│   - Tick 事件驱动: 全角色空闲才快进 (有任务跳任务, 没任务跳下班/次日上班) │
 │   - Tick 事件驱动: 全角色空闲才快进 (有任务跳任务, 没任务跳下班/次日上班) │
 └──────────────┬───────────────────────────────────────────┘
                │  SHIFT_START/SHIFT_END/TASK_DUE 事件
@@ -122,6 +195,10 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 │     容器内用户名 = 员工名字拼音 (guoxiaodong), 每员工独立 uid           │
 │     自带 sudo/git/node/python + Hermes Agent (hermes_new_conversation)  │
 │   - 企业云盘: 共享文件夹挂载 /mnt/drive (Public 777 + 员工目录 755) │
+│   - 个人电脑: podman 容器 maf-<role> (Ubuntu 24.04, 上班开机/下班关机)  │
+│     容器内用户名 = 员工名字拼音 (guoxiaodong), 每员工独立 uid           │
+│     自带 sudo/git/node/python + Hermes Agent (hermes_new_conversation)  │
+│   - 企业云盘: 共享文件夹挂载 /mnt/drive (Public 777 + 员工目录 755) │
 │   talk: inter-role communication                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -141,9 +218,16 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 - **Tick 事件驱动（不随真实时间流逝）**：角色忙碌期间 Tick 冻结（LLM 在 1 Tick 内跑完内容，不会因处理耗时错过未来 Tick 的任务）；全部角色空闲持续 60s 才快进——有任务跳任务 Tick，没任务跳当天下班，已下班跳次日上班
 - 笔记与定时任务统一（统称笔记）：`write_note` 填 `remind_tick` = 带提醒的笔记，到点像任务一样发送提醒事件；底层 `schedule_task` 只保存任务列表；当天任务直接注册事件，隔天任务目标天上班时自动加载
 - 兼容别名 `TimeManager` 已于 2026-08 移除（commit `2953835`）——统一使用 `TimeEventBus`
+- **Tick 事件驱动（不随真实时间流逝）**：角色忙碌期间 Tick 冻结（LLM 在 1 Tick 内跑完内容，不会因处理耗时错过未来 Tick 的任务）；全部角色空闲持续 60s 才快进——有任务跳任务 Tick，没任务跳当天下班，已下班跳次日上班
+- 笔记与定时任务统一（统称笔记）：`write_note` 填 `remind_tick` = 带提醒的笔记，到点像任务一样发送提醒事件；底层 `schedule_task` 只保存任务列表；当天任务直接注册事件，隔天任务目标天上班时自动加载
+- 兼容别名 `TimeManager` 已于 2026-08 移除（commit `2953835`）——统一使用 `TimeEventBus`
 
 ### 2. 事件 3 层过滤 (`src/core/roles.py` — `AgentRole.evaluate_event`)
+### 2. 事件 3 层过滤 (`src/core/roles.py` — `AgentRole.evaluate_event`)
 
+0 Token 消耗拦截低价值事件。**过滤是每角色独立的**（角色差异化：各自的
+`interest_keywords`/`skills`/状态），由 `EventDispatcher.trigger` 分发时调用；
+`EventBus` 只做定时事件调度表，不含过滤管线（2026-08 收敛）。
 0 Token 消耗拦截低价值事件。**过滤是每角色独立的**（角色差异化：各自的
 `interest_keywords`/`skills`/状态），由 `EventDispatcher.trigger` 分发时调用；
 `EventBus` 只做定时事件调度表，不含过滤管线（2026-08 收敛）。
@@ -151,6 +235,10 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 | 层 | 名称 | 机制 | Token |
 |----|------|------|-------|
 | Layer 1 | State Mask | OFF_DUTY 状态拦截非 EMERGENCY 事件 | 0 |
+| Layer 2 | Salience Evaluator | 角色关键词命中 + 优先级加权（`priority*0.4 + relevance*0.6`） | 0 |
+| Layer 3 | Wake | 通过前两层的事件转 Task 入该角色队列 | 按需 |
+
+系统时间事件（`source="time"`，如 SHIFT_START/END）绕过 Layer 2 直接通过。
 | Layer 2 | Salience Evaluator | 角色关键词命中 + 优先级加权（`priority*0.4 + relevance*0.6`） | 0 |
 | Layer 3 | Wake | 通过前两层的事件转 Task 入该角色队列 | 按需 |
 
@@ -178,14 +266,22 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 - 循环有保护上限：最多 20 轮工具调用 / 单任务累计 200K tokens，超限任务标记 failed
   （防止 LLM 陷入反复调工具的退化循环无限烧 Token）；API 超时/错误文本
   （`[API timeout]` / `[API error: ...]`）同样判失败，不当成功结果
+- 工具结果以 `role:"tool"` + `tool_call_id` 回喂
+- 循环有保护上限：最多 20 轮工具调用 / 单任务累计 200K tokens，超限任务标记 failed
+  （防止 LLM 陷入反复调工具的退化循环无限烧 Token）；API 超时/错误文本
+  （`[API timeout]` / `[API error: ...]`）同样判失败，不当成功结果
 - `max_tokens` 默认无上限（长内容 JSON 不被截断成非法 JSON；`None` 时不传该字段）
+- 文本协议（```tool_call 块 + `_parse_tool_calls` 正则）已随 commit `2953835` 删除，只有原生 function calling
 - 文本协议（```tool_call 块 + `_parse_tool_calls` 正则）已随 commit `2953835` 删除，只有原生 function calling
 
 ### 6. 个人电脑体系 (`src/core/computer.py`)
 
 每个角色一台独立电脑，默认 **Podman 容器**（镜像 `maf-base:latest`，名 `maf-<role_id>`）：
+每个角色一台独立电脑，默认 **Podman 容器**（镜像 `maf-base:latest`，名 `maf-<role_id>`）：
 
 - 容器挂载宿主机目录 `data/computers/<role>` ↔ 容器内 `/home/agent`（同一份文件，双向可见）
+- 默认镜像 `maf-base:latest` 由项目根 `Containerfile` 定义（阿里源 / apt 标配包 / Hermes / MCP 服务器一次构建）；
+  初始化电脑时若镜像不存在自动 `podman build` 创建，角色容器从该镜像复制，秒建只补员工用户
 - 默认镜像 `maf-base:latest` 由项目根 `Containerfile` 定义（阿里源 / apt 标配包 / Hermes / MCP 服务器一次构建）；
   初始化电脑时若镜像不存在自动 `podman build` 创建，角色容器从该镜像复制，秒建只补员工用户
 - **上班自动开机**（SHIFT_START）、**下班自动关机**（summary 总结后）
@@ -193,7 +289,11 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 - `ComputerManager`（全局单例）管理分配/销毁
 - **Podman 是硬要求**：本机无 podman 时 `PodmanComputer` 构造直接抛 `RuntimeError`
   （commit `2953835` 移除了自动降级）——需要本地模拟请显式设 `computer_kind="local"`
+- **Podman 是硬要求**：本机无 podman 时 `PodmanComputer` 构造直接抛 `RuntimeError`
+  （commit `2953835` 移除了自动降级）——需要本地模拟请显式设 `computer_kind="local"`
 - 另有 `SSHComputer`（远程主机，需显式指定 host）
+- **跨天自动重连 MCP 服务器**：每天下班 `podman stop` 会杀死容器内 MCP 服务器的
+  stdio 管道，次日上班开机时自动探测会话存活并重建（否则第 2 天起文件工具全失效）
 - **跨天自动重连 MCP 服务器**：每天下班 `podman stop` 会杀死容器内 MCP 服务器的
   stdio 管道，次日上班开机时自动探测会话存活并重建（否则第 2 天起文件工具全失效）
 
@@ -201,6 +301,7 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 
 - **每台电脑一个独立 MCP filesystem 服务器**，通过 `podman exec -i` 在容器内启动，
   授权目录 = `/home/agent`（与 LLM 看到的工作目录字面一致，无路径空间错位）
+- 基础镜像（`Containerfile`）构建时已全局预装 `@modelcontextprotocol/server-filesystem`，容器秒启即用（旧容器由 `_ensure_container` 兜底补装）
 - 基础镜像（`Containerfile`）构建时已全局预装 `@modelcontextprotocol/server-filesystem`，容器秒启即用（旧容器由 `_ensure_container` 兜底补装）
 - `DEFAULT_MCP_GROUPS = ("file_ops",)`：角色加入/新入职时自动把文件操作工具装到个人电脑
 - `MCPManager`（全局共享）：`mcp_search/mcp_list/mcp_add/mcp_remove/mcp_my_tools`
@@ -217,9 +318,37 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP 工具演�
 | mcp_manager | mcp_search / mcp_list / mcp_add / mcp_remove / mcp_my_tools | MCP 自助管理 |
 | talk / list_roles | 角色间通信（仅同组成员可互发，跨组走邮件） | pool.start() 自动注入 |
 | email | send_email / read_mail / open_mail / mail_address_book | 员工邮件（虚拟邮箱，配 SMTP 后真实发送） |
+| talk / list_roles | 角色间通信（仅同组成员可互发，跨组走邮件） | pool.start() 自动注入 |
+| email | send_email / read_mail / open_mail / mail_address_book | 员工邮件（虚拟邮箱，配 SMTP 后真实发送） |
 | MCP file_ops | read_file / write_file / edit_file / ... | 默认 MCP 组，自动安装到电脑 |
 
 专属工具：CEO 有 `talk_to_client`（甲方交流），HR 有 `post_job_posting` / `list_candidates`。
+
+### 8.1 模板风格工具类（Java 版 `src/main/java/com/agent/software/tools/toolkits/`）
+
+Java 版默认装配已切换到模板风格实现：每个业务域一个 `Toolkit` 子类 + 每个函数一个
+`Tool` 子类（以 `toolkits/note/WriteNote` 为模板）：
+
+| Toolkit (类) | 工具 | 说明 |
+|--------|------|------|
+| `toolkits.memory.Memory` | `summary` | **只含记忆相关内容**（每日总结，下一天自动注入提示词 + 下班关机） |
+| `toolkits.note.Note` | `write_note` / `edit_note` / `list_notes` / `read_note` / `delete_note` | 笔记（**已从 memory 分离**；笔记与定时提醒统一） |
+| `toolkits.time.Time` | `get_time` / `take_rest` | 作息 |
+| `toolkits.todo.Todo` | `todo_add` / `todo_list` / `todo_update` / `todo_delete` | 待办清单 |
+| `toolkits.taskview.TaskView` | `my_tasks` | 任务队列 + 历史 |
+| `toolkits.pc.Pc` | `run_command` / `computer_status` / `lan_devices` / `reboot` | **pc = computer 工具**（个人电脑操作） |
+| `toolkits.mcp.McpManager` | `mcp_search` / `mcp_list` / `mcp_add` / `mcp_remove` / `mcp_my_tools` | MCP 自助管理 |
+| `toolkits.skill.Skill` | `skill_search` / `skill_list` / `skill_add` / `skill_remove` / `skill_my_skills` | SKILL.md 技能管理 |
+| `toolkits.email.Email` | `send_email` / `read_mail` / `open_mail` / `mail_address_book` | 员工邮件 |
+| `toolkits.hermes.Hermes` | `hermes_new_conversation` / `hermes_send` | 调用电脑上的 Hermes Agent |
+| `toolkits.talk.Talk` | `talk` / `list_roles` | 角色间通信（同组互发，跨组走邮件） |
+| `toolkits.hr.Hr` | `post_job_posting` / `list_candidates` | 招聘即入职（HR 专属） |
+| `toolkits.client.Client` | `talk_to_client` | 甲方交流（CEO 专属） |
+
+基类：`tools.Tool`（getToolName / getSchema / handler）与 `tools.Toolkit`
+（addTool / getTools / trigger）。`tools.ToolkitBridge.toLegacy()` 把模板风格
+工具类桥接为旧版 `ToolRegistry.ToolKit` 供 LLM 调用
+（`AgentRole.addToolkit(Toolkit)` 已支持直接加载）。
 
 ### 8.1 模板风格工具类（Java 版 `src/main/java/com/agent/software/tools/toolkits/`）
 
@@ -317,15 +446,53 @@ HR 发布招聘 → 后台 `RoleFactory` 生成新人 → **立即加入运行�
 （重启后可恢复，已 gitignore）。**配置 SMTP 后自动切换真实发送**：通过 smtplib
 发出真实邮件，同时仍把副本投递到内部收件人邮箱（模拟内网阅读）。
 
+### 13. 员工分组 + 公司邮件 (`src/core/role_templates.py` + `src/core/mail_service.py` + `src/python_tools/email_toolkit.py`)
+
+**分组**：每位成员都有一个分组（`AgentRole.group`），默认团队划分如下 ——
+
+| 分组 | 成员 |
+|------|------|
+| 领导组 | CEO 林总 / COO 陈总 / HR 王人事 / CFO 钱财 / CTO 高远 |
+| 前端开发组 | frontend_lead 陈思远 + frontend_dev_1~3 |
+| 后端开发组 | backend_lead 王宇轩 + backend_dev_1~3 |
+| 移动开发组 | mobile_lead 张雅婷 + mobile_dev_1~3 |
+| 全栈开发组 | fullstack_lead 李俊杰 + fullstack_dev_1~3 |
+| 测试组 | test_lead 刘子涵 + tester_1~20 |
+| 安全组 | attacker_1~3（红蓝对抗/审计） |
+| 架构与版本组 | architect 王建国 + release_manager 方谨言 |
+| 运维组 / 市场组 / 数据组 / 客服组 | ops_engineer 赵强 / content_marketer 陈静 / data_analyst 孙晓 / support_agent 周梅 |
+
+- **talk 工具仅限同组成员之间交流**：跨组发送会被拒绝，并提示改用邮件
+  （招聘入职的新人未分组，不受限制，可与任何人 talk）。
+- 分组会显示在 `list_roles` 花名册、`mail_address_book` 通讯录和系统提示词中。
+
+**公司邮箱**：每位成员一个邮箱 `username@<后缀>`（后缀由用户定义，见下方环境变量），
+例如 郭晓东 → `guoxiaodong@company.com`；角色显式 `email` 字段可覆盖。
+
+**员工邮件工具**（每个角色自动装配）：
+
+| 工具 | 说明 |
+|------|------|
+| send_email | 发邮件给同事（人名/邮箱均可，支持多人、抄送）——跨组沟通的首选 |
+| read_mail | 查看收件箱（新到优先，未读标记，可只看未读） |
+| open_mail | 打开一封邮件全文（自动标记已读） |
+| mail_address_book | 公司通讯录（按分组列出成员姓名/邮箱/职位） |
+
+**虚拟实现（默认）**：邮件投递到内部邮箱，持久化在 `data/mail/mailboxes.json`
+（重启后可恢复，已 gitignore）。**配置 SMTP 后自动切换真实发送**：通过 smtplib
+发出真实邮件，同时仍把副本投递到内部收件人邮箱（模拟内网阅读）。
+
 ---
 
 ## 项目结构
 
 ```
 AgentCompany/
+AgentCompany/
 ├── src/
 │   ├── core/
 │   │   ├── types.py           # Event, AgentState, Priority 等数据类型
+│   │   ├── event_bus.py       # EventBus: 定时事件调度表 (_tick_schedule)
 │   │   ├── event_bus.py       # EventBus: 定时事件调度表 (_tick_schedule)
 │   │   ├── time_manager.py    # TimeEventBus: 时间(时钟/Tick/天) + 事件总线 + 快进
 │   │   ├── roles.py           # AgentRole + RolePool（多角色线程池 + 动态入职/离职）
@@ -368,6 +535,7 @@ AgentCompany/
   指向任意 OpenAI 兼容端点，如 DeepSeek / 本地 vLLM）
 
 ```bash
+cd AgentCompany
 cd AgentCompany
 source .venv/bin/activate
 
@@ -429,6 +597,27 @@ pool.start()
 coo = pool.get_role("COO")
 coo.talk_to("HR", "请发布招聘: 需要一位精通 Rust 的后端工程师", "HIGH")
 # → HR 队列收到: [FROM COO(陈总)] 请发布招聘...
+```
+
+> talk 仅限同组成员；CEO/COO/HR 同属「领导组」所以可以互发。跨组沟通请用邮件。
+
+### 员工邮件（虚拟邮箱 / SMTP 真实发送）
+
+```python
+# 发件人: 郭晓东 (测试组) → 收件人: 王建国 (架构与版本组, 跨组)
+tester = pool.get_role("tester_1")
+tester._tools.call_tool("send_email", {
+    "to": "王建国",
+    "subject": "架构问题咨询",
+    "body": "登录模块的权限校验想请教一下最佳实践。",
+})
+# → 邮件已发送给 wangjianguo@company.com, 主题「架构问题咨询」, 虚拟邮箱投递.
+
+# 收件人查看收件箱
+architect = pool.get_role("architect")
+inbox = architect._tools.call_tool("read_mail", {"limit": 5})
+mid = inbox.split("id=")[-1].split(")")[0].strip()
+print(architect._tools.call_tool("open_mail", {"message_id": mid}).content[0].text)
 ```
 
 > talk 仅限同组成员；CEO/COO/HR 同属「领导组」所以可以互发。跨组沟通请用邮件。

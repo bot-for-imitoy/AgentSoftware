@@ -55,7 +55,7 @@ public class PostJobPosting extends Tool {
         if (requirement.isEmpty()) {
             return "post_job_posting: Error: needs requirement";
         }
-        RoleFactory factory = new RoleFactory(apiKey, null);
+        RoleFactory factory = new RoleFactory(apiKey, null, null);
         AgentRole newRole;
         try {
             newRole = factory.createRole(requirement);

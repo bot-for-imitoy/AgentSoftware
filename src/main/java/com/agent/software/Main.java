@@ -3,8 +3,8 @@ package com.agent.software;
 import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.role.AgentRole;
-import com.agent.software.role.RoleLoader;
 import com.agent.software.store.NoteStore;
+import com.agent.software.role.RoleTemplates;
 import com.agent.software.store.StateStore;
 import com.agent.software.core.Types;
 import org.slf4j.Logger;
@@ -44,7 +44,7 @@ public class Main {
     private static final int SHIFT_END_HOURS = 10;
     private static final int DAY_BOUNDARY_HOURS = 24;
 
-    private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleLoader.DEFAULT_ROLES);
+    private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleTemplates.DEFAULT_ROLES);
 
     // ── 终端 UI ─────────────────────────────────────────────
 
