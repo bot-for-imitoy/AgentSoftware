@@ -2,7 +2,6 @@ package com.agent.software.llm;
 
 import com.agent.software.store.ConfigStore;
 import com.agent.software.utils.Json;
-import com.agent.software.utils.LayeredConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +22,7 @@ import java.util.Map;
  * (OpenAI 格式), 因此不再区分 provider: 客户端层次只有 {@link LLM} 接口 + 本实现,
  * 只读取 OpenAI 格式的环境变量.
  *
- * <p><b>配置解析统一优先级</b> (高 → 低, 与 {@link LayeredConfig} 一致):
+ * <p><b>配置解析统一优先级</b> (高 → 低, 与 {@link ConfigStore} 一致):
  * <ol>
  *   <li>构造器显式参数 (apiKey / baseUrl / model);</li>
  *   <li>Java 参数: 系统属性 {@code -DOPENAI_API_KEY=...} 等 (键名与环境变量一致);</li>
@@ -89,12 +88,9 @@ public class OpenAICompatLLM implements LLM {
                     Map<String, String> env, Map<String, String> props) {
         this.configStore = configStore != null ? configStore : new ConfigStore();
         this.label = label != null ? label : "";
-        this.apiKey = first(apiKey, LayeredConfig.get(API_KEY_ENV, this.configStore,
-                storeKeys("api_key"), null, env, props));
-        this.baseUrl = stripSlash(first(baseUrl, LayeredConfig.get(BASE_URL_ENV, this.configStore,
-                storeKeys("base_url"), DEFAULT_BASE_URL, env, props)));
-        this.model = first(model, LayeredConfig.get(MODEL_ENV, this.configStore,
-                storeKeys("model"), DEFAULT_MODEL, env, props));
+        this.apiKey = first(apiKey, (String) this.configStore.get("llm.api_key", System.getenv("OPENAI_APIKEY")));
+        this.baseUrl = stripSlash(first(baseUrl, (String) this.configStore.get("llm.base_url", System.getenv("OPENAI_BASEURL"))));
+        this.model = first(model, (String) this.configStore.get("llm.model", System.getenv("OPENAI_MODEL")));
     }
 
     /** ConfigStore 点号路径: {@code llm.&lt;field&gt;}. */
@@ -164,7 +160,7 @@ public class OpenAICompatLLM implements LLM {
     public LLM.ToolsResponse chatWithTools(List<Map<String, Object>> messages,
                                            List<Map<String, Object>> tools,
                                            double temperature, Integer maxTokens) {
-        URI url = URI.create(baseUrl + "/v1/chat/completions");
+        URI url = URI.create(baseUrl);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("messages", messages);
