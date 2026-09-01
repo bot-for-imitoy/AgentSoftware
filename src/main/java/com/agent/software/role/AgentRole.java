@@ -817,16 +817,16 @@ public class AgentRole {
         int roundNo = 0;
         while (true) {
             roundNo++;
-            if (roundNo > MAX_TOOL_ROUNDS) {
+            /*if (roundNo > MAX_TOOL_ROUNDS) {
                 throw new ToolLoopError("工具调用超过 " + MAX_TOOL_ROUNDS + " 轮仍未收敛 "
                         + "(累计 " + totalTokens + " tokens), 任务失败");
-            }
+            }*/
             LLM.ToolsResponse response = llm.chatWithTools(messages, openaiTools, 0.7, null);
             totalTokens += response.totalTokens();
-            if (MAX_TOOL_TOTAL_TOKENS != null && totalTokens > MAX_TOOL_TOTAL_TOKENS) {
+            /*if (MAX_TOOL_TOTAL_TOKENS != null && totalTokens > MAX_TOOL_TOTAL_TOKENS) {
                 throw new ToolLoopError("工具调用累计 " + totalTokens + " tokens 超过上限 "
                         + MAX_TOOL_TOTAL_TOKENS + ", 任务失败");
-            }
+            }*/
             List<Map<String, Object>> toolCalls = response.toolCalls;
             if (toolCalls.isEmpty()) {
                 // LLM 调用失败 (API 超时/异常): 不能当作成功结果
