@@ -20,11 +20,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * MCP 服务器客户端 (Python 版 mcp_client.py 的 Java 对应物).
+ * MCP server client (the Java counterpart of the Python mcp_client.py).
  *
- * 通过 npx 或自定义命令 (如容器内 podman exec) 启动服务器进程, 用
- * newline-delimited JSON-RPC 2.0 走 stdio 传输: 后台线程读服务器输出,
- * 工具调用按 request id 匹配响应.
+ * Starts the server process via npx or a custom command (e.g. podman exec inside a container), using
+ * newline-delimited JSON-RPC 2.0 over stdio: a background thread reads the server output,
+ * and tool calls are matched to responses by request id.
  */
 public class MCPServer {
 
@@ -34,8 +34,8 @@ public class MCPServer {
 
     public final String packageName;
     public final List<String> args;
-    public final String command;          // 自定义启动命令 (如 "podman")
-    public final List<String> commandArgs; // 自定义命令参数 (podman exec -i ...)
+    public final String command;          // custom launch command (e.g. "podman")
+    public final List<String> commandArgs; // custom command arguments (podman exec -i ...)
 
     private Process process;
     private Writer stdin;
@@ -57,14 +57,14 @@ public class MCPServer {
         this(packageName, args, null, null);
     }
 
-    // ── 生命周期 ──────────────────────────────────────────
+    // ── Lifecycle ─────────────────────────────────────────
 
-    /** 启动服务器进程并建立会话 (最多等待 20 秒). */
+    /** Start the server process and establish a session (waits up to 20 seconds). */
     public synchronized void connect() {
         try {
             List<String> cmd = new ArrayList<>();
             if (command != null && !command.isEmpty()) {
-                // 自定义启动命令 (容器内执行等): 直接 spawn, 不经过宿主 npx
+                // custom launch command (e.g. running inside a container): spawn directly, bypassing the host npx
                 cmd.add(command);
                 cmd.addAll(commandArgs);
             } else {
@@ -81,25 +81,25 @@ public class MCPServer {
             readerThread.setDaemon(true);
             readerThread.start();
 
-            // 握手: initialize → initialized
+            // handshake: initialize → initialized
             Map<String, Object> resp = request("initialize", Map.of(
                     "protocolVersion", PROTOCOL_VERSION,
                     "capabilities", new LinkedHashMap<>(),
                     "clientInfo", Map.of("name", "maf-java", "version", "1.0.0")));
             if (resp == null) {
-                throw new IOException("initialize 无响应: " + (connectError != null ? connectError : "未知错误"));
+                throw new IOException("initialize got no response: " + (connectError != null ? connectError : "unknown error"));
             }
             notify("notifications/initialized", new LinkedHashMap<>());
             connected = true;
-            logger.info("MCP 服务器 '{}' 连接成功", packageName);
+            logger.info("MCP server '{}' connected successfully", packageName);
         } catch (Exception exc) {
             connectError = String.valueOf(exc.getMessage());
-            logger.error("MCP 服务器 '{}' 连接失败: {}", packageName, exc.getMessage());
+            logger.error("MCP server '{}' connection failed: {}", packageName, exc.getMessage());
             connected = false;
         }
     }
 
-    /** 关闭服务器连接. */
+    /** Close the server connection. */
     public synchronized void close() {
         connected = false;
         try {
@@ -120,8 +120,8 @@ public class MCPServer {
     }
 
     /**
-     * 探测服务器会话是否仍然可用 (进程死亡/管道断裂后返回 false).
-     * 走一次轻量 list_tools 往返.
+     * Probe whether the server session is still usable (returns false after process death / broken pipe).
+     * Performs one lightweight list_tools round trip.
      */
     public boolean isAlive(double timeoutSeconds) {
         if (!connected || process == null || !process.isAlive()) {
@@ -136,14 +136,14 @@ public class MCPServer {
         }
     }
 
-    /** 最近一次连接/请求失败原因 (诊断用). */
+    /** Reason of the most recent connection/request failure (for diagnostics). */
     public String connectError() {
         return connectError;
     }
 
-    // ── 工具操作 ──────────────────────────────────────────
+    // ── Tool operations ───────────────────────────────────
 
-    /** 获取服务器工具列表. 返回 MCP 工具 Map 列表 (name/description/inputSchema). */
+    /** Get the server's tool list. Returns a list of MCP tool Maps (name/description/inputSchema). */
     public List<Map<String, Object>> listTools() {
         if (!connected) {
             return new ArrayList<>();
@@ -167,12 +167,12 @@ public class MCPServer {
             }
             return new ArrayList<>();
         } catch (Exception exc) {
-            logger.error("MCP '{}' list_tools 失败: {}", packageName, exc.getMessage());
+            logger.error("MCP '{}' list_tools failed: {}", packageName, exc.getMessage());
             return new ArrayList<>();
         }
     }
 
-    /** 调用服务器上的工具. 返回结果文本. */
+    /** Call a tool on the server. Returns the result text. */
     public String callTool(String name, Map<String, Object> arguments) {
         if (!connected) {
             return "Error: MCP server '" + packageName + "' is not connected";
@@ -185,7 +185,7 @@ public class MCPServer {
             if (result == null) {
                 return "Error: calling " + name + " failed - " + (connectError != null ? connectError : "no response");
             }
-            // 提取文本内容
+            // extract text content
             StringBuilder parts = new StringBuilder();
             Object content = result.get("content");
             if (content instanceof List<?> list) {
@@ -203,12 +203,12 @@ public class MCPServer {
             }
             return parts.length() == 0 ? String.valueOf(result) : parts.toString();
         } catch (Exception exc) {
-            logger.error("MCP '{}' 调用 {} 失败: {}", packageName, name, exc.getMessage());
+            logger.error("MCP '{}' call {} failed: {}", packageName, name, exc.getMessage());
             return "Error: calling " + name + " failed - " + exc.getMessage();
         }
     }
 
-    // ── 内部: JSON-RPC over stdio ─────────────────────────
+    // ── Internal: JSON-RPC over stdio ─────────────────────
 
     private void notify(String method, Map<String, Object> params) throws IOException {
         Map<String, Object> msg = new LinkedHashMap<>();
@@ -237,20 +237,20 @@ public class MCPServer {
             return future.get(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             pending.remove(id);
-            throw new IOException("MCP 请求超时/失败: " + method + " - " + e.getMessage());
+            throw new IOException("MCP request timed out/failed: " + method + " - " + e.getMessage());
         }
     }
 
     private synchronized void sendLine(Map<String, Object> msg) throws IOException {
         if (stdin == null || process == null || !process.isAlive()) {
-            throw new IOException("MCP 进程未运行");
+            throw new IOException("MCP process is not running");
         }
         stdin.write(Json.stringify(msg));
         stdin.write("\n");
         stdin.flush();
     }
 
-    /** 后台读取线程: 解析服务器的 JSON-RPC 响应/通知. */
+    /** Background reader thread: parses the server's JSON-RPC responses/notifications. */
     private void readLoop() {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -262,7 +262,7 @@ public class MCPServer {
                 handleMessage(line);
             }
         } catch (IOException e) {
-            logger.debug("MCP '{}' 读取流结束: {}", packageName, e.getMessage());
+            logger.debug("MCP '{}' read stream ended: {}", packageName, e.getMessage());
         }
     }
 
@@ -284,10 +284,10 @@ public class MCPServer {
                     }
                 }
             } else {
-                logger.debug("MCP '{}' 通知: {}", packageName, line);
+                logger.debug("MCP '{}' notification: {}", packageName, line);
             }
         } catch (IOException e) {
-            logger.warn("MCP '{}' 收到非法 JSON 行: {}", packageName, e.getMessage());
+            logger.warn("MCP '{}' received invalid JSON line: {}", packageName, e.getMessage());
         }
     }
 }

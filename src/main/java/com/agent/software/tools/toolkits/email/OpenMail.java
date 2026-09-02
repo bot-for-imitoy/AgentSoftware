@@ -9,8 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * open_mail — 打开一封邮件查看完整内容 (自动标记为已读).
- * message_id 来自 read_mail 列表.
+ * open_mail - open a mail to view its full content (automatically marked as read).
+ * message_id comes from the read_mail list.
  */
 public class OpenMail extends Tool {
 

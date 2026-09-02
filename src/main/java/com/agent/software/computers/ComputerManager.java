@@ -18,10 +18,10 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 电脑管理类 (Python 版 ComputerManager + create_computer 工厂).
+ * Computer manager class (Python version ComputerManager + create_computer factory).
  *
- * 职责: 分配/注册/查询/销毁各角色电脑; 确保 podman 自定义桥接网络存在;
- * 确保默认镜像存在 (不存在则从项目根 Containerfile 构建).
+ * Responsibilities: allocate/register/query/destroy each role's computer; ensure the podman custom bridge
+ * network exists; ensure the default image exists (build it from the project root Containerfile if missing).
  */
 public class ComputerManager {
 
@@ -29,39 +29,40 @@ public class ComputerManager {
 
     public static final String DEFAULT_NETWORK_NAME = "maf-net";
 
-    /** 镜像构建互斥锁文件 (跨进程串行 build). */
+    /** Image build mutex lock file (serializes build across processes). */
     private static final Path BASE_IMAGE_LOCK_FILE = Paths.get("data", ".maf-base-image.lock");
 
     private final ReentrantLock networkLock = new ReentrantLock();
     private final Map<String, Computer> computers = new LinkedHashMap<>(); // role_id → Computer
-    private final Map<String, String> names = new LinkedHashMap<>();       // role_id → 人名
+    private final Map<String, String> names = new LinkedHashMap<>();       // role_id → person name
 
     public String networkName = DEFAULT_NETWORK_NAME;
 
     /**
-     * 每系统独立实例: 角色电脑注册表按系统隔离, 使多个 AgentSystem 可安全共存
-     * (见 {@link com.agent.software.AgentSystem}). 未注入实例的旧代码
-     * 仍可通过 {@link #getInstance()} 使用进程级默认单例.
+     * One independent instance per system: the role computer registry is isolated per system, allowing multiple
+     * AgentSystem instances to safely coexist (see {@link com.agent.software.AgentSystem}). Legacy code that does
+     * not inject an instance can still use the process-level default singleton via {@link #getInstance()}.
      */
     public ComputerManager() {
     }
 
     private static final ComputerManager INSTANCE = new ComputerManager();
 
-    /** 全局单例: 角色自动创建的电脑统一注册到这里. */
+    /** Global singleton: computers auto-created by roles are all registered here. */
     public static ComputerManager getInstance() {
         return INSTANCE;
     }
 
-    // ── 按类型创建电脑实例 (create_computer 工厂) ──────────
+    // ── Create computer instances by type (create_computer factory) ──────────
 
     /**
-     * 按类型创建电脑实例.
+     * Create a computer instance by type.
      *
-     * @param kind     "podman" (默认) | "ssh" | "local".
-     * @param roleId   角色标识.
-     * @param autoMcp  是否自动创建 (True = 创建实例时自动安装独立 MCP 服务器).
-     * @param kwargs   透传给具体实现 (ssh 需 host/user 等).
+     * @param kind     "podman" (default) | "ssh" | "local".
+     * @param roleId   Role identifier.
+     * @param autoMcp  Whether it is auto-created (True = automatically install an independent MCP server when
+     *                 creating the instance).
+     * @param kwargs   Passed through to the concrete implementation (ssh requires host/user, etc.).
      */
     public static Computer createComputer(String kind, String roleId, boolean autoMcp,
                                           Map<String, Object> kwargs) {
@@ -81,7 +82,7 @@ public class ComputerManager {
             case "ssh": {
                 String host = strOf(kwargs.get("host"));
                 if (host.isEmpty()) {
-                    throw new IllegalArgumentException("SSHComputer 需要 host 参数 (远程主机地址)");
+                    throw new IllegalArgumentException("SSHComputer requires a host parameter (remote host address)");
                 }
                 String user = strOf(kwargs.get("user"));
                 String keyPath = strOf(kwargs.get("key_path"));
@@ -117,12 +118,12 @@ public class ComputerManager {
         return def;
     }
 
-    // ── 网络 ──────────────────────────────────────────────
+    // ── Network ──────────────────────────────────────────────
 
-    /** 确保 podman 自定义桥接网络存在 (幂等). 返回网络名. */
+    /** Ensure the podman custom bridge network exists (idempotent). Returns the network name. */
     public String ensureNetwork() {
         if (PodmanComputer.findExecutable("podman") == null) {
-            return networkName;  // 降级环境无 podman, 无所谓网络
+            return networkName;  // degraded environment without podman, the network does not matter
         }
         networkLock.lock();
         try {
@@ -130,7 +131,7 @@ public class ComputerManager {
             for (int attempt = 1; attempt <= 3; attempt++) {
                 r = Computer.runProcess(List.of("podman", "network", "exists", networkName), null, 30);
                 if (r.returnCode == -1 || r.returnCode == -2 || r.returnCode == -3) {
-                    logger.warn("podman network exists 超时/失败 (第 {} 次, 可能镜像构建中)", attempt);
+                    logger.warn("podman network exists timed out/failed (attempt {}, image may be building)", attempt);
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException e) {
@@ -142,7 +143,7 @@ public class ComputerManager {
             }
             if (r != null && r.returnCode != 0) {
                 Computer.runProcess(List.of("podman", "network", "create", networkName), null, 60);
-                logger.info("podman 自定义桥接网络已创建: {}", networkName);
+                logger.info("podman custom bridge network created: {}", networkName);
             }
         } finally {
             networkLock.unlock();
@@ -150,15 +151,15 @@ public class ComputerManager {
         return networkName;
     }
 
-    // ── 镜像 ──────────────────────────────────────────────
+    // ── Image ──────────────────────────────────────────────
 
-    /** 探测默认镜像是否存在. */
+    /** Check whether the default image exists. */
     public boolean imageExists() {
         Computer.ProcessResult r = Computer.runProcess(List.of("podman", "image", "exists", Computer.DEFAULT_IMAGE), null, 30);
         return r.returnCode == 0;
     }
 
-    /** 轮询等待镜像出现 (构建方 build 期间探测命令排队, 超时不算失败). */
+    /** Poll and wait for the image to appear (probe commands queue while the builder runs build; timeouts are not treated as failures). */
     private boolean waitImageAppears(long windowMillis) {
         long deadline = System.currentTimeMillis() + windowMillis;
         while (System.currentTimeMillis() < deadline) {
@@ -174,27 +175,28 @@ public class ComputerManager {
         return false;
     }
 
-    /** 从项目根 Containerfile 构建默认镜像 (须持有文件锁). */
+    /** Build the default image from the project root Containerfile (the file lock must be held). */
     private void buildBaseImage() {
         Path context = Paths.get(Computer.CONTAINERFILE).toAbsolutePath().getParent();
         Computer.ProcessResult r = Computer.runProcess(List.of("podman", "build", "-f", Computer.CONTAINERFILE,
                 "-t", Computer.DEFAULT_IMAGE, context.toString()), null, 1800);
         if (r.returnCode != 0) {
-            throw new RuntimeException("podman build 创建镜像 " + Computer.DEFAULT_IMAGE + " 失败 ("
+            throw new RuntimeException("podman build failed to create image " + Computer.DEFAULT_IMAGE + " ("
                     + r.returnCode + "): " + Computer.truncate(
                     (r.stderr != null ? r.stderr : r.stdout), 300));
         }
-        logger.info("自定义镜像 {} 已从 {} 构建 (角色容器从它复制)",
+        logger.info("Custom image {} built from {} (role containers are copied from it)",
                 Computer.DEFAULT_IMAGE, Computer.CONTAINERFILE);
     }
 
     /**
-     * 确保电脑默认容器镜像存在 (由项目根 Containerfile 定义). 返回镜像名.
-     * 并发保护: 文件锁 + 双检 — 首个调用者持锁完成构建; 其余调用者轮询等待.
+     * Ensure the default computer container image exists (defined by the project root Containerfile). Returns the
+     * image name. Concurrency protection: file lock + double-check - the first caller holds the lock and completes
+     * the build; the other callers poll and wait.
      */
     public String ensureBaseImage() {
         if (PodmanComputer.findExecutable("podman") == null) {
-            return Computer.DEFAULT_IMAGE;  // 降级环境无 podman
+            return Computer.DEFAULT_IMAGE;  // degraded environment without podman
         }
         while (true) {
             if (tryAcquireImageLock()) {
@@ -211,7 +213,8 @@ public class ComputerManager {
             if (waitImageAppears(60_000)) {
                 return Computer.DEFAULT_IMAGE;
             }
-            // 单轮等待未出现: 回到抢锁流程 (构建方失败释放锁后由本进程接管)
+            // Image did not appear within one wait round: return to the lock-acquisition flow (if the builder failed
+            // and released the lock, this process takes over)
         }
     }
 
@@ -253,9 +256,9 @@ public class ComputerManager {
         }
     }
 
-    // ── 分配 / 注册 ───────────────────────────────────────
+    // ── Allocation / registration ───────────────────────────────────────
 
-    /** 创建并注册一台角色电脑 (分配). */
+    /** Create and register a role computer (allocation). */
     public Computer create(String kind, String roleId, String name, boolean autoMcp,
                            Map<String, Object> kwargs) {
         ensureNetwork();
@@ -268,7 +271,7 @@ public class ComputerManager {
         return comp;
     }
 
-    /** 注册一台已创建的电脑到管理器. */
+    /** Register an already-created computer with the manager. */
     public void register(Computer computer, String name) {
         computers.put(computer.roleId, computer);
         if (name != null && !name.isEmpty()) {
@@ -276,9 +279,9 @@ public class ComputerManager {
         }
     }
 
-    // ── 查询 ──────────────────────────────────────────────
+    // ── Query ──────────────────────────────────────────────
 
-    /** 按角色 ID 获取电脑 (不存在抛 IllegalArgumentException). */
+    /** Get the computer by role ID (throws IllegalArgumentException if missing). */
     public Computer get(String roleId) {
         Computer c = computers.get(roleId);
         if (c == null) {
@@ -287,19 +290,19 @@ public class ComputerManager {
         return c;
     }
 
-    /** 只读查询角色的显示名. */
+    /** Read-only lookup of a role's display name. */
     public String nameOf(String roleId, String def) {
         return names.getOrDefault(roleId, def != null ? def : roleId);
     }
 
-    /** 返回全部已注册电脑列表 (按注册顺序). */
+    /** Return the list of all registered computers (in registration order). */
     public List<Computer> listAll() {
         return new ArrayList<>(computers.values());
     }
 
-    // ── 销毁 ──────────────────────────────────────────────
+    // ── Destruction ──────────────────────────────────────────────
 
-    /** 销毁角色电脑: 关机 + 删除容器 + 注销. 返回是否销毁成功. */
+    /** Destroy a role computer: power off + delete container + unregister. Returns whether destruction succeeded. */
     public boolean destroy(String roleId) {
         Computer comp = computers.remove(roleId);
         names.remove(roleId);
@@ -311,23 +314,23 @@ public class ComputerManager {
                 comp.powerOff();
             }
         } catch (Exception e) {
-            logger.warn("电脑[{}] 关机失败 (销毁继续)", roleId);
+            logger.warn("Computer [{}] power-off failed (destruction continues)", roleId);
         }
         if (comp instanceof PodmanComputer pc) {
             try {
                 pc.pod("rm", "-f", pc.containerName);
-                logger.info("电脑[{}] 容器已删除: {}", roleId, pc.containerName);
+                logger.info("Computer [{}] container deleted: {}", roleId, pc.containerName);
             } catch (Exception e) {
-                logger.warn("电脑[{}] 容器删除失败", roleId);
+                logger.warn("Computer [{}] container deletion failed", roleId);
             }
         }
-        logger.info("电脑[{}] 已销毁 (注销)", roleId);
+        logger.info("Computer [{}] destroyed (unregistered)", roleId);
         return true;
     }
 
-    // ── 内网设备 ──────────────────────────────────────────
+    // ── LAN devices ──────────────────────────────────────────
 
-    /** 列出内网电脑设备: 人名 / 电脑名 / IP (按角色排序). */
+    /** List LAN computer devices: person name / computer name / IP (sorted by role). */
     public List<Map<String, String>> listLanDevices() {
         List<Map<String, String>> devices = new ArrayList<>();
         List<String> roleIds = new ArrayList<>(computers.keySet());

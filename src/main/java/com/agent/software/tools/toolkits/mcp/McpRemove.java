@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * mcp_remove — 从当前角色移除一个已添加的 MCP 工具.
+ * mcp_remove - remove an already-added MCP tool from the current role.
  */
 public class McpRemove extends Tool {
 

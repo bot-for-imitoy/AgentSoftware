@@ -11,9 +11,9 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * hermes_send — 向指定 Hermes 对话 (conversation_id) 发送一段内容, 然后
- * 同步等待 Hermes 完成全部处理 (含工具调用) 并返回最终结果.
- * 适合委托电脑上的 Hermes 独立完成一个子任务.
+ * hermes_send - send a piece of content to the specified Hermes conversation (conversation_id), then
+ * synchronously wait for Hermes to finish all processing (including tool calls) and return the final result.
+ * Suitable for delegating an independent subtask to the Hermes on the computer.
  */
 public class HermesSend extends Tool {
 
@@ -68,7 +68,7 @@ public class HermesSend extends Tool {
         }
         String cmd = "hermes chat -q " + PodmanQuote(content) + " -r " + PodmanQuote(cid) + " -Q 2>&1";
         String out = computer.runCommand(cmd, HERMES_TIMEOUT, 100_000);
-        if (out.startsWith("[exit") || out.startsWith("错误")) {
+        if (out.startsWith("[exit") || out.startsWith("Error")) {
             return errorHint(out);
         }
         if (out.strip().isEmpty()) {
@@ -85,7 +85,7 @@ public class HermesSend extends Tool {
         return cleaned.isEmpty() ? out.strip() : String.join("\n", cleaned);
     }
 
-    /** 把 hermes 错误转成给角色的可读提示. */
+    /** Converts a hermes error into a readable hint for the role. */
     private static String errorHint(String raw) {
         String text = raw.length() > 300 ? raw.substring(0, 300) : raw;
         if (text.contains("Configure Hermes") || text.toLowerCase().contains("wizard")

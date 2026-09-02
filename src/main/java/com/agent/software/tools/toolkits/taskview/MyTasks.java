@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * my_tasks — 查看分配给我的任务列表: 待处理队列 (系统/同事派发, 还没开始)
- * + 最近完成/失败的任务历史 (含结果与 token 消耗).
- * scope 可选: all(默认)/pending(只看队列)/done/failed.
+ * my_tasks — view the list of tasks assigned to me: pending queue (dispatched by the system/colleagues, not yet started)
+ * + recent completed/failed task history (with results and token consumption).
+ * scope options: all (default) / pending (queue only) / done / failed.
  */
 public class MyTasks extends Tool {
 

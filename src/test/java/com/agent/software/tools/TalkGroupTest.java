@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * talk 工具组内交流限制测试 (Python 版 test_talk_group.py 的 Java 对应物).
+ * talk tool in-group communication restriction tests (the Java counterpart of the Python test_talk_group.py).
  */
 class TalkGroupTest {
 
@@ -65,16 +65,16 @@ class TalkGroupTest {
         return toolkits.get(senderId).trigger("talk", args);
     }
 
-    // ── 同组放行 ───────────────────────────────────────────
+    // ── Same group allowed ────────────────────────────────────
 
     @Test
     void testSameGroupAllowed() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool,
-                role("顾承宇", "frontend_dev_1", "前端开发组"),
-                role("陈思远", "frontend_lead", "前端开发组"));
-        String result = talk(tks, "frontend_dev_1", "陈思远", "组件重构完成", false);
-        assertTrue(result.contains("message sent to 陈思远"));
+                role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group"),
+                role("Chen Siyuan", "frontend_lead", "Frontend Development Group"));
+        String result = talk(tks, "frontend_dev_1", "Chen Siyuan", "Component refactor done", false);
+        assertTrue(result.contains("message sent to Chen Siyuan"));
         assertEquals(1, pool.getRole("frontend_lead").queueDepth());
     }
 
@@ -82,77 +82,77 @@ class TalkGroupTest {
     void testSameGroupWaitRoundtrip() throws InterruptedException {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool,
-                role("顾承宇", "frontend_dev_1", "前端开发组"),
-                role("陈思远", "frontend_lead", "前端开发组"));
+                role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group"),
+                role("Chen Siyuan", "frontend_lead", "Frontend Development Group"));
         AgentRole roleA = pool.getRole("frontend_dev_1");
         AtomicReference<String> result = new AtomicReference<>();
-        Thread t = new Thread(() -> result.set(talk(tks, "frontend_dev_1", "陈思远", "进度?", true)));
+        Thread t = new Thread(() -> result.set(talk(tks, "frontend_dev_1", "Chen Siyuan", "Progress?", true)));
         t.start();
         try {
-            assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
-            String reply = talk(tks, "frontend_lead", "顾承宇", "进度 80%", false);
-            assertTrue(reply.contains("replied to 顾承宇 who was waiting"));
+            assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A did not enter WAIT");
+            String reply = talk(tks, "frontend_lead", "Gu Chengyu", "80% done", false);
+            assertTrue(reply.contains("replied to Gu Chengyu who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("received reply from 陈思远: 进度 80%"));
+        assertTrue(result.get().contains("received reply from Chen Siyuan: 80% done"));
     }
 
-    // ── 跨组拒绝 ───────────────────────────────────────────
+    // ── Cross-group rejected ──────────────────────────────────
 
     @Test
     void testCrossGroupRejected() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool,
-                role("郭晓东", "tester_1", "测试组"),
-                role("王建国", "architect", "架构与版本组"));
-        String result = talk(tks, "tester_1", "王建国", "有个架构问题", false);
+                role("Guo Xiaodong", "tester_1", "Testing Group"),
+                role("Wang Jianguo", "architect", "Architecture & Release Group"));
+        String result = talk(tks, "tester_1", "Wang Jianguo", "Have an architecture question", false);
         assertTrue(result.contains("only for communication within the same group"));
-        assertTrue(result.contains("测试组") && result.contains("架构与版本组"));
+        assertTrue(result.contains("Testing Group") && result.contains("Architecture & Release Group"));
         assertTrue(result.contains("send_email"));
-        assertEquals(0, pool.getRole("architect").queueDepth());  // 未送达
+        assertEquals(0, pool.getRole("architect").queueDepth());  // not delivered
     }
 
     @Test
     void testCrossGroupWaitRejected() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool,
-                role("郭晓东", "tester_1", "测试组"),
-                role("方谨言", "release_manager", "架构与版本组"));
+                role("Guo Xiaodong", "tester_1", "Testing Group"),
+                role("Fang Jinyan", "release_manager", "Architecture & Release Group"));
         AgentRole roleA = pool.getRole("tester_1");
-        String result = talk(tks, "tester_1", "方谨言", "有急事", true);
+        String result = talk(tks, "tester_1", "Fang Jinyan", "Urgent matter", true);
         assertTrue(result.contains("only for communication within the same group"));
-        assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // 未进入 WAIT
+        assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // did not enter WAIT
     }
 
-    // ── 未分组不受限 ───────────────────────────────────────
+    // ── Ungrouped roles unrestricted ──────────────────────────
 
     @Test
     void testUngroupedRolesUnrestricted() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool,
-                role("新人", "newbie_1", ""),
-                role("顾承宇", "frontend_dev_1", "前端开发组"));
-        String r1 = talk(tks, "newbie_1", "顾承宇", "你好", false);
-        assertTrue(r1.contains("message sent to 顾承宇"));
-        String r2 = talk(tks, "frontend_dev_1", "新人", "欢迎", false);
-        assertTrue(r2.contains("message sent to 新人"));
+                role("Newcomer", "newbie_1", ""),
+                role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group"));
+        String r1 = talk(tks, "newbie_1", "Gu Chengyu", "Hello", false);
+        assertTrue(r1.contains("message sent to Gu Chengyu"));
+        String r2 = talk(tks, "frontend_dev_1", "Newcomer", "Welcome", false);
+        assertTrue(r2.contains("message sent to Newcomer"));
     }
 
-    // ── 花名册显示分组 ─────────────────────────────────────
+    // ── Roster shows group ────────────────────────────────────
 
     @Test
     void testRosterShowsGroup() {
         RolePool pool = new RolePool();
-        pool.addRole(role("顾承宇", "frontend_dev_1", "前端开发组"));
-        pool.addRole(role("林总", "CEO", "领导组"));
-        pool.addRole(role("新人", "newbie_1", ""));
+        pool.addRole(role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group"));
+        pool.addRole(role("Lin Zong", "CEO", "Leadership Group"));
+        pool.addRole(role("Newcomer", "newbie_1", ""));
         String roster = ListRoles.buildTeamRoster(pool);
-        assertTrue(roster.contains("(Group: 前端开发组)"));
-        assertTrue(roster.contains("(Group: 领导组)"));
+        assertTrue(roster.contains("(Group: Frontend Development Group)"));
+        assertTrue(roster.contains("(Group: Leadership Group)"));
         assertTrue(roster.contains("(Group: Unassigned)"));
         assertFalse(roster.contains("frontend_dev_1"));
     }

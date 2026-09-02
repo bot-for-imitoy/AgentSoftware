@@ -16,11 +16,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * RoleFactory — LLM 驱动的角色创建 (从用人需求, Python 版 role_factory.py).
+ * RoleFactory — LLM-driven role creation (from hiring requirements, Java port of role_factory.py).
  *
- * 用法:
+ * Usage:
  *     RoleFactory factory = new RoleFactory();
- *     AgentRole newRole = factory.createRole("需要一位精通 Rust 的后端工程师，熟悉 gRPC 和 PostgreSQL");
+ *     AgentRole newRole = factory.createRole("Need a backend engineer proficient in Rust, familiar with gRPC and PostgreSQL");
  */
 public class RoleFactory {
 
@@ -65,9 +65,9 @@ public class RoleFactory {
             4. at least 6 keywords
             5. output only JSON, nothing else""";
 
-    /** 从用人需求创建新角色. */
+    /** Create a new role from a hiring requirement. */
     public AgentRole createRole(String requirement) {
-        // 构建现有模板列表供 LLM 参考
+        // Build the list of existing templates for the LLM to reference
         List<Map<String, Object>> existing = new ArrayList<>();
         for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             AgentRole r = e.getValue().get();
@@ -94,14 +94,14 @@ public class RoleFactory {
             throw new IllegalArgumentException(
                     "Failed to parse role config from LLM response: " + truncate(resp.text, 200));
         }
-        // 校验必填字段
+        // Validate required fields
         String[] required = {"role_id", "title", "responsibilities", "personality", "skills", "interest_keywords"};
         for (String f : required) {
             if (!roleConfig.containsKey(f)) {
                 throw new IllegalArgumentException("Missing required field '" + f + "' in role config");
             }
         }
-        // 生成唯一人名与 role_id
+        // Generate a unique person name and role_id
         String personName = RoleLoader.nextName();
         String generatedRoleId = String.valueOf(roleConfig.get("role_id"));
         if (RoleLoader.TEMPLATES.containsKey(generatedRoleId)) {
@@ -126,7 +126,7 @@ public class RoleFactory {
                 .interestKeywords(keywords)
                 .systemPromptExtra(Json.str(roleConfig, "system_prompt_extra", ""))
                 .build();
-        // 注册进模板池
+        // Register into the template pool
         RoleLoader.addTemplate(role);
         logger.info("RoleFactory: created role '{}' ({}) — {}, {} skills, {} keywords, {} tokens",
                 generatedRoleId, personName, role.title, role.skills.size(),
@@ -137,14 +137,14 @@ public class RoleFactory {
     private static final Pattern JSON_BLOCK = Pattern.compile("```(?:json)?\\s*\\n?(.*?)\\n?\\s*```", Pattern.DOTALL);
     private static final Pattern JSON_BRACES = Pattern.compile("\\{.*\\}", Pattern.DOTALL);
 
-    /** 从 LLM 响应提取 JSON (处理 ```json 块). */
+    /** Extract JSON from the LLM response (handles ```json blocks). */
     @SuppressWarnings("unchecked")
     static Map<String, Object> parseJson(String text) {
         if (text == null) {
             return null;
         }
         String t = text.strip();
-        // 直接解析
+        // Try a direct parse
         try {
             Object v = Json.parse(t);
             if (v instanceof Map) {
@@ -152,7 +152,7 @@ public class RoleFactory {
             }
         } catch (Exception ignored) {
         }
-        // ```json ... ``` 块
+        // ```json ... ``` block
         Matcher m = JSON_BLOCK.matcher(t);
         if (m.find()) {
             try {
@@ -163,7 +163,7 @@ public class RoleFactory {
             } catch (Exception ignored) {
             }
         }
-        // { ... } 提取
+        // Extract { ... }
         m = JSON_BRACES.matcher(t);
         if (m.find()) {
             try {

@@ -6,7 +6,7 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * Hermes 工具类 (Hermes Toolkit) — 调用角色电脑 (容器) 上安装的 Hermes Agent:
+ * Hermes toolkit (Hermes Toolkit) - invokes the Hermes Agent installed on the role's computer (container):
  * hermes_new_conversation / hermes_send.
  */
 public class Hermes extends Toolkit {

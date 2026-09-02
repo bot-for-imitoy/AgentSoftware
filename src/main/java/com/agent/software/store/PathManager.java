@@ -6,11 +6,12 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * PathManager — 跨平台应用路径管理 (Python 版 path_manager.py).
+ * PathManager — cross-platform application path management (Python version path_manager.py).
  *
- * 按各平台目录约定返回应用专属目录, 作为全项目路径的唯一入口.
- * 环境变量显式覆盖 (优先级最高): {@code <ENV_PREFIX>_CONFIG_DIR / _DATA_DIR /
- * _CACHE_DIR / _LOG_DIR}; 默认 ENV_PREFIX = app_name 大写化 (下划线).
+ * Returns the application-specific directory according to each platform's directory
+ * conventions, serving as the single entry point for project-wide paths.
+ * Explicit environment variable overrides (highest priority): {@code <ENV_PREFIX>_CONFIG_DIR / _DATA_DIR /
+ * _CACHE_DIR / _LOG_DIR}; default ENV_PREFIX = app_name uppercased (underscores).
  */
 public class PathManager {
 
@@ -24,10 +25,10 @@ public class PathManager {
     }
 
     /**
-     * @param appName   应用名 (平台目录下的子目录, 如 "AgentCompany").
-     * @param envPrefix 环境变量覆盖前缀 (null = appName 大写化).
-     * @param env       环境变量快照 (测试注入用; null = System.getenv()).
-     * @param platform  平台名 (测试注入用; null = 当前 OS 名).
+     * @param appName   application name (subdirectory under the platform directory, e.g. "AgentCompany").
+     * @param envPrefix environment variable override prefix (null = appName uppercased).
+     * @param env       environment variable snapshot (for test injection; null = System.getenv()).
+     * @param platform  platform name (for test injection; null = current OS name).
      */
     public PathManager(String appName, String envPrefix, Map<String, String> env, String platform) {
         this.appName = appName;
@@ -55,7 +56,7 @@ public class PathManager {
         if (v != null && !v.isEmpty()) {
             return v;
         }
-        // 回退: 系统属性 (测试/容器用 -D 注入, 等价于 Python 测试的 monkeypatch.setenv)
+        // Fallback: system properties (-D injection for tests/containers, equivalent to monkeypatch.setenv in Python tests)
         String prop = System.getProperty(key, "");
         return prop == null ? "" : prop;
     }
@@ -166,25 +167,25 @@ public class PathManager {
         return p;
     }
 
-    /** 创建全部四个目录 (parents + exist_ok), 幂等. */
+    /** Create all four directories (parents + exist_ok), idempotent. */
     public void ensureDirs() {
         try {
             for (Path d : new Path[]{configDir(), dataDir(), cacheDir(), logDir()}) {
                 java.nio.file.Files.createDirectories(d);
             }
         } catch (java.io.IOException e) {
-            throw new RuntimeException("创建应用目录失败", e);
+            throw new RuntimeException("Failed to create application directories", e);
         }
     }
 
-    /** 创建 path 的父目录, 返回原 path (写文件前调用). */
+    /** Create the parent directory of path, return the original path (call before writing a file). */
     public Path ensure(Path path) {
         try {
             if (path.getParent() != null) {
                 java.nio.file.Files.createDirectories(path.getParent());
             }
         } catch (java.io.IOException e) {
-            throw new RuntimeException("创建目录失败: " + path.getParent(), e);
+            throw new RuntimeException("Failed to create directory: " + path.getParent(), e);
         }
         return path;
     }

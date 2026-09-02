@@ -10,7 +10,7 @@
   <packaging>jar</packaging>
 
   <name>Shift &amp; Event-Driven Agent Scheduler (Java)</name>
-  <description>Java 重写版: 基于企业作息与事件驱动的多角色 AI Agent 调度框架</description>
+  <description>Java rewrite: a multi-role AI agent scheduling framework driven by corporate work schedules and events</description>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -21,14 +21,14 @@
   </properties>
 
   <dependencies>
-    <!-- JSON (配置/状态/邮箱/LLM 请求与响应) -->
+    <!-- JSON (config/state/mail/LLM requests and responses) -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>${jackson.version}</version>
     </dependency>
 
-    <!-- 日志 (Python logging 的 Java 对应物) -->
+    <!-- Logging (the Java counterpart of Python logging) -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
@@ -40,14 +40,14 @@
       <version>${slf4j.version}</version>
     </dependency>
 
-    <!-- 公司邮件真实发送 (SMTP) -->
+    <!-- Real company email sending (SMTP) -->
     <dependency>
       <groupId>com.sun.mail</groupId>
       <artifactId>jakarta.mail</artifactId>
       <version>2.0.1</version>
     </dependency>
 
-    <!-- 测试 -->
+    <!-- Testing -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

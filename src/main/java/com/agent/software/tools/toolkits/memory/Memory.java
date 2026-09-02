@@ -5,10 +5,10 @@ import com.agent.software.store.NoteStore;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 记忆工具类 (Memory Toolkit) — 只包含记忆相关内容 (每日总结).
+ * Memory toolkit class (Memory Toolkit) - contains only memory-related content (daily summary).
  *
- * 笔记类工具已分离到 toolkits.note (write_note / edit_note / list_notes /
- * read_note / delete_note), memory 不再包含任何笔记操作.
+ * Note tools have been split out into toolkits.note (write_note / edit_note / list_notes /
+ * read_note / delete_note); memory no longer contains any note operations.
  */
 public class Memory extends Toolkit {
 

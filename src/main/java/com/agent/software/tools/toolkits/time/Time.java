@@ -5,7 +5,7 @@ import com.agent.software.event.TimeEventBus;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 时间工具类 (Time Toolkit) — 作息时间查看与休息.
+ * Time toolkit — schedule time viewing and rest.
  */
 public class Time extends Toolkit {
 

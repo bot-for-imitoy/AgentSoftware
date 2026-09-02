@@ -4,11 +4,11 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * MCP 工具管理类 (McpManager Toolkit) — 搜索/添加/移除本地 MCP 工具:
+ * MCP tool management toolkit (McpManager Toolkit) — search/add/remove local MCP tools:
  * mcp_search / mcp_list / mcp_add / mcp_remove / mcp_my_tools.
  *
- * 底层复用全局共享的 {@link MCPManager} (每角色电脑上
- * 运行独立的 MCP filesystem 服务器).
+ * Under the hood it reuses the global shared {@link MCPManager} (an independent
+ * MCP filesystem server runs on each role's computer).
  */
 public class McpManager extends Toolkit {
 

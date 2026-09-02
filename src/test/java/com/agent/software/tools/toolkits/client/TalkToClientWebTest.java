@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * talk_to_client Web 模式集成测试: 领导调用 → 输入框启用状态 (等待甲方回复)
- * → 甲方在网页提交回复 → 领导拿到回复, 聊天记录完整.
+ * talk_to_client Web mode integration test: a leader calls → input enabled state (waiting for the client reply)
+ * → the client submits a reply on the page → the leader gets it, and the chat log is complete.
  */
 class TalkToClientWebTest {
 
@@ -41,37 +41,37 @@ class TalkToClientWebTest {
         AgentSystem system = new AgentSystem(List.of(RoleLoader.getTemplate("CEO")), null, 30.0, false);
         AgentRole ceo = system.getRole("CEO");
         ChatStore store = system.chatStore;
-        store.markAttached();   // 模拟 Web 前端已挂载
+        store.markAttached();   // simulate an attached Web frontend
 
         Tool talkToClient = new Client(ceo).getTools().stream()
                 .filter(t -> "talk_to_client".equals(t.getToolName()))
                 .findFirst().orElseThrow();
 
         AtomicReference<String> result = new AtomicReference<>();
-        Thread t = new Thread(() -> result.set(talkToClient.handler(Map.of("message", "您好，请问项目需求是？"))));
+        Thread t = new Thread(() -> result.set(talkToClient.handler(Map.of("message", "Hello, may I ask what the project requirements are?"))));
         t.start();
 
         try {
-            // 领导进入"等待甲方回复"状态 → Web 输入框应启用
-            assertTrue(waitUntil(store::isClientWaitPending, 5000), "领导未进入等待甲方回复状态");
+            // the leader enters the "waiting for the client reply" state → the Web input box should be enabled
+            assertTrue(waitUntil(store::isClientWaitPending, 5000), "leader did not enter the waiting-for-client-reply state");
             assertEquals("CEO", store.pendingHolderRoleId());
-            assertEquals("林总", store.pendingHolderName());
+            assertEquals("Lin Zong", store.pendingHolderName());
 
-            // 甲方在网页上回复
-            store.postClientReply("帮我开发一个支付系统");
+            // the client replies on the page
+            store.postClientReply("Please develop a payment system for me");
 
             t.join(5000);
             assertFalse(t.isAlive());
-            assertTrue(result.get().contains("client reply: 帮我开发一个支付系统"));
-            assertFalse(store.isClientWaitPending(), "回复后等待状态应复位");
+            assertTrue(result.get().contains("client reply: Please develop a payment system for me"));
+            assertFalse(store.isClientWaitPending(), "the waiting state should be reset after the reply");
 
-            // 聊天记录: 领导 → 甲方, 甲方 → 领导 (归属领导组)
+            // chat log: leader → client, client → leader (in the Leadership Group)
             List<Map<String, Object>> msgs = store.messagesSince(0);
             assertEquals(2, msgs.size());
-            assertEquals("林总", msgs.get(0).get("fromName"));
-            assertEquals("甲方", msgs.get(0).get("toName"));
-            assertEquals("甲方", msgs.get(1).get("fromName"));
-            assertEquals("林总", msgs.get(1).get("toName"));
+            assertEquals("Lin Zong", msgs.get(0).get("fromName"));
+            assertEquals("Client A", msgs.get(0).get("toName"));
+            assertEquals("Client A", msgs.get(1).get("fromName"));
+            assertEquals("Lin Zong", msgs.get(1).get("toName"));
             assertEquals("Leadership Group", msgs.get(0).get("group"));
             assertEquals("Leadership Group", msgs.get(1).get("group"));
         } finally {

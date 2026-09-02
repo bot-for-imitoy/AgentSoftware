@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * talk 工具 wait=true 同步等待回复测试 (Python 版 test_talk_wait.py 的 Java 对应物).
+ * talk tool wait=true synchronous reply-waiting tests (the Java counterpart of the Python test_talk_wait.py).
  */
 class TalkWaitTest {
 
@@ -47,15 +47,15 @@ class TalkWaitTest {
     private static Map<String, Talk> setupRoles(RolePool pool, String... roleIds) {
         Map<String, Talk> toolkits = new LinkedHashMap<>();
         for (String rid : roleIds) {
-            AgentRole role = AgentRole.builder().name("角色" + rid).roleId(rid).build();
+            AgentRole role = AgentRole.builder().name("Role " + rid).roleId(rid).build();
             pool.addRole(role);
-            role.setPool(pool);  // 模拟 start() 后的 back-reference
+            role.setPool(pool);  // simulate the back-reference after start()
             toolkits.put(rid, new Talk(role, pool));
         }
         return toolkits;
     }
 
-    /** 调用发送方 talk 工具 (与 call_tool 同一逻辑). */
+    /** Calls the sender's talk tool (same logic as call_tool). */
     private static String talk(Map<String, Talk> toolkits, String senderId,
                                String target, String message, boolean wait) {
         Map<String, Object> args = new LinkedHashMap<>();
@@ -67,15 +67,15 @@ class TalkWaitTest {
         return toolkits.get(senderId).trigger("talk", args);
     }
 
-    // ── 人名暴露 ──────────────────────────────────────────
+    // ── Person-name exposure ──────────────────────────────────
 
     @Test
     void testRosterHidesRoleId() {
         RolePool pool = new RolePool();
-        pool.addRole(AgentRole.builder().name("张三").roleId("dev_1").build());
-        pool.addRole(AgentRole.builder().name("李四").roleId("dev_2").build());
+        pool.addRole(AgentRole.builder().name("Zhang San").roleId("dev_1").build());
+        pool.addRole(AgentRole.builder().name("Li Si").roleId("dev_2").build());
         String roster = ListRoles.buildTeamRoster(pool);
-        assertTrue(roster.contains("张三") && roster.contains("李四"));
+        assertTrue(roster.contains("Zhang San") && roster.contains("Li Si"));
         assertFalse(roster.contains("dev_1"));
         assertFalse(roster.contains("dev_2"));
         assertFalse(roster.contains("role_id"));
@@ -86,8 +86,8 @@ class TalkWaitTest {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleB = pool.getRole("B");
-        String result = talk(tks, "A", "角色B", "按名字发送测试", false);
-        assertTrue(result.contains("message sent to 角色B"));
+        String result = talk(tks, "A", "Role B", "send-by-name test", false);
+        assertTrue(result.contains("message sent to Role B"));
         assertEquals(1, roleB.queueDepth());
     }
 
@@ -95,12 +95,12 @@ class TalkWaitTest {
     void testTalkUnknownNameGivesHint() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        String result = talk(tks, "A", "不存在的名字", "hi", false);
+        String result = talk(tks, "A", "Nonexistent name", "hi", false);
         assertTrue(result.contains("cannot find"));
         assertTrue(result.contains("list_roles"));
     }
 
-    // ── 1) wait 往返 ──────────────────────────────────────
+    // ── 1) wait round trip ────────────────────────────────────
 
     @Test
     void testWaitRoundtrip() throws InterruptedException {
@@ -108,27 +108,27 @@ class TalkWaitTest {
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleA = pool.getRole("A");
         AtomicReference<String> result = new AtomicReference<>();
-        Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "请问进度?", true)));
+        Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "What's the progress?", true)));
         t.start();
         try {
-            assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
-            String reply = talk(tks, "B", "A", "进度 80%", false);
-            assertTrue(reply.contains("replied to 角色A who was waiting"));
+            assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A did not enter WAIT");
+            String reply = talk(tks, "B", "A", "80% done", false);
+            assertTrue(reply.contains("replied to Role A who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("received reply from 角色B: 进度 80%"));
-        assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // 状态恢复
+        assertTrue(result.get().contains("received reply from Role B: 80% done"));
+        assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // state restored
     }
 
     @Test
     void testWaitRoundtripWithRealNames() throws InterruptedException {
         RolePool pool = new RolePool();
-        AgentRole a = AgentRole.builder().name("王建国").roleId("architect").build();
-        AgentRole b = AgentRole.builder().name("郭晓东").roleId("tester_1").build();
+        AgentRole a = AgentRole.builder().name("Wang Jianguo").roleId("architect").build();
+        AgentRole b = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").build();
         pool.addRole(a);
         pool.addRole(b);
         a.setPool(pool);
@@ -138,24 +138,24 @@ class TalkWaitTest {
             tks.put(r.roleId, new Talk(r, pool));
         }
         AtomicReference<String> result = new AtomicReference<>();
-        Thread t = new Thread(() -> result.set(talk(tks, "architect", "郭晓东", "进度?", true)));
+        Thread t = new Thread(() -> result.set(talk(tks, "architect", "Guo Xiaodong", "Progress?", true)));
         t.start();
         try {
-            assertTrue(waitUntil(() -> a.state == Types.AgentState.WAIT, 5000), "A 未进入 WAIT");
-            assertEquals("tester_1", a.waitingReplyFrom());  // 内部等待链存 role_id
-            String reply = talk(tks, "tester_1", "王建国", "进度 80%", false);
-            assertTrue(reply.contains("replied to 王建国 who was waiting"));
+            assertTrue(waitUntil(() -> a.state == Types.AgentState.WAIT, 5000), "A did not enter WAIT");
+            assertEquals("tester_1", a.waitingReplyFrom());  // the internal wait chain stores the role_id
+            String reply = talk(tks, "tester_1", "Wang Jianguo", "80% done", false);
+            assertTrue(reply.contains("replied to Wang Jianguo who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("received reply from 郭晓东: 进度 80%"));
+        assertTrue(result.get().contains("received reply from Guo Xiaodong: 80% done"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, a.state);
     }
 
-    // ── 2) 双向互等拆解 ───────────────────────────────────
+    // ── 2) Mutual wait decomposed ─────────────────────────────
 
     @Test
     void testMutualWaitDecomposed() {
@@ -163,18 +163,18 @@ class TalkWaitTest {
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
         AgentRole roleA = pool.getRole("A");
         AgentRole roleB = pool.getRole("B");
-        roleA.beginWait("B");  // A 正在等 B 的回复
+        roleA.beginWait("B");  // A is waiting for B's reply
         try {
-            String result = talk(tks, "B", "A", "收到, 马上处理", true);
-            assertTrue(result.contains("replied to 角色A who was waiting"));
-            assertEquals("收到, 马上处理", roleA.debugReplyBox());  // 投递进 A 的信箱
-            assertEquals(Types.AgentState.ON_DUTY_IDLE, roleB.state);  // B 没有进入 WAIT
+            String result = talk(tks, "B", "A", "Got it, handling it right away", true);
+            assertTrue(result.contains("replied to Role A who was waiting"));
+            assertEquals("Got it, handling it right away", roleA.debugReplyBox());  // delivered into A's mailbox
+            assertEquals(Types.AgentState.ON_DUTY_IDLE, roleB.state);  // B did not enter WAIT
         } finally {
             roleA.endWait();
         }
     }
 
-    // ── 3) 环形等待拒绝 ───────────────────────────────────
+    // ── 3) Circular wait rejected ─────────────────────────────
 
     @Test
     void testDeadlockCycleRejected() {
@@ -186,16 +186,16 @@ class TalkWaitTest {
         roleB.beginWait("C");
         roleC.beginWait("A");
         try {
-            String result = talk(tks, "A", "B", "有急事", true);
+            String result = talk(tks, "A", "B", "Urgent matter", true);
             assertTrue(result.contains("deadlock"));
-            assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // A 未进入 WAIT
+            assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // A did not enter WAIT
         } finally {
             roleB.endWait();
             roleC.endWait();
         }
     }
 
-    // ── 4) 无限等待 + 等待提示 ────────────────────────────
+    // ── 4) Infinite wait + waiting hint ───────────────────────
 
     @Test
     void testWaitMessageCarriesWaitingHint() throws InterruptedException {
@@ -204,30 +204,30 @@ class TalkWaitTest {
         AgentRole roleA = pool.getRole("A");
         AgentRole roleB = pool.getRole("B");
         AtomicReference<String> result = new AtomicReference<>();
-        Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "进度如何?", true)));
+        Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "How's the progress?", true)));
         t.start();
         try {
-            assertTrue(waitUntil(() -> roleB.queueDepth() == 1, 5000), "B 未收到消息");
+            assertTrue(waitUntil(() -> roleB.queueDepth() == 1, 5000), "B did not receive the message");
             AgentRole.Task task = roleB.popTask();
             assertTrue(task != null && task.description.contains("is waiting for your reply"));
-            assertTrue(task.description.contains("角色A"));
+            assertTrue(task.description.contains("Role A"));
             assertEquals(Boolean.TRUE, task.context.get("waiting"));
-            // 无超时: 等 1.5s 仍在 WAIT
+            // no timeout: still in WAIT after 1.5s
             Thread.sleep(1500);
             assertEquals(Types.AgentState.WAIT, roleA.state);
-            String reply = talk(tks, "B", "A", "进度 80%", false);
-            assertTrue(reply.contains("replied to 角色A who was waiting"));
+            String reply = talk(tks, "B", "A", "80% done", false);
+            assertTrue(reply.contains("replied to Role A who was waiting"));
             t.join(5000);
         } finally {
             t.join(1000);
             pool.shutdown(false);
         }
         assertFalse(t.isAlive());
-        assertTrue(result.get().contains("received reply from 角色B: 进度 80%"));
+        assertTrue(result.get().contains("received reply from Role B: 80% done"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);
     }
 
-    // ── 5) 非等待对象消息不投递 ───────────────────────────
+    // ── 5) Messages to non-waiting targets are not delivered as replies ─
 
     @Test
     void testThirdPartyMessageNotDeliveredAsReply() {
@@ -236,17 +236,17 @@ class TalkWaitTest {
         AgentRole roleA = pool.getRole("A");
         roleA.beginWait("B");
         try {
-            String result = talk(tks, "C", "A", "普通消息", false);
+            String result = talk(tks, "C", "A", "Regular message", false);
             assertTrue(result.contains("message sent to"));
-            assertEquals(Types.AgentState.WAIT, roleA.state);  // 仍在等待 B
+            assertEquals(Types.AgentState.WAIT, roleA.state);  // still waiting for B
             assertNull(roleA.debugReplyBox());
-            assertEquals(1, roleA.queueDepth());  // 消息入队, 恢复后处理
+            assertEquals(1, roleA.queueDepth());  // message queued, processed after recovery
         } finally {
             roleA.endWait();
         }
     }
 
-    // ── 6) 附件 (公司云盘 /mnt/drive 文件) ────────────────
+    // ── 6) Attachments (company cloud drive /mnt/drive files) ──
 
     @Test
     void testTalkAttachmentValidatedAndCarried() {
@@ -254,38 +254,38 @@ class TalkWaitTest {
         RolePool pool = new RolePool();
         Map<String, Object> kw = new LinkedHashMap<>();
         kw.put("drive_dir", tmp.resolve("drive").toString());
-        AgentRole a = AgentRole.builder().name("郭晓东").roleId("tester_1")
+        AgentRole a = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1")
                 .computerKind("local").computerKwargs(kw).build();
-        AgentRole b = AgentRole.builder().name("王建国").roleId("architect")
+        AgentRole b = AgentRole.builder().name("Wang Jianguo").roleId("architect")
                 .computerKind("local").computerKwargs(kw).build();
         pool.addRole(a);
         pool.addRole(b);
-        // 郭晓东在云盘放附件
-        a.computer().writeFile(a.computer().driveRoot() + "/郭晓东/设计稿.md", "附件内容");
+        // Guo Xiaodong places an attachment on the cloud drive
+        a.computer().writeFile(a.computer().driveRoot() + "/drafts/design-doc.md", "attachment content");
 
         Talk talkA = new Talk(a, pool);
         Talk talkB = new Talk(b, pool);
 
-        // 无效附件 (不存在) → 拒绝
+        // invalid attachment (missing) → rejected
         Map<String, Object> badArgs = new LinkedHashMap<>();
-        badArgs.put("target", "王建国");
-        badArgs.put("message", "看下");
-        badArgs.put("attachment", "郭晓东/不存在.md");
+        badArgs.put("target", "Wang Jianguo");
+        badArgs.put("message", "Take a look");
+        badArgs.put("attachment", "drafts/nonexistent.md");
         String r = talkA.trigger("talk", badArgs);
         assertTrue(r.contains("invalid attachment"));
         assertEquals(0, b.queueDepth());
 
-        // 有效附件 → 送达, 任务描述带附件提示
+        // valid attachment → delivered, task description carries the attachment hint
         Map<String, Object> okArgs = new LinkedHashMap<>();
-        okArgs.put("target", "王建国");
-        okArgs.put("message", "看下设计稿");
-        okArgs.put("attachment", "郭晓东/设计稿.md");
+        okArgs.put("target", "Wang Jianguo");
+        okArgs.put("message", "Take a look at the design doc");
+        okArgs.put("attachment", "drafts/design-doc.md");
         String r2 = talkA.trigger("talk", okArgs);
-        assertTrue(r2.contains("message sent to 王建国"));
+        assertTrue(r2.contains("message sent to Wang Jianguo"));
         AgentRole.Task task = b.popTask();
-        assertTrue(task != null && task.description.contains("[Attachment: 郭晓东/设计稿.md]"));
+        assertTrue(task != null && task.description.contains("[Attachment: drafts/design-doc.md]"));
         assertTrue(task.description.contains("mnt/drive"));
-        assertEquals("郭晓东/设计稿.md", task.context.get("attachment"));
+        assertEquals("drafts/design-doc.md", task.context.get("attachment"));
         pool.shutdown(false);
     }
 }

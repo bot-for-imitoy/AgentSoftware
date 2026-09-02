@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * ChatWebServer 测试: HTTP 端点冒烟 (JDK HttpServer, 随机端口).
+ * ChatWebServer tests: HTTP endpoint smoke tests (JDK HttpServer, random port).
  */
 class ChatWebServerTest {
 
@@ -31,7 +31,7 @@ class ChatWebServerTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        system = new AgentSystem();   // 空角色池 (分组花名册来自模板)
+        system = new AgentSystem();   // empty role pool (group roster comes from templates)
         server = new ChatWebServer(system, "127.0.0.1", 0);
         server.start();
     }
@@ -63,11 +63,11 @@ class ChatWebServerTest {
         try {
             return com.agent.software.utils.Json.parseObject(r.body());
         } catch (Exception e) {
-            throw new AssertionError("响应不是合法 JSON: " + r.body(), e);
+            throw new AssertionError("response is not valid JSON: " + r.body(), e);
         }
     }
 
-    // ── 静态页面 ──────────────────────────────────────────
+    // ── Static pages ─────────────────────────────────────────
 
     @Test
     void testIndexServed() throws Exception {
@@ -95,16 +95,16 @@ class ChatWebServerTest {
         assertNotNull(groups);
         assertFalse(groups.isEmpty());
         assertEquals("Leadership Group", groups.get(0).get("key"));
-        assertEquals("领导组", groups.get(0).get("label"));
-        // 领导组成员包含 CEO 林总
+        assertEquals("Leadership Group", groups.get(0).get("label"));
+        // the Leadership Group contains CEO Lin Zong
         List<Map<String, Object>> members = (List<Map<String, Object>>) groups.get(0).get("members");
-        assertTrue(members.stream().anyMatch(m -> "CEO".equals(m.get("roleId")) && "林总".equals(m.get("name"))));
+        assertTrue(members.stream().anyMatch(m -> "CEO".equals(m.get("roleId")) && "Lin Zong".equals(m.get("name"))));
 
         Map<String, Object> ct = (Map<String, Object>) body.get("clientTalk");
         assertFalse((Boolean) ct.get("active"));
     }
 
-    // ── /api/messages 与 /api/reply ───────────────────────
+    // ── /api/messages and /api/reply ────────────────────────
 
     @Test
     void testMessagesEmptyInitially() throws Exception {
@@ -117,7 +117,7 @@ class ChatWebServerTest {
 
     @Test
     void testReplyWithoutPendingConversationRejected() throws Exception {
-        HttpResponse<String> r = post("/api/reply", "{\"text\":\"你好\"}");
+        HttpResponse<String> r = post("/api/reply", "{\"text\":\"Hello\"}");
         assertEquals(409, r.statusCode());
         assertFalse((Boolean) json(r).get("ok"));
     }
@@ -130,7 +130,7 @@ class ChatWebServerTest {
         assertEquals(400, bad.statusCode());
     }
 
-    // ── 完整往返: 领导等待 → 网页回复 ─────────────────────
+    // ── Full round trip: leader waits → page reply ────────────
 
     @Test
     void testFullClientReplyFlow() throws Exception {
@@ -138,22 +138,22 @@ class ChatWebServerTest {
         assertNotNull(store);
         store.markAttached();
 
-        store.beginClientWait("CEO", "林总", "Leadership Group");
+        store.beginClientWait("CEO", "Lin Zong", "Leadership Group");
 
-        // 甲方在网页上回复
-        HttpResponse<String> r = post("/api/reply", "{\"text\":\"帮我开发一个支付系统\"}");
+        // the client replies on the page
+        HttpResponse<String> r = post("/api/reply", "{\"text\":\"Please develop a payment system for me\"}");
         assertEquals(200, r.statusCode());
         Map<String, Object> body = json(r);
         assertTrue((Boolean) body.get("ok"));
         Map<String, Object> msg = (Map<String, Object>) body.get("message");
-        assertEquals("甲方", msg.get("fromName"));
+        assertEquals("Client A", msg.get("fromName"));
         assertEquals("CEO", msg.get("toRoleId"));
 
-        // 等待中的成员拿到回复
+        // the waiting member receives the reply
         String reply = store.awaitClientReply(5000);
-        assertEquals("帮我开发一个支付系统", reply);
+        assertEquals("Please develop a payment system for me", reply);
 
-        // state 中 clientTalk.active 在等待期间为 true
+        // clientTalk.active in the state is true while waiting
         HttpResponse<String> s = get("/api/state");
         Map<String, Object> ct = (Map<String, Object>) json(s).get("clientTalk");
         assertTrue((Boolean) ct.get("active"));

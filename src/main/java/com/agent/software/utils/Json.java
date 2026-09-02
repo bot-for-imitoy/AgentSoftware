@@ -13,57 +13,57 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JSON 工具 (Python json 模块的 Java 对应物).
+ * JSON utilities (the Java counterpart of the Python json module).
  *
- * 全项目统一使用本类做 JSON 解析/序列化, 避免各处 ObjectMapper 实例漂移.
- * 所有对象映射采用 {@code Map<String,Object>} / {@code List<Object>} 结构,
- * 与 Python 的 dict/list 语义一致.
+ * The whole project uses this class uniformly for JSON parsing/serialization to avoid ObjectMapper
+ * instance drift. All object mappings use {@code Map<String,Object>} / {@code List<Object>} structures,
+ * consistent with Python's dict/list semantics.
  */
 public final class Json {
 
-    // 注意: 不在 mapper 上开启 INDENT_OUTPUT — 那会让 stringify() (紧凑, 单行) 也输出
-    // 多行缩进 JSON, 破坏 MCP stdio 的 newline-delimited JSON 传输. 需要缩进的地方
-    // 显式使用 stringifyPretty().
+    // Note: do not enable INDENT_OUTPUT on the mapper - that would make stringify() (compact, single-line)
+    // also output multi-line indented JSON, breaking MCP stdio's newline-delimited JSON transport. Where
+    // indentation is needed, use stringifyPretty() explicitly.
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private Json() {
     }
 
-    /** 解析 JSON 文本 → Map (根节点必须是对象). */
+    /** Parse JSON text into a Map (the root node must be an object). */
     public static Map<String, Object> parseObject(String text) throws IOException {
         return MAPPER.readValue(text, new TypeReference<LinkedHashMap<String, Object>>() {
         });
     }
 
-    /** 解析 JSON 文本 → 任意结构 (List/Map/String/Number/Boolean/null). */
+    /** Parse JSON text into any structure (List/Map/String/Number/Boolean/null). */
     public static Object parse(String text) throws IOException {
         return MAPPER.readValue(text, Object.class);
     }
 
-    /** 序列化为紧凑 JSON (ensure_ascii=False 语义: 保留 UTF-8). */
+    /** Serialize to compact JSON (ensure_ascii=False semantics: keep UTF-8). */
     public static String stringify(Object value) {
         try {
             return MAPPER.writeValueAsString(value);
         } catch (IOException e) {
-            throw new RuntimeException("JSON 序列化失败", e);
+            throw new RuntimeException("JSON serialization failed", e);
         }
     }
 
-    /** 序列化为缩进 JSON (配置/存档写盘用). */
+    /** Serialize to indented JSON (for writing configs/archives to disk). */
     public static String stringifyPretty(Object value) {
         try {
             return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(value);
         } catch (IOException e) {
-            throw new RuntimeException("JSON 序列化失败", e);
+            throw new RuntimeException("JSON serialization failed", e);
         }
     }
 
-    /** 读取整个文件 (UTF-8). */
+    /** Read the entire file (UTF-8). */
     public static String readFile(Path path) throws IOException {
         return Files.readString(path, StandardCharsets.UTF_8);
     }
 
-    /** 原子写文件: 先写 .tmp 再 rename (与 Python 版 tmp+replace 一致). */
+    /** Atomically write a file: write to .tmp first, then rename (same as the Python tmp+replace approach). */
     public static void atomicWrite(Path path, String content) throws IOException {
         if (path.getParent() != null) {
             Files.createDirectories(path.getParent());
@@ -73,7 +73,7 @@ public final class Json {
         Files.move(tmp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
     }
 
-    /** 点号路径取值 (Python 版 ConfigStore.get 的语义): "llm.model" → 逐级下钻. */
+    /** Get a value by dotted path (semantics of the Python ConfigStore.get): "llm.model" → drill down level by level. */
     @SuppressWarnings("unchecked")
     public static Object getByPath(Map<String, Object> root, String dotPath, Object def) {
         Object current = root;
@@ -90,7 +90,7 @@ public final class Json {
         return deepCopy(current);
     }
 
-    /** 深度复制 JSON 兼容值 (Python json.loads(json.dumps(v)) 语义). */
+    /** Deep-copy a JSON-compatible value (semantics of Python json.loads(json.dumps(v))). */
     public static Object deepCopy(Object value) {
         try {
             return parse(stringify(value));
@@ -99,7 +99,7 @@ public final class Json {
         }
     }
 
-    /** 值 → 字符串 (Map/List 走 JSON, 其余走 toString). */
+    /** Value to string (Map/List via JSON, everything else via toString). */
     @SuppressWarnings("unchecked")
     public static String asText(Object value) {
         if (value == null) {
@@ -114,13 +114,13 @@ public final class Json {
         return String.valueOf(value);
     }
 
-    /** 从 Map 读字符串字段. */
+    /** Read a string field from a Map. */
     public static String str(Map<String, Object> m, String key, String def) {
         Object v = m.get(key);
         return v == null ? def : String.valueOf(v);
     }
 
-    /** 从 Map 读 int 字段. */
+    /** Read an int field from a Map. */
     public static int intVal(Map<String, Object> m, String key, int def) {
         Object v = m.get(key);
         if (v == null) {
@@ -136,7 +136,7 @@ public final class Json {
         }
     }
 
-    /** 从 Map 读 double 字段. */
+    /** Read a double field from a Map. */
     public static double doubleVal(Map<String, Object> m, String key, double def) {
         Object v = m.get(key);
         if (v == null) {
@@ -152,7 +152,7 @@ public final class Json {
         }
     }
 
-    /** 从 Map 读 boolean 字段 (兼容 "true"/"1"/"yes" 等). */
+    /** Read a boolean field from a Map (accepts "true"/"1"/"yes" etc.). */
     public static boolean boolVal(Map<String, Object> m, String key, boolean def) {
         Object v = m.get(key);
         if (v == null) {
@@ -171,7 +171,7 @@ public final class Json {
         return def;
     }
 
-    /** 从 Map 读字符串列表 (缺失/非列表返回空列表). */
+    /** Read a string list from a Map (returns an empty list if missing / not a list). */
     @SuppressWarnings("unchecked")
     public static List<String> strList(Map<String, Object> m, String key) {
         Object v = m.get(key);

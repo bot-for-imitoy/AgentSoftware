@@ -27,11 +27,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 统一状态存储 (StateStore) — 结构化数据 + 对话内容 + 容器信息持久化
- * (Python 版 state_store.py).
+ * Unified state storage (StateStore) — persistence of structured data + conversation content + container info
+ * (Python version state_store.py).
  *
- * 把所有可序列化状态汇总到单个 JSON 文件 (默认 data/state.json):
- * 角色档案 / 任务历史 / 未完成任务 / 电脑容器信息 / 时间进度.
+ * Aggregates all serializable state into a single JSON file (default data/state.json):
+ * role profiles / task history / pending tasks / computer container info / time progress.
  */
 public class StateStore {
 
@@ -54,24 +54,24 @@ public class StateStore {
         return Files.exists(path);
     }
 
-    /** 保存系统全部状态到 JSON (原子写). 返回存档文件路径. */
+    /** Save the entire system state to JSON (atomic write). Returns the archive file path. */
     public String save(AgentSystem system) {
         Map<String, Object> data = collect(system);
         try {
             Json.atomicWrite(path, Json.stringifyPretty(data));
         } catch (IOException e) {
-            throw new RuntimeException("保存状态失败: " + path, e);
+            throw new RuntimeException("Failed to save state: " + path, e);
         }
         int historyCount = 0;
         for (Map<String, Object> r : (List<Map<String, Object>>) data.get("roles")) {
             historyCount += ((List<?>) r.get("history")).size();
         }
-        logger.info("StateStore: 状态已保存 → {} (角色 {}, 任务历史 {})",
+        logger.info("StateStore: state saved → {} (roles {}, task history {})",
                 path, ((List<?>) data.get("roles")).size(), historyCount);
         return path.toString();
     }
 
-    /** 从存档恢复系统状态 (角色档案/任务/容器/时间). 返回恢复的角色数. */
+    /** Restore system state from the archive (role profiles/tasks/containers/time). Returns the number of restored roles. */
     public int restore(AgentSystem system) {
         if (!exists()) {
             return 0;
@@ -80,18 +80,18 @@ public class StateStore {
         try {
             data = Json.parseObject(Files.readString(path));
         } catch (Exception e) {
-            logger.error("StateStore: 存档读取失败, 跳过恢复: {}", e.getMessage());
+            logger.error("StateStore: failed to read archive, skipping restore: {}", e.getMessage());
             return 0;
         }
         Object version = data.get("version");
         if (!Integer.valueOf(VERSION).equals(version instanceof Number n ? n.intValue() : version)) {
-            logger.warn("StateStore: 存档版本 {} ≠ 当前 {}, 跳过恢复", version, VERSION);
+            logger.warn("StateStore: archive version {} != current {}, skipping restore", version, VERSION);
             return 0;
         }
         return apply(data, system);
     }
 
-    // ── 收集 (内存 → Map) ───────────────────────────────
+    // ── Collect (memory → Map) ───────────────────────────────
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> collect(AgentSystem system) {
@@ -103,7 +103,7 @@ public class StateStore {
             rolesData.add(roleToDict(role));
         }
 
-        // 电脑/容器信息
+        // computer/container info
         Map<String, Object> computers = new LinkedHashMap<>();
         for (AgentRole role : pool.allRoles()) {
             Computer comp = role.computerIfCreated();
@@ -130,7 +130,7 @@ public class StateStore {
         return data;
     }
 
-    /** 角色档案 + 任务 (队列待办 + 历史) → Map. */
+    /** Role profile + tasks (pending queue + history) → Map. */
     private Map<String, Object> roleToDict(AgentRole role) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("role_id", role.roleId);
@@ -161,14 +161,14 @@ public class StateStore {
         return m;
     }
 
-    // ── 应用 (Map → 内存) ───────────────────────────────
+    // ── Apply (Map → memory) ───────────────────────────────
 
     @SuppressWarnings("unchecked")
     private int apply(Map<String, Object> data, AgentSystem system) {
         RolePool pool = system.pool;
         int restored = 0;
 
-        // 1) 角色档案 + 任务
+        // 1) Role profiles + tasks
         Object rolesObj = data.get("roles");
         if (rolesObj instanceof List) {
             for (Object rObj : (List<Object>) rolesObj) {
@@ -195,29 +195,29 @@ public class StateStore {
             }
         }
 
-        // 2) 电脑/容器: 重建对象并绑定已存在的容器 (不重建容器)
+        // 2) Computers/containers: rebuild objects and bind to existing containers (no container recreation)
         Object computersObj = data.get("computers");
         if (computersObj instanceof Map) {
             restoreComputers(system, (Map<String, Object>) computersObj);
         }
 
-        // 3) 时间进度 (start() 时应用)
+        // 3) Time progress (applied on start())
         Map<String, Object> t = (Map<String, Object>) data.getOrDefault("time", new LinkedHashMap<>());
         int day = t.get("day") instanceof Number n ? n.intValue() : 1;
         int tod = t.get("tick_of_day") instanceof Number n2 ? n2.intValue() : 0;
         system.timeManager.setProgress(day, tod);
 
-        logger.info("StateStore: 已恢复 {} 个角色 → {}", restored, system.timeManager.describe());
+        logger.info("StateStore: restored {} roles → {}", restored, system.timeManager.describe());
         return restored;
     }
 
-    /** 按存档恢复单个角色: 已注册则覆盖字段, 未注册则重建并装配. */
+    /** Restore a single role from the archive: overwrite fields if already registered, otherwise rebuild and wire it up. */
     @SuppressWarnings("unchecked")
     private AgentRole restoreRole(RolePool pool, Map<String, Object> rdata, AgentSystem system) {
         String roleId = Json.str(rdata, "role_id", "");
         AgentRole role = pool.getRoleOrNull(roleId);
         if (role == null) {
-            // 存档里的角色不在当前模板池: 重建并装配
+            // The role in the archive is not in the current template pool: rebuild and wire it up
             Set<String> keywords = new java.util.LinkedHashSet<>();
             for (String k : Json.strList(rdata, "interest_keywords")) {
                 keywords.add(k);
@@ -238,7 +238,7 @@ public class StateStore {
                     .build();
             system.addRole(role);
         }
-        // 覆盖档案字段 (模板创建的角色以存档为准)
+        // Overwrite profile fields (roles created from templates follow the archive)
         if (rdata.containsKey("name")) {
             role.name = Json.str(rdata, "name", role.name);
         }
@@ -273,7 +273,7 @@ public class StateStore {
         return role;
     }
 
-    /** 重建电脑对象并绑定到角色 (容器已存在, ensureContainer 幂等). */
+    /** Rebuild the computer object and bind it to the role (container already exists, ensureContainer is idempotent). */
     @SuppressWarnings("unchecked")
     private void restoreComputers(AgentSystem system, Map<String, Object> computers) {
         Map<String, AgentRole> roles = new LinkedHashMap<>();
@@ -291,7 +291,7 @@ public class StateStore {
         if (todo.isEmpty()) {
             return;
         }
-        // 并行重建: 每台电脑一个虚拟线程 (Java 21+), 信号量限流避免 podman 打满
+        // Parallel rebuild: one virtual thread per computer (Java 21+), semaphore throttling to avoid saturating podman
         int maxWorkers = Math.min(10, todo.size());
         java.util.concurrent.Semaphore gate = new java.util.concurrent.Semaphore(maxWorkers);
         ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor();
@@ -316,10 +316,10 @@ public class StateStore {
                             Json.boolVal(cdata, "auto_mcp", true),
                             new LinkedHashMap<>());
                     role.bindComputer(comp);
-                    comp.powerOn();  // 容器已存在 → 幂等启动 + MCP 重连
-                    logger.info("StateStore: 电脑已恢复绑定 → {}", rid);
+                    comp.powerOn();  // container already exists → idempotent start + MCP reconnect
+                    logger.info("StateStore: computer restored and bound → {}", rid);
                 } catch (Exception e) {
-                    logger.error("StateStore: 电脑恢复失败 → {}", rid, e);
+                    logger.error("StateStore: computer restore failed → {}", rid, e);
                 } finally {
                     gate.release();
                 }

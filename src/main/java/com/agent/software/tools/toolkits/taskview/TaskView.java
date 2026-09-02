@@ -4,7 +4,7 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 任务列表工具类 (Task View Toolkit) — 查看分配给我的任务 (队列 + 历史).
+ * Task list toolkit (Task View Toolkit) — view tasks assigned to me (queue + history).
  */
 public class TaskView extends Toolkit {
 

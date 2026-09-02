@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * mail_address_book — 查看公司通讯录: 所有成员按分组列出
- * (组名 → 姓名 <邮箱> — 职位). 发邮件前若不确定收件人, 先调用本工具.
+ * mail_address_book - view the company address book: all members listed by group
+ * (group name -> name <email> - position). If unsure about the recipient before sending mail, call this tool first.
  */
 public class MailAddressBook extends Tool {
 

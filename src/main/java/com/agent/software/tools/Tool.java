@@ -4,31 +4,31 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 工具基类 (模板: toolkits/note 中的 WriteNote 即按此实现).
+ * Tool base class (template: WriteNote in toolkits/note is implemented this way).
  *
- * 每个 Tool 对应一个 LLM 可调用的函数:
- *   - getToolName():    工具名 (如 "write_note")
- *   - getSchema():      参数说明. 模板约定为 参数名 → 说明文字 的扁平 Map
- *                       (值也可以是完整属性描述 Map).
- *   - getInputSchema(): 把扁平参数说明转为 OpenAI 风格 input_schema (供注册/LLM 调用).
- *   - handler():        参数校验 + 执行, 返回给 LLM 的结果文本.
+ * Each Tool corresponds to a function the LLM can call:
+ *   - getToolName():    tool name (e.g. "write_note")
+ *   - getSchema():      parameter descriptions. The template convention is a flat Map of parameter name -> description
+ *                       (the value can also be a full property description Map).
+ *   - getInputSchema(): converts the flat parameter descriptions into an OpenAI-style input_schema (for registration/LLM calls).
+ *   - handler():        parameter validation + execution, returns the result text to the LLM.
  */
 public abstract class Tool {
 
     public Tool(){
     }
 
-    /** 工具名 (LLM 调用时的函数名). */
+    /** Tool name (the function name used when the LLM calls it). */
     public abstract String getToolName();
 
-    /** 参数说明: 参数名 → 说明 (或完整属性描述 Map). */
+    /** Parameter descriptions: parameter name -> description (or a full property description Map). */
     public abstract Map<String, Object> getSchema();
 
     /**
-     * 参数 input_schema (OpenAI 风格, 暴露给 LLM 的 function 签名):
+     * Parameter input_schema (OpenAI style, the function signature exposed to the LLM):
      * {@code {type: object, properties: {...}}}.
-     * 扁平 schema 中值为完整属性描述 Map 时原样透传
-     * (可声明 integer/boolean/enum 等类型).
+     * When a flat schema value is a full property description Map it is passed through as-is
+     * (types such as integer/boolean/enum can be declared).
      */
     public Map<String, Object> getInputSchema(){
         Map<String, Object> input = new LinkedHashMap<>();
@@ -39,7 +39,7 @@ public abstract class Tool {
             for(Map.Entry<String, Object> e : schema.entrySet()){
                 Object v = e.getValue();
                 if(v instanceof Map<?, ?>){
-                    props.put(e.getKey(), v);   // 完整属性描述, 原样透传
+                    props.put(e.getKey(), v);   // full property description, passed through as-is
                 } else {
                     Map<String, Object> p = new LinkedHashMap<>();
                     p.put("type", "string");
@@ -52,10 +52,10 @@ public abstract class Tool {
         return input;
     }
 
-    /** 执行工具. args 为参数字典, 返回结果文本. */
+    /** Executes the tool. args is the parameter dictionary, returns the result text. */
     public abstract String handler(Map<String, Object> args);
 
-    /** 工具功能描述 (给 LLM 看的说明文字, 可选). 默认按参数生成. */
+    /** Tool functional description (explanatory text for the LLM, optional). By default generated from the parameters. */
     public String getDescription(){
         Map<String, Object> schema = getSchema();
         if(schema == null || schema.isEmpty()){

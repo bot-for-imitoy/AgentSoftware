@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 角色演示 (Python 版 role_demo.py): 单角色创建 + 工具装配 + 任务执行.
+ * Role demo (Python version role_demo.py): single role creation + tool assembly + task execution.
  */
 public final class RoleDemo {
 
@@ -29,16 +29,16 @@ public final class RoleDemo {
         header("Multi-Role Concurrent Task Scheduler — OpenAI Integration");
 
         AgentRole coder = AgentRole.builder()
-                .name("李明")
+                .name("Li Ming")
                 .roleId("coder")
                 .title("Senior Backend Engineer")
-                .personality("严谨细致，追求代码质量，善于排查复杂 bug")
+                .personality("Rigorous and meticulous, pursues code quality, and is good at troubleshooting complex bugs")
                 .skills(List.of("Python", "Go", "PostgreSQL", "Kubernetes", "Redis"))
                 .interestKeywords(new java.util.LinkedHashSet<>(
                         List.of("bug", "fix", "crash", "500", "error", "debug", "race", "down")))
                 .build();
 
-        // 注册角色并启动
+        // Register the role and start
         RolePool pool = new RolePool();
         pool.addRole(coder);
         coder.onTaskStart = (role, task) -> System.out.println(
@@ -48,23 +48,23 @@ public final class RoleDemo {
                         + (task.result.length() > 120 ? task.result.substring(0, 120) : task.result));
         pool.start();
 
-        System.out.println("\n  自动注册的工具: " + coder.mcpToolNames());
+        System.out.println("\n  Auto-registered tools: " + coder.mcpToolNames());
 
-        // 直接派一个任务
+        // Assign a task directly
         pool.assignTask("coder", new AgentRole.Task(
                 AgentRole.Urgency.HIGH.value,
-                "修复登录接口 500 错误 (POST /api/login NPE in UserService.verifyPassword)",
+                "Fix the 500 error on the login endpoint (POST /api/login NPE in UserService.verifyPassword)",
                 "github", new java.util.LinkedHashMap<>()));
 
-        // 等待任务执行 (真实 LLM 调用, 给足时间)
-        System.out.println("\n  " + GREEN + "任务已入队, 等待 worker 处理... (真实 LLM 调用)" + RESET);
+        // Wait for the task to execute (real LLM call, allow enough time)
+        System.out.println("\n  " + GREEN + "Task queued, waiting for the worker to process... (real LLM call)" + RESET);
         try {
             Thread.sleep(60_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        // 最终状态
+        // Final status
         for (Map.Entry<String, Map<String, Object>> e : pool.getStatus().entrySet()) {
             Map<String, Object> s = e.getValue();
             System.out.println("  " + e.getKey() + ": busy=" + s.get("busy") + " queue=" + s.get("queue_depth"));

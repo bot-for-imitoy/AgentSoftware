@@ -6,7 +6,7 @@ import com.agent.software.services.MailService;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 公司邮件工具类 (Email Toolkit) — 员工邮件收发:
+ * Company email toolkit (Email Toolkit) - employee mail send/receive:
  * send_email / read_mail / open_mail / mail_address_book.
  */
 public class Email extends Toolkit {

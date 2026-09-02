@@ -4,7 +4,7 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 人力资源工具类 (HR Toolkit) — 招聘即入职:
+ * Human resources toolkit (HR Toolkit) - hire-to-onboard:
  * post_job_posting / list_candidates.
  */
 public class Hr extends Toolkit {

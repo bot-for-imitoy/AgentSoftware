@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * read_note — 读取指定标题的笔记内容.
+ * read_note - read the content of the note with the given title.
  */
 public class ReadNote extends Tool {
 

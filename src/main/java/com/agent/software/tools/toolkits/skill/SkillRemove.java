@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * skill_remove — 从当前角色移除一个已添加的技能.
+ * skill_remove — remove an added skill from the current role.
  */
 public class SkillRemove extends Tool {
 

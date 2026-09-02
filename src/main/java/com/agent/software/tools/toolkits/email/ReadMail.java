@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * read_mail — 查看自己的公司邮箱收件箱 (新到优先). 返回邮件列表:
- * 发件人/主题/摘要/已读未读/message_id. 用 open_mail 打开某封邮件的完整内容.
+ * read_mail - view your own company mailbox inbox (newest first). Returns the mail list:
+ * sender/subject/summary/read or unread/message_id. Use open_mail to open the full content of a mail.
  */
 public class ReadMail extends Tool {
 

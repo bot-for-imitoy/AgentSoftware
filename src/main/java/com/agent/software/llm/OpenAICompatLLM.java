@@ -17,63 +17,63 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 统一的 OpenAI 兼容 chat/completions 客户端 (Python 版 llm.py 的 OpenAICompatLLM).
+ * Unified OpenAI-compatible chat/completions client (the OpenAICompatLLM of the Python llm.py).
  *
- * <p>所有后端 (OpenAI 官方 / DeepSeek / 本地 vLLM、LM Studio 等) 的请求协议完全一致
- * (OpenAI 格式), 因此不再区分 provider: 客户端层次只有 {@link LLM} 接口 + 本实现,
- * 只读取 OpenAI 格式的环境变量.
+ * <p>All backends (OpenAI official / DeepSeek / local vLLM, LM Studio, etc.) use exactly the same
+ * request protocol (OpenAI format), so providers are no longer distinguished: the client layer only
+ * has the {@link LLM} interface plus this implementation, and reads only OpenAI-format environment variables.
  *
- * <p><b>配置解析统一优先级</b> (高 → 低, 与 {@link LayeredConfig} 一致):
+ * <p><b>Unified config resolution priority</b> (high → low, consistent with {@link LayeredConfig}):
  * <ol>
- *   <li>构造器显式参数 (apiKey / baseUrl / model);</li>
- *   <li>Java 参数: 系统属性 {@code -DOPENAI_API_KEY=...} 等 (键名与环境变量一致);</li>
- *   <li>环境变量: {@code OPENAI_API_KEY} / {@code OPENAI_BASE_URL} / {@code OPENAI_MODEL};</li>
- *   <li>配置文件: {@link ConfigStore} 点号路径 {@code llm.api_key} / {@code llm.base_url} /
+ *   <li>Constructor explicit parameters (apiKey / baseUrl / model);</li>
+ *   <li>Java arguments: system properties {@code -DOPENAI_API_KEY=...} etc. (key names match environment variables);</li>
+ *   <li>Environment variables: {@code OPENAI_API_KEY} / {@code OPENAI_BASE_URL} / {@code OPENAI_MODEL};</li>
+ *   <li>Config files: {@link ConfigStore} dotted paths {@code llm.api_key} / {@code llm.base_url} /
  *       {@code llm.model};</li>
- *   <li>默认值.</li>
+ *   <li>Default values.</li>
  * </ol>
  */
 public class OpenAICompatLLM implements LLM {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAICompatLLM.class);
 
-    /** OpenAI 格式环境变量名 (系统属性使用相同键名). */
+    /** OpenAI-format environment variable names (system properties use the same key names). */
     public static final String API_KEY_ENV = "OPENAI_API_KEY";
     public static final String BASE_URL_ENV = "OPENAI_BASE_URL";
     public static final String MODEL_ENV = "OPENAI_MODEL";
     public static final String DEFAULT_BASE_URL = "https://api.openai.com";
     public static final String DEFAULT_MODEL = "gpt-4o-mini";
 
-    // ── 请求失败重试 (用户指定) ────────────────────────────────
-    // 可恢复错误等 retryDelay 秒 (10s) 重试, 最多 retryMax 次 (200);
-    // 不可恢复的客户端错误 (400/401/403/404 等) 不重试.
+    // ── Request failure retry (user-specified) ─────────────
+    // Recoverable errors retry after retryDelay seconds (10s), up to retryMax times (200);
+    // unrecoverable client errors (400/401/403/404 etc.) are not retried.
     public double retryDelay = 10.0;
     public int retryMax = 200;
     public int apiTimeoutSeconds = 120;
 
-    /** 日志前缀 (如 "OpenAI"). */
+    /** Log prefix (e.g. "OpenAI"). */
     public String apiName = "OpenAI";
 
     protected String apiKey;
     protected String baseUrl;
     protected String model;
-    protected String label = "";                 // 角色标识 (DEBUG 日志前缀)
-    protected String retryError = "";            // 最近一次请求失败原因
+    protected String label = "";                 // role label (DEBUG log prefix)
+    protected String retryError = "";            // reason of the most recent request failure
     protected final ConfigStore configStore;
 
-    /** 便捷构造: 全部走分层配置 (系统属性 &gt; 环境变量 &gt; ConfigStore &gt; 默认值). */
+    /** Convenience constructor: everything goes through layered config (system property &gt; environment variable &gt; ConfigStore &gt; default value). */
     public OpenAICompatLLM() {
         this(null, null, null, null, null);
     }
 
     /**
-     * 完整构造.
+     * Full constructor.
      *
-     * @param apiKey      显式 API Key (null = 分层解析 {@code OPENAI_API_KEY})
-     * @param baseUrl     显式 Base URL (null = 分层解析 {@code OPENAI_BASE_URL})
-     * @param model       显式模型名 (null = 分层解析 {@code OPENAI_MODEL})
-     * @param label       角色标识 (DEBUG 日志前缀)
-     * @param configStore 配置存储 (null = 默认路径)
+     * @param apiKey      explicit API key (null = resolve via layered config {@code OPENAI_API_KEY})
+     * @param baseUrl     explicit Base URL (null = resolve via layered config {@code OPENAI_BASE_URL})
+     * @param model       explicit model name (null = resolve via layered config {@code OPENAI_MODEL})
+     * @param label       role label (DEBUG log prefix)
+     * @param configStore config store (null = default path)
      */
     public OpenAICompatLLM(String apiKey, String baseUrl, String model,
                            String label, ConfigStore configStore) {
@@ -81,8 +81,8 @@ public class OpenAICompatLLM implements LLM {
     }
 
     /**
-     * 测试注入版: env / props 为配置快照 (null = 读取真实系统属性 / 环境变量),
-     * 与 PathManager 的注入方式一致.
+     * Test injection variant: env / props are config snapshots (null = read real system properties /
+     * environment variables), consistent with PathManager's injection approach.
      */
     OpenAICompatLLM(String apiKey, String baseUrl, String model,
                     String label, ConfigStore configStore,
@@ -97,7 +97,7 @@ public class OpenAICompatLLM implements LLM {
                 storeKeys("model"), DEFAULT_MODEL, env, props));
     }
 
-    /** ConfigStore 点号路径: {@code llm.&lt;field&gt;}. */
+    /** ConfigStore dotted path: {@code llm.&lt;field&gt;}. */
     private static String[] storeKeys(String field) {
         return new String[]{"llm." + field};
     }
@@ -110,7 +110,7 @@ public class OpenAICompatLLM implements LLM {
         return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
     }
 
-    // ── 调试日志 (带角色前缀) ─────────────────────────────
+    // ── Debug logging (with role prefix) ──────────────────
 
     protected void debug(String msg, Object... args) {
         if (label != null && !label.isEmpty()) {
@@ -127,10 +127,10 @@ public class OpenAICompatLLM implements LLM {
         List<Map<String, Object>> messages = new ArrayList<>();
         if (system != null && !system.isEmpty()) {
             messages.add(msg("system", system));
-            debug("chat: 追加 system 消息 ({} 字符)", system.length());
+            debug("chat: appended system message ({} chars)", system.length());
         }
         messages.add(msg("user", user));
-        debug("chat: 追加 user 消息 ({} 字符)", user.length());
+        debug("chat: appended user message ({} chars)", user.length());
 
         int mt = maxTokens != null ? maxTokens : 512;
         Object[] result = callApi(messages, temperature, mt);
@@ -151,7 +151,7 @@ public class OpenAICompatLLM implements LLM {
                 + "Output format: first a summary paragraph, then a list of key decisions and action items.");
         messages.add(system);
         messages.add(msg("user", "Please summarize today's work log:\n" + logText));
-        debug("summarize: 追加 user 消息 ({} 字符)", logText.length());
+        debug("summarize: appended user message ({} chars)", logText.length());
 
         int mt = maxTokens != null ? maxTokens : 256;
         Object[] result = callApi(messages, temperature, mt);
@@ -265,9 +265,9 @@ public class OpenAICompatLLM implements LLM {
     }
 
     /**
-     * 发送 POST 请求, 失败自动重试 (限速/超时/5xx 等可恢复错误).
+     * Send a POST request, automatically retrying on failure (rate limit / timeout / 5xx etc. recoverable errors).
      *
-     * @return 响应 JSON Map; 放弃时返回 null (原因在 retryError).
+     * @return the response JSON Map; returns null when giving up (reason in retryError).
      */
     protected Map<String, Object> postWithRetry(URI url, Map<String, Object> payload) {
         HttpClient client = HttpClient.newBuilder()
@@ -288,30 +288,30 @@ public class OpenAICompatLLM implements LLM {
                 int status = resp.statusCode();
                 if (status == 429 || status >= 500) {
                     lastErr = "HTTP " + status;
-                    logger.warn("{} API 请求失败 ({}, 第 {}/{} 次), {}s 后重试",
+                    logger.warn("{} API request failed ({}, attempt {}/{}), retrying in {}s",
                             apiName, lastErr, attempt, retryMax, (long) retryDelay);
                     sleep();
                     continue;
                 }
                 if (status >= 400) {
                     retryError = "HTTP " + status + ": " + truncate(resp.body(), 200);
-                    logger.error("{} API 请求失败, 不可恢复: {}", apiName, retryError);
+                    logger.error("{} API request failed, unrecoverable: {}", apiName, retryError);
                     return null;
                 }
                 return parseBody(resp.body());
             } catch (java.net.http.HttpTimeoutException e) {
                 lastErr = "timeout";
-                logger.warn("{} API 请求超时 (第 {}/{} 次), {}s 后重试", apiName, attempt, retryMax, (long) retryDelay);
+                logger.warn("{} API request timed out (attempt {}/{}), retrying in {}s", apiName, attempt, retryMax, (long) retryDelay);
                 sleep();
             } catch (Exception e) {
                 lastErr = e.getClass().getSimpleName() + ": " + truncate(e.getMessage(), 120);
-                logger.warn("{} API 请求错误 ({}, 第 {}/{} 次), {}s 后重试",
+                logger.warn("{} API request error ({}, attempt {}/{}), retrying in {}s",
                         apiName, lastErr, attempt, retryMax, (long) retryDelay);
                 sleep();
             }
         }
-        retryError = "重试 " + retryMax + " 次仍失败: " + lastErr;
-        logger.error("{} API 请求失败 {} 次, 放弃: {}", apiName, retryMax, lastErr);
+        retryError = "Retried " + retryMax + " times and still failed: " + lastErr;
+        logger.error("{} API request failed {} times, giving up: {}", apiName, retryMax, lastErr);
         return null;
     }
 
@@ -334,7 +334,7 @@ public class OpenAICompatLLM implements LLM {
         return Json.parseObject(body);
     }
 
-    /** 核心 API 调用. 返回 (contentText, usageMap). */
+    /** Core API call. Returns (contentText, usageMap). */
     protected Object[] callApi(List<Map<String, Object>> messages, double temperature, int maxTokens) {
         URI url = URI.create(baseUrl + "/v1/chat/completions");
         Map<String, Object> payload = new LinkedHashMap<>();

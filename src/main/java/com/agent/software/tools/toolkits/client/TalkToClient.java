@@ -13,21 +13,23 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * talk_to_client — 与甲方(用户)实时交流. 调用此工具会暂停并请求用户输入
- * 文本, 用户输入的内容会作为结果返回.
- * 用于: 收集需求, 确认方案, 汇报进度, 提出疑问.
+ * talk_to_client — real-time communication with the client (user). Calling this tool pauses
+ * and requests text input from the user; the entered content is returned as the result.
+ * Used for: gathering requirements, confirming plans, reporting progress, raising questions.
  *
- * <p>双通道输入:
+ * <p>Two input channels:
  * <ul>
- *   <li><b>Web 模式</b>: Web 界面已挂载 (ChatStore 心跳内) 时, 消息显示在
- *       Web 聊天窗口, 输入框自动启用, 甲方在网页上回复 → 结果返回.
- *       等待有超时 ({@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}, 默认 20 分钟),
- *       超时返回错误, 避免代理无限阻塞.</li>
- *   <li><b>控制台模式</b>: 未挂载 Web 时保持原行为, 阻塞读取 System.in.</li>
+ *   <li><b>Web mode</b>: when the Web UI is attached (inside the ChatStore heartbeat), the
+ *       message is shown in the Web chat window, the input box is enabled automatically, and
+ *       the client replies on the page → the result is returned. The wait has a timeout
+ *       ({@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}, default 20 minutes); on timeout an error is
+ *       returned so the agent never blocks forever.</li>
+ *   <li><b>Console mode</b>: when no Web UI is attached, the original behavior is kept, blocking
+ *       on System.in.</li>
  * </ul>
  *
- * 互斥: 同一时间只允许一位成员与甲方对话. 锁被占用时立即返回错误,
- * 不阻塞等待, 避免多人同时抢占输入.
+ * Mutex: only one member may talk to the client at a time. If the lock is taken, an error is
+ * returned immediately without blocking, avoiding multiple people grabbing the input at once.
  */
 public class TalkToClient extends Tool {
 
@@ -41,7 +43,7 @@ public class TalkToClient extends Tool {
         this(agentRole, ClientCommunicationLock.getInstance());
     }
 
-    /** 包私有: 测试可注入独立锁实例. */
+    /** Package-private: tests can inject an independent lock instance. */
     TalkToClient(AgentRole agentRole, ClientCommunicationLock lock) {
         super();
         this.agentRole = agentRole;
@@ -72,25 +74,25 @@ public class TalkToClient extends Tool {
             Object omsg = args.get("message");
             String question = omsg instanceof String s ? s.strip() : "";
             ChatStore store = chatStore();
-            // 记录消息到聊天存储 (Web 界面展示; 控制台模式也留痕)
+            // Record the message to the chat store (shown in the Web UI; also logged in console mode)
             if (store != null) {
                 String group = agentRole != null && agentRole.group != null
                         && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
                 store.record(ChatStore.KIND_CLIENT, group, roleId, name, "", ChatStore.CLIENT_NAME,
-                        question.isEmpty() ? "(发来一条消息, 请回复)" : question, null);
+                        question.isEmpty() ? "(sent a message, please reply)" : question, null);
             }
-            // Web 模式: 已有 Web 界面挂载 → 等待甲方在网页上回复
+            // Web mode: a Web UI is attached → wait for the client to reply on the page
             if (store != null && store.isAttached()) {
                 return handlerWeb(store, roleId, name, question);
             }
-            // 控制台模式 (原行为): 阻塞读取 System.in
+            // Console mode (original behavior): block on System.in
             return handlerConsole(name, question);
         } finally {
             lock.release(roleId);
         }
     }
 
-    /** Web 模式: 登记等待 → 阻塞等甲方在网页上回复 (带超时). */
+    /** Web mode: register the wait → block until the client replies on the page (with timeout). */
     private String handlerWeb(ChatStore store, String roleId, String name, String question) {
         String group = agentRole != null && agentRole.group != null
                 && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
@@ -117,14 +119,14 @@ public class TalkToClient extends Tool {
         }
     }
 
-    /** 控制台模式: 原 System.in 交互. */
+    /** Console mode: the original System.in interaction. */
     private String handlerConsole(String name, String question) {
         if (!question.isEmpty()) {
             System.out.println("\n  " + BOLD + "[" + name + "] " + question + RESET);
         } else {
-            System.out.println("\n  " + BOLD + "[" + name + "] (发来一条消息, 请回复)" + RESET);
+            System.out.println("\n  " + BOLD + "[" + name + "] (sent a message, please reply)" + RESET);
         }
-        System.out.print("  [甲方] 请输入你的回复: ");
+        System.out.print("  [Client A] Please enter your reply: ");
         System.out.flush();
         String reply;
         try {
@@ -143,7 +145,7 @@ public class TalkToClient extends Tool {
         return "talk_to_client: client reply: " + reply;
     }
 
-    /** 本角色所属系统的聊天存储 (未绑定系统的独立角色为 null). */
+    /** The chat store of the system this role belongs to (null for standalone roles not bound to a system). */
     private ChatStore chatStore() {
         return agentRole != null && agentRole.system() != null
                 ? agentRole.system().chatStore : null;

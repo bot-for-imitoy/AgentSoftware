@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * skill_list — 列出技能库中全部可用技能 (名称 + 简述).
+ * skill_list — list all available skills in the skill library (name + brief description).
  */
 public class SkillList extends Tool {
 

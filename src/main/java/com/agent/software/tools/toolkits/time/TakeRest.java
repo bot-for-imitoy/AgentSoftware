@@ -10,8 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * take_rest — 休息. 调用后立即进入休息状态 (ON_DUTY_IDLE);
- * 有任务或事件 (定时提醒/他人消息/上班) 到来时自动唤醒.
+ * take_rest — rest. Calling it immediately enters the rest state (ON_DUTY_IDLE);
+ * you are automatically woken up when tasks or events (scheduled reminders/other people's messages/going to work) arrive.
  */
 public class TakeRest extends Tool {
 
@@ -38,7 +38,7 @@ public class TakeRest extends Tool {
     public String handler(Map<String, Object> args) {
         if (agentRole != null && agentRole.state != Types.AgentState.ON_DUTY_IDLE) {
             agentRole.setState(Types.AgentState.ON_DUTY_IDLE);
-            logger.info("[{}] 开始休息 (状态 ON_DUTY_IDLE, 等待事件唤醒)", agentRole.roleId);
+            logger.info("[{}] rest started (state ON_DUTY_IDLE, waiting for events to wake up)", agentRole.roleId);
         }
         return "take_rest: rest started (state ON_DUTY_IDLE). You will be automatically woken up when tasks or events arrive.";
     }

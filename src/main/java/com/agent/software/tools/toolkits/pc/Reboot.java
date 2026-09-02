@@ -8,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * reboot — 重启个人电脑 (关机后自动开机). 适合清理运行状态或安装工具后重启.
+ * reboot - restart the personal computer (powers off then on automatically). Useful for clearing runtime state or restarting after installing tools.
  */
 public class Reboot extends Tool {
 

@@ -1,128 +1,128 @@
-# Shift & Event-Driven Agent Scheduler 接口文档
-# Shift & Event-Driven Agent Scheduler 接口文档
+# Shift & Event-Driven Agent Scheduler Interface Documentation
+# Shift & Event-Driven Agent Scheduler Interface Documentation
 
-**多角色、事件驱动、Tick 作息制的 Agent 调度框架**（Shift & Event-Driven Agent Scheduler）。
-本文档覆盖全部核心类与工具类的接口、用途、参数与使用示例。
-**多角色、事件驱动、Tick 作息制的 Agent 调度框架**（Shift & Event-Driven Agent Scheduler）。
-本文档覆盖全部核心类与工具类的接口、用途、参数与使用示例。
-
----
-
-## 目录
-
-1. [架构总览](#架构总览)
-2. [核心类型 types.py](#核心类型)
-3. [时间系统 time_manager.py](#时间系统)
-4. [存储 NoteStore](#存储)
-4. [存储 NoteStore](#存储)
-5. [角色系统 roles.py](#角色系统)
-6. [事件系统 EventBus / EventDispatcher](#事件系统)
-7. [系统管理 AgentSystem](#系统管理)
-8. [角色模板与工厂](#角色模板与工厂)
-9. [工具系统 tools.py](#工具系统)
-10. [Python 工具类 python_tools/](#python-工具类)
-11. [MCP 加载器 mcp_toolkit.py](#mcp-加载器)
-12. [LLM 客户端 llm.py](#llm-客户端)
-13. [完整示例](#完整示例)
-12. [LLM 客户端 llm.py](#llm-客户端)
-13. [完整示例](#完整示例)
+**A multi-role, event-driven, Tick-based Agent scheduling framework** (Shift & Event-Driven Agent Scheduler).
+This document covers the interfaces, purposes, parameters, and usage examples of all core classes and utility classes.
+**A multi-role, event-driven, Tick-based Agent scheduling framework** (Shift & Event-Driven Agent Scheduler).
+This document covers the interfaces, purposes, parameters, and usage examples of all core classes and utility classes.
 
 ---
 
-## 架构总览
+## Table of Contents
+
+1. [Architecture Overview](#architecture-overview)
+2. [Core Types types.py](#core-types)
+3. [Time System time_manager.py](#time-system)
+4. [Storage NoteStore](#storage)
+4. [Storage NoteStore](#storage)
+5. [Role System roles.py](#role-system)
+6. [Event System EventBus / EventDispatcher](#event-system)
+7. [System Management AgentSystem](#system-management)
+8. [Role Templates and Factory](#role-templates-and-factory)
+9. [Tool System tools.py](#tool-system)
+10. [Python Toolkits python_tools/](#python-toolkits)
+11. [MCP Loader mcp_toolkit.py](#mcp-loader)
+12. [LLM Client llm.py](#llm-client)
+13. [Complete Example](#complete-example)
+12. [LLM Client llm.py](#llm-client)
+13. [Complete Example](#complete-example)
+
+---
+
+## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────┐
-│ AgentSystem (统一入口)                       │
-│  ├── TimeEventBus   (独占线程, Tick 制)      │
-│  ├── TimeEventBus   (独占线程, Tick 制)      │
-│  ├── RolePool         (每角色独立线程)       │
-│  └── EventDispatcher  (事件广播/定向投递)    │
+│ AgentSystem (unified entry)                 │
+│  ├── TimeEventBus   (dedicated thread, Tick) │
+│  ├── TimeEventBus   (dedicated thread, Tick) │
+│  ├── RolePool       (thread per role)       │
+│  └── EventDispatcher (broadcast/targeted)   │
 └──────────────┬──────────────────────────────┘
                ▼
   ┌─────────────────────────┐
   │ Event (target_role?)    │
   └────────────┬────────────┘
                ▼
-  每个角色 AgentRole: Layer1 状态掩码 → Layer2 显著性 → 转 Task 入队
+  Each role's AgentRole: Layer 1 state mask → Layer 2 salience → enqueue as Task
                ▼
-  角色 worker 线程: LLM + 工具循环 (ToolRegistry)
+  Role worker thread: LLM + tool loop (ToolRegistry)
                ▼
-  ToolKit 集合: talk / hr / memory / time / task / client / MCP 分组
+  ToolKit collection: talk / hr / memory / time / task / client / MCP groups
 ```
 
 ---
 
-## 核心类型
+## Core Types
 
-文件: `src/core/types.py`
+File: `src/core/types.py`
 
 ### `Priority(IntEnum)`
-事件优先级，数值越高越紧急。
+Event priority; higher values are more urgent.
 
-| 成员 | 值 | 用途 |
+| Member | Value | Purpose |
 |------|-----|------|
-| `LOW` | 1 | 闲聊、无关信息 |
-| `NORMAL` | 3 | 常规任务、作息事件 |
-| `HIGH` | 6 | 工作工单 |
-| `EMERGENCY` | 10 | 紧急事件（穿透所有过滤） |
+| `LOW` | 1 | Chit-chat, irrelevant information |
+| `NORMAL` | 3 | Routine tasks, shift events |
+| `HIGH` | 6 | Work tickets |
+| `EMERGENCY` | 10 | Emergency events (bypass all filters) |
 
 ### `AgentState(str, Enum)`
-角色生命周期状态。
+Role lifecycle states.
 
-| 成员 | 含义 |
+| Member | Meaning |
 |------|------|
-| `OFF_DUTY` | 下班。非 EMERGENCY 事件被 Layer 1 拦截 |
-| `ON_DUTY_IDLE` | 上班空闲（默认） |
-| `ON_DUTY_BUSY` | 上班忙碌（执行任务中） |
-| `WRAPPING_UP` | 收尾中（预留） |
+| `OFF_DUTY` | Off duty. Non-EMERGENCY events are blocked by Layer 1 |
+| `ON_DUTY_IDLE` | On duty, idle (default) |
+| `ON_DUTY_BUSY` | On duty, busy (executing a task) |
+| `WRAPPING_UP` | Wrapping up (reserved) |
 
-### `Event`（dataclass）
+### `Event` (dataclass)
 ```python
 Event(
-    id: str = 自动生成,          # 事件 ID
-    source: str = "",            # 来源: github/slack/time/task...
+    id: str = auto-generated,    # event ID
+    source: str = "",            # source: github/slack/time/task...
     event_type: str = "",        # new_pr/SHIFT_START/TASK_DUE...
     priority: Priority = NORMAL,
-    payload: dict = {},          # 载荷
+    payload: dict = {},          # payload
     timestamp: datetime = now,
-    target_role: Optional[str] = None,  # 定向投递: 只发给该角色; None=广播
-    trigger_tick: Optional[int] = None, # 触发绝对 Tick (None=立即, 由 TimeEventBus 设置)
-    trigger_tick: Optional[int] = None, # 触发绝对 Tick (None=立即, 由 TimeEventBus 设置)
+    target_role: Optional[str] = None,  # targeted delivery: only sent to that role; None=broadcast
+    trigger_tick: Optional[int] = None, # absolute tick to trigger (None=immediate, set by TimeEventBus)
+    trigger_tick: Optional[int] = None, # absolute tick to trigger (None=immediate, set by TimeEventBus)
 )
 ```
 
 ---
 
-## 时间系统
+## Time System
 
-文件: `src/core/time_manager.py`
+File: `src/core/time_manager.py`
 
-### `ScheduledTask`（dataclass）
-定时任务，注册到 TimeEventBus。
-定时任务，注册到 TimeEventBus。
+### `ScheduledTask` (dataclass)
+A scheduled task, registered with TimeEventBus.
+A scheduled task, registered with TimeEventBus.
 
-| 字段 | 说明 |
+| Field | Description |
 |------|------|
-| `description` | 任务内容 |
-| `owner_role` | 所属角色（提醒只投递给它） |
-| `target_tick` | 目标 Tick，范围 **0~60** |
-| `day` | 第几天触发（默认当天） |
-| `task_id` | 自动生成 |
-| `fired` | 是否已触发 |
+| `description` | Task content |
+| `owner_role` | Owning role (reminders are only delivered to it) |
+| `target_tick` | Target tick, range **0~60** |
+| `day` | Day on which to trigger (default: the current day) |
+| `task_id` | Auto-generated |
+| `fired` | Whether it has fired |
 
-方法: `absolute_fire_tick(ticks_per_day)` → `(day-1)*144 + target_tick`
+Method: `absolute_fire_tick(ticks_per_day)` → `(day-1)*144 + target_tick`
 
 ### `TimeEventBus`
-作息时间管理器（= 事件总线子类，`EventBus` + 时间线程），**独占一个后台线程**。
-（旧名 `TimeManager` 兼容别名已于 2026-08 移除，统一用 `TimeEventBus`。）
+Shift time manager (= an event bus subclass, `EventBus` + time thread), **owns a dedicated background thread**.
+(The legacy `TimeManager` compatibility alias was removed in 2026-08; use `TimeEventBus` uniformly.)
 ### `TimeEventBus`
-作息时间管理器（= 事件总线子类，`EventBus` + 时间线程），**独占一个后台线程**。
-（旧名 `TimeManager` 兼容别名已于 2026-08 移除，统一用 `TimeEventBus`。）
+Shift time manager (= an event bus subclass, `EventBus` + time thread), **owns a dedicated background thread**.
+(The legacy `TimeManager` compatibility alias was removed in 2026-08; use `TimeEventBus` uniformly.)
 
-**常量**: `MINUTES_PER_TICK=10`、`TICKS_PER_DAY=144`、`SHIFT_START_TICK=0`、`SHIFT_END_TICK=60`、`EVENT_SHIFT_START/SHIFT_END/TASK_DUE`、`TASK_TICK_MIN/MAX=0/60`
+**Constants**: `MINUTES_PER_TICK=10`, `TICKS_PER_DAY=144`, `SHIFT_START_TICK=0`, `SHIFT_END_TICK=60`, `EVENT_SHIFT_START/SHIFT_END/TASK_DUE`, `TASK_TICK_MIN/MAX=0/60`
 
-**构造**:
+**Constructor**:
 ```python
 TimeEventBus(minutes_per_tick=10, shift_start_tick=0, shift_end_tick=60,
              ticks_per_day=144, check_interval=30)
@@ -130,259 +130,259 @@ TimeEventBus(minutes_per_tick=10, shift_start_tick=0, shift_end_tick=60,
              ticks_per_day=144, check_interval=30)
 ```
 
-**配置**:
-| 方法 | 参数 | 用途 |
+**Configuration**:
+| Method | Parameter | Purpose |
 |------|------|------|
-| `set_event_sender(fn)` | `fn(Event)` | 设置事件发送回调（接入事件总线） |
-| `set_clock(fn)` | `fn() -> datetime` | 注入时间源（默认 `datetime.now`，测试用模拟时钟） |
+| `set_event_sender(fn)` | `fn(Event)` | Set the event-sending callback (wires into the event bus) |
+| `set_clock(fn)` | `fn() -> datetime` | Inject a time source (default `datetime.now`; simulated clock for tests) |
 
-**时间查询**:
-| 方法 | 返回 | 说明 |
+**Time queries**:
+| Method | Returns | Description |
 |------|------|------|
-| `current_tick()` | int | 自系统启动累计 Tick（启动=0） |
-| `day_number()` | int | 第几天（启动当天=1） |
-| `tick_of_day()` | int | 今日内 Tick 位置 0~143 |
-| `tick_to_time(tick)` | str | Tick → 相对时钟 "HH:MM" |
-| `is_working_hours()` | bool | 今日是否在上班区间 |
-| `ticks_until_shift_end()` | int | 距下班还有多少 Tick |
-| `describe()` | str | "第 X 天, Tick Y (上班中/已下班)" |
+| `current_tick()` | int | Cumulative ticks since system start (start=0) |
+| `day_number()` | int | Day number (start day=1) |
+| `tick_of_day()` | int | Tick position within today, 0~143 |
+| `tick_to_time(tick)` | str | Tick → relative clock "HH:MM" |
+| `is_working_hours()` | bool | Whether today is within working hours |
+| `ticks_until_shift_end()` | int | How many ticks until shift end |
+| `describe()` | str | "Day X, Tick Y (on duty / off duty)" |
 | `get_shift_event(tick_of_day)` | str\|None | SHIFT_START / SHIFT_END / None |
 
-**定时任务**:
-| 方法 | 参数 | 返回 |
+**Scheduled tasks**:
+| Method | Parameter | Returns |
 |------|------|------|
-| `schedule_task(description, owner_role, target_tick, day=None, payload=None)` | — | `ScheduledTask`，tick 越界抛 `ValueError` |
-| `list_tasks(owner_role=None)` | 按触发顺序 | `list[ScheduledTask]` |
+| `schedule_task(description, owner_role, target_tick, day=None, payload=None)` | — | `ScheduledTask`; raises `ValueError` if the tick is out of range |
+| `list_tasks(owner_role=None)` | In trigger order | `list[ScheduledTask]` |
 | `edit_task(task_id, description=None, target_tick=None, day=None)` | — | `Optional[ScheduledTask]` |
 | `cancel_task(task_id)` | — | bool |
 
-**生命周期**: `start()` 启动线程（Tick 0 / 第 1 天）、`stop()` 停止、`is_running` 属性。
-Tick 为显式状态：不随真实时间流逝，仅在全部角色空闲时快进跳变（`set_fast_forward(enabled, idle_seconds)` 可调）。
-**生命周期**: `start()` 启动线程（Tick 0 / 第 1 天）、`stop()` 停止、`is_running` 属性。
-Tick 为显式状态：不随真实时间流逝，仅在全部角色空闲时快进跳变（`set_fast_forward(enabled, idle_seconds)` 可调）。
+**Lifecycle**: `start()` starts the thread (Tick 0 / Day 1), `stop()` stops it, and `is_running` is a property.
+Tick is an explicit state: it does not advance with real time; it only jumps forward when all roles are idle (configurable via `set_fast_forward(enabled, idle_seconds)`).
+**Lifecycle**: `start()` starts the thread (Tick 0 / Day 1), `stop()` stops it, and `is_running` is a property.
+Tick is an explicit state: it does not advance with real time; it only jumps forward when all roles are idle (configurable via `set_fast_forward(enabled, idle_seconds)`).
 
-**自动事件**: 每天第 0 Tick → `SHIFT_START`（EMERGENCY）；每天 ≥60 Tick → `SHIFT_END`（EMERGENCY，instruction 提示调 summary）；到期任务 → `TASK_DUE`（NORMAL，`target_role=owner`）。
+**Automatic events**: Tick 0 of each day → `SHIFT_START` (EMERGENCY); each day at Tick >=60 → `SHIFT_END` (EMERGENCY; the instruction prompts writing a summary); due tasks → `TASK_DUE` (NORMAL, `target_role=owner`).
 
 ```python
 from src.core.time_manager import TimeEventBus
 tm = TimeEventBus(check_interval=1)
 from src.core.time_manager import TimeEventBus
 tm = TimeEventBus(check_interval=1)
-tm.set_event_sender(lambda ev: dispatcher.trigger(ev))  # 接入总线
+tm.set_event_sender(lambda ev: dispatcher.trigger(ev))  # wire into the bus
 tm.start()
-print(tm.describe())          # 第 1 天, Tick 0 (上班中...)
-task = tm.schedule_task("写周报", owner_role="CEO", target_tick=45)
-task = tm.schedule_task("写周报", owner_role="CEO", target_tick=45)
+print(tm.describe())          # Day 1, Tick 0 (on duty...)
+task = tm.schedule_task("Write weekly report", owner_role="CEO", target_tick=45)
+task = tm.schedule_task("Write weekly report", owner_role="CEO", target_tick=45)
 tm.cancel_task(task.task_id)
 tm.stop()
 ```
 
 ---
 
-## 存储
+## Storage
 
-### `NoteStore` — 笔记 (含提醒 = 定时任务统一) 与总结
-文件: `src/core/note_store.py`。每角色独立目录（有个人电脑时在电脑工作目录
-`<workdir>/notes/`，否则本地 `data/notes/<role_id>/`）。
+### `NoteStore` — notes (with reminders unified with scheduled tasks) and summaries
+File: `src/core/note_store.py`. Each role has its own directory (when the role has a personal computer, in the computer's working directory
+`<workdir>/notes/`; otherwise locally at `data/notes/<role_id>/`).
 
-**笔记与定时任务已统一**: 笔记 = 内容 + 可选提醒时间。`write_note` 填入
-`remind_tick` 后, 到点系统像任务一样向该角色发送提醒事件 (TASK_DUE)。
-### `NoteStore` — 笔记 (含提醒 = 定时任务统一) 与总结
-文件: `src/core/note_store.py`。每角色独立目录（有个人电脑时在电脑工作目录
-`<workdir>/notes/`，否则本地 `data/notes/<role_id>/`）。
+**Notes and scheduled tasks are unified**: a note = content + optional reminder time. After `write_note` fills in
+`remind_tick`, the system sends the role a reminder event (TASK_DUE) like a task when the time arrives.
+### `NoteStore` — notes (with reminders unified with scheduled tasks) and summaries
+File: `src/core/note_store.py`. Each role has its own directory (when the role has a personal computer, in the computer's working directory
+`<workdir>/notes/`; otherwise locally at `data/notes/<role_id>/`).
 
-**笔记与定时任务已统一**: 笔记 = 内容 + 可选提醒时间。`write_note` 填入
-`remind_tick` 后, 到点系统像任务一样向该角色发送提醒事件 (TASK_DUE)。
+**Notes and scheduled tasks are unified**: a note = content + optional reminder time. After `write_note` fills in
+`remind_tick`, the system sends the role a reminder event (TASK_DUE) like a task when the time arrives.
 
 ```python
 NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 NoteStore(base_dir="./data/notes", role_id="", computer=None, time_manager=None)
 ```
 
-| 方法 | 参数 | 返回 | 说明 |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 写笔记（存在则覆盖；`remind_tick` 填了则注册提醒，到点发事件） |
-| `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 编辑笔记（提供 `remind_tick` 则重置提醒，否则保留原提醒） |
-| `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 写笔记（存在则覆盖；`remind_tick` 填了则注册提醒，到点发事件） |
-| `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(路径) | 编辑笔记（提供 `remind_tick` 则重置提醒，否则保留原提醒） |
-| `list_notes()` | — | list[str] | 笔记标题列表（不含总结） |
-| `read_note(title)` | str | Optional[str] | 读笔记，不存在返回 None |
-| `delete_note(title)` | str | bool | 删笔记（真实删除文件 + 取消关联提醒） |
-| `get_reminder(title)` | str | Optional[dict] | 查询笔记提醒 `{"day", "tick"}`，无提醒返回 None |
-| `delete_note(title)` | str | bool | 删笔记（真实删除文件 + 取消关联提醒） |
-| `get_reminder(title)` | str | Optional[dict] | 查询笔记提醒 `{"day", "tick"}`，无提醒返回 None |
-| `save_summary(content, day=None)` | str,int\|None | str(路径) | 保存第 N 天总结 `_summary_day_N.md` |
-| `get_summary(day=None)` | int\|None | Optional[str] | 读指定天总结 |
-| `get_latest_summary(before_day=None)` | int\|None | Optional[str] | 最近一次总结（严格早于 before_day） |
+| `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(path) | Write a note (overwrites if it exists; if `remind_tick` is set, registers a reminder that fires an event when due) |
+| `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(path) | Edit a note (if `remind_tick` is provided, resets the reminder; otherwise keeps the original one) |
+| `write_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(path) | Write a note (overwrites if it exists; if `remind_tick` is set, registers a reminder that fires an event when due) |
+| `edit_note(title, content, remind_tick=None, remind_day=None)` | str,str,int\|None,int\|None | str(path) | Edit a note (if `remind_tick` is provided, resets the reminder; otherwise keeps the original one) |
+| `list_notes()` | — | list[str] | List of note titles (excluding summaries) |
+| `read_note(title)` | str | Optional[str] | Read a note; returns None if it does not exist |
+| `delete_note(title)` | str | bool | Delete a note (actually deletes the file + cancels the associated reminder) |
+| `get_reminder(title)` | str | Optional[dict] | Query the note's reminder `{"day", "tick"}`; returns None if there is no reminder |
+| `delete_note(title)` | str | bool | Delete a note (actually deletes the file + cancels the associated reminder) |
+| `get_reminder(title)` | str | Optional[dict] | Query the note's reminder `{"day", "tick"}`; returns None if there is no reminder |
+| `save_summary(content, day=None)` | str,int\|None | str(path) | Save the Day N summary `_summary_day_N.md` |
+| `get_summary(day=None)` | int\|None | Optional[str] | Read the summary for the given day |
+| `get_latest_summary(before_day=None)` | int\|None | Optional[str] | The most recent summary (strictly before before_day) |
 
 ---
 
-## 公司邮件
+## Company Mail
 
-文件: `src/core/mail_service.py`（核心）+ `src/python_tools/email_toolkit.py`（LLM 工具）。
+File: `src/core/mail_service.py` (core) + `src/python_tools/email_toolkit.py` (LLM tool).
 
-**邮箱地址**: 每位成员一个邮箱 `username@<后缀>`，后缀由环境变量 `MAIL_SUFFIX` 定义（默认 `company.com`）；角色显式 `email` 字段优先。`AgentRole.mail_address` 与工具类走同一分配规则。
+**Mail address**: each member has one mailbox `username@<suffix>`, where the suffix is defined by the environment variable `MAIL_SUFFIX` (default `company.com`); a role's explicit `email` field takes precedence. `AgentRole.mail_address` and the tool follow the same allocation rule.
 
-**投递方式**: 默认**虚拟实现**（投递到内部邮箱并持久化 `data/mail/mailboxes.json`）；配置 `SMTP_HOST` 后自动切换 **smtplib 真实发送**，同时保留内部收件人邮箱副本（标记 `via_smtp`）。
+**Delivery mode**: by default a **virtual implementation** (delivered to the internal mailbox and persisted in `data/mail/mailboxes.json`); once `SMTP_HOST` is configured, it automatically switches to **real smtplib sending**, while keeping an internal copy in the recipient's mailbox (marked `via_smtp`).
 
 ```python
 MailService(config=MailConfig.from_env())
 ```
 
-| 方法 | 参数 | 返回 | 说明 |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `email_for(role)` | AgentRole | str | 角色 → 邮箱地址（`username@后缀`，显式 email 优先） |
-| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(摘要) | 发送邮件（虚拟投递 / SMTP 真实发送 + 内部副本） |
-| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | 收件箱（新到优先） |
-| `unread_count(email)` | str | int | 未读邮件数 |
-| `read(email, message_id)` | str,str | Optional[MailMessage] | 打开邮件（标记已读） |
-| `describe()` | — | str | 投递方式描述（虚拟 / SMTP） |
+| `email_for(role)` | AgentRole | str | Role → mail address (`username@suffix`; explicit email takes precedence) |
+| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(summary) | Send mail (virtual delivery / real SMTP sending + internal copy) |
+| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | Inbox (newest first) |
+| `unread_count(email)` | str | int | Number of unread mails |
+| `read(email, message_id)` | str,str | Optional[MailMessage] | Open a mail (marks it read) |
+| `describe()` | — | str | Description of the delivery mode (virtual / SMTP) |
 
-**LLM 工具**（每个角色自动装配，`email` 工具类）: `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`。
+**LLM tool** (auto-attached to every role, `email` toolkit): `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`.
 ---
 
-## 公司邮件
+## Company Mail
 
-文件: `src/core/mail_service.py`（核心）+ `src/python_tools/email_toolkit.py`（LLM 工具）。
+File: `src/core/mail_service.py` (core) + `src/python_tools/email_toolkit.py` (LLM tool).
 
-**邮箱地址**: 每位成员一个邮箱 `username@<后缀>`，后缀由环境变量 `MAIL_SUFFIX` 定义（默认 `company.com`）；角色显式 `email` 字段优先。`AgentRole.mail_address` 与工具类走同一分配规则。
+**Mail address**: each member has one mailbox `username@<suffix>`, where the suffix is defined by the environment variable `MAIL_SUFFIX` (default `company.com`); a role's explicit `email` field takes precedence. `AgentRole.mail_address` and the tool follow the same allocation rule.
 
-**投递方式**: 默认**虚拟实现**（投递到内部邮箱并持久化 `data/mail/mailboxes.json`）；配置 `SMTP_HOST` 后自动切换 **smtplib 真实发送**，同时保留内部收件人邮箱副本（标记 `via_smtp`）。
+**Delivery mode**: by default a **virtual implementation** (delivered to the internal mailbox and persisted in `data/mail/mailboxes.json`); once `SMTP_HOST` is configured, it automatically switches to **real smtplib sending**, while keeping an internal copy in the recipient's mailbox (marked `via_smtp`).
 
 ```python
 MailService(config=MailConfig.from_env())
 ```
 
-| 方法 | 参数 | 返回 | 说明 |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `email_for(role)` | AgentRole | str | 角色 → 邮箱地址（`username@后缀`，显式 email 优先） |
-| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(摘要) | 发送邮件（虚拟投递 / SMTP 真实发送 + 内部副本） |
-| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | 收件箱（新到优先） |
-| `unread_count(email)` | str | int | 未读邮件数 |
-| `read(email, message_id)` | str,str | Optional[MailMessage] | 打开邮件（标记已读） |
-| `describe()` | — | str | 投递方式描述（虚拟 / SMTP） |
+| `email_for(role)` | AgentRole | str | Role → mail address (`username@suffix`; explicit email takes precedence) |
+| `send(sender_email, sender_name, to, subject, body, cc=None)` | str,str,list[str],str,str,list[str]\|None | str(summary) | Send mail (virtual delivery / real SMTP sending + internal copy) |
+| `inbox(email, limit=None)` | str,int\|None | list[MailMessage] | Inbox (newest first) |
+| `unread_count(email)` | str | int | Number of unread mails |
+| `read(email, message_id)` | str,str | Optional[MailMessage] | Open a mail (marks it read) |
+| `describe()` | — | str | Description of the delivery mode (virtual / SMTP) |
 
-**LLM 工具**（每个角色自动装配，`email` 工具类）: `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`。
+**LLM tool** (auto-attached to every role, `email` toolkit): `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)`.
 
 ---
 
-## 角色系统
+## Role System
 
-文件: `src/core/roles.py`
+File: `src/core/roles.py`
 
 ### `Urgency(IntEnum)`
-`LOW=1 / NORMAL=3 / HIGH=6 / CRITICAL=8`（任务队列按紧急度排序）。
+`LOW=1 / NORMAL=3 / HIGH=6 / CRITICAL=8` (task queues are sorted by urgency).
 
-### `Task`（dataclass）
+### `Task` (dataclass)
 `Task(description, urgency=Urgency.NORMAL, source="", payload={})`
-字段: `task_id`（自动）、`status`（pending/running/done/failed）、`result`、`tokens_consumed`、`assigned_role`。
+Fields: `task_id` (auto), `status` (pending/running/done/failed), `result`, `tokens_consumed`, `assigned_role`.
 
-### `AgentRole`（dataclass）
-角色定义 + 任务队列 + LLM 绑定。
+### `AgentRole` (dataclass)
+Role definition + task queue + LLM binding.
 
-**角色属性**:
-| 字段 | 说明 |
+**Role attributes**:
+| Field | Description |
 |------|------|
-| `name` | 人物姓名（张三/李四…） |
-| `role_id` | 职能职位（coder/reviewer/ceo…） |
-| `title` | 职位名称 |
-| `responsibilities` | 职责描述 |
-| `personality` | 性格 |
-| `skills` | 技能列表 |
-| `is_default` | 是否默认角色 |
-| `group` | 所属分组（如 前端开发组/领导组；空 = 未分组，talk 不受组限制） |
-| `email` | 显式公司邮箱（可选；默认 `username@<MAIL_SUFFIX>`，见 `mail_address`） |
-| `group` | 所属分组（如 前端开发组/领导组；空 = 未分组，talk 不受组限制） |
-| `email` | 显式公司邮箱（可选；默认 `username@<MAIL_SUFFIX>`，见 `mail_address`） |
-| `state` | AgentState（默认 ON_DUTY_IDLE） |
-| `interest_keywords` | 事件过滤关键词 |
+| `name` | Person name (Zhang San / Li Si...) |
+| `role_id` | Functional role (coder/reviewer/ceo...) |
+| `title` | Job title |
+| `responsibilities` | Responsibilities description |
+| `personality` | Personality |
+| `skills` | Skills list |
+| `is_default` | Whether it is a default role |
+| `group` | Owning group (e.g. Frontend Development Group / Leadership Group; empty = ungrouped, talk is not restricted by group) |
+| `email` | Explicit company mail (optional; default `username@<MAIL_SUFFIX>`, see `mail_address`) |
+| `group` | Owning group (e.g. Frontend Development Group / Leadership Group; empty = ungrouped, talk is not restricted by group) |
+| `email` | Explicit company mail (optional; default `username@<MAIL_SUFFIX>`, see `mail_address`) |
+| `state` | AgentState (default ON_DUTY_IDLE) |
+| `interest_keywords` | Event-filtering keywords |
 
-**事件过滤**: `evaluate_event(event) -> (bool, reason)` 三层过滤；`event_to_task(event) -> Task`。
-**提示词**: `build_system_prompt() -> str`（自动注入"今天是第 X 天" + 昨日总结）。
-**队列**: `add_task(task)` / `pop_task()` / `peek_next_urgency()` / `queue_depth` / `current_task` / `is_busy`。
-**存储与时间**: `note_store` 属性（惰性 NoteStore）、`get_latest_summary(before_day=None)`、`time_manager` 属性、`bind_time_manager(tm)`。
-**活动日志**: `journal(entry)` — 追加一行到 `data/journals/<role_id>.md`（角色上下文更新自动写入：收到任务/执行/工具调用/笔记/消息）。
-**活动日志**: `journal(entry)` — 追加一行到 `data/journals/<role_id>.md`（角色上下文更新自动写入：收到任务/执行/工具调用/笔记/消息）。
-**工具**: `add_mcp_tool(name, description, input_schema, handler)`、`add_toolkit(toolkit) -> int`、`mcp_tool_names`。
-**交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; **talk 仅限同组成员之间交流**（跨组被拒绝, 提示改用邮件）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
-**邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
-**交流**: `talk_to(target, message, urgency="NORMAL") -> str`（编程式跨角色消息）; LLM 经 talk 工具（target/message/urgency/wait/attachment）通信, **target 用成员人名**（花名册不暴露 role_id, 内部自动映射）; **talk 仅限同组成员之间交流**（跨组被拒绝, 提示改用邮件）; `wait=true` 时发送方进入 WAIT 状态同步等待对方回复（消息附带"提问者正在等待"提示, 等待无时间限制, 互等死锁自动检测拒绝）; `attachment` 为公司云盘文件路径（/mnt/drive 下, 发送前校验存在且可读, 对方可直接读取）。
-**邮件**: `mail_address -> str`（公司邮箱, `username@<MAIL_SUFFIX>`）; LLM 经 email 工具类（send_email/read_mail/open_mail/mail_address_book）收发邮件, **跨组沟通用邮件**; 虚拟邮箱默认, 配 SMTP 后真实发送（详见 `MailService`）。
+**Event filtering**: `evaluate_event(event) -> (bool, reason)` three-layer filtering; `event_to_task(event) -> Task`.
+**Prompt**: `build_system_prompt() -> str` (automatically injects "Today is Day X" + yesterday's summary).
+**Queue**: `add_task(task)` / `pop_task()` / `peek_next_urgency()` / `queue_depth` / `current_task` / `is_busy`.
+**Storage and time**: `note_store` property (lazy NoteStore), `get_latest_summary(before_day=None)`, `time_manager` property, `bind_time_manager(tm)`.
+**Activity journal**: `journal(entry)` — appends a line to `data/journals/<role_id>.md` (automatically written on role context updates: receiving tasks/executing/tool calls/notes/messages).
+**Activity journal**: `journal(entry)` — appends a line to `data/journals/<role_id>.md` (automatically written on role context updates: receiving tasks/executing/tool calls/notes/messages).
+**Tools**: `add_mcp_tool(name, description, input_schema, handler)`, `add_toolkit(toolkit) -> int`, `mcp_tool_names`.
+**Communication**: `talk_to(target, message, urgency="NORMAL") -> str` (programmatic cross-role message); the LLM communicates via the talk tool (target/message/urgency/wait/attachment), and **target uses the member's person name** (the roster does not expose role_id; it is mapped internally automatically); **talk is limited to members of the same group** (cross-group talk is rejected with a hint to use mail instead); when `wait=true`, the sender enters the WAIT state and synchronously waits for the other party's reply (the message carries a "the questioner is waiting" hint; waiting has no time limit, and mutual-wait deadlocks are automatically detected and rejected); `attachment` is a company cloud-drive file path (under /mnt/drive; existence and readability are validated before sending, and the other party can read it directly).
+**Mail**: `mail_address -> str` (company mail, `username@<MAIL_SUFFIX>`); the LLM sends/receives mail via the email toolkit (send_email/read_mail/open_mail/mail_address_book), and **cross-group communication uses mail**; virtual mailbox by default, real sending once SMTP is configured (see `MailService`).
+**Communication**: `talk_to(target, message, urgency="NORMAL") -> str` (programmatic cross-role message); the LLM communicates via the talk tool (target/message/urgency/wait/attachment), and **target uses the member's person name** (the roster does not expose role_id; it is mapped internally automatically); **talk is limited to members of the same group** (cross-group talk is rejected with a hint to use mail instead); when `wait=true`, the sender enters the WAIT state and synchronously waits for the other party's reply (the message carries a "the questioner is waiting" hint; waiting has no time limit, and mutual-wait deadlocks are automatically detected and rejected); `attachment` is a company cloud-drive file path (under /mnt/drive; existence and readability are validated before sending, and the other party can read it directly).
+**Mail**: `mail_address -> str` (company mail, `username@<MAIL_SUFFIX>`); the LLM sends/receives mail via the email toolkit (send_email/read_mail/open_mail/mail_address_book), and **cross-group communication uses mail**; virtual mailbox by default, real sending once SMTP is configured (see `MailService`).
 
 ### `RolePool`
-多角色并发管理，**每角色独立线程 + 独立锁 + 独立 LLM 客户端**（统一 OpenAI 兼容接口，由 `OpenAICompatLLM` 提供）。
+Multi-role concurrent management; **each role has its own thread + lock + LLM client** (unified OpenAI-compatible interface provided by `OpenAICompatLLM`).
 
 ```python
-RolePool(llm_api_key=None, llm_model=None)  # 配置: 显式参数 > -D 系统属性 > 环境变量 (OPENAI_*) > ConfigStore
+RolePool(llm_api_key=None, llm_model=None)  # configuration: explicit args > -D system properties > environment variables (OPENAI_*) > ConfigStore
 ```
 
-| 方法 | 参数 | 返回 | 说明 |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `add_role(role)` | AgentRole | None | 注册（须在 start 前） |
-| `get_role(name)` | str | AgentRole | 不存在抛 KeyError |
-| `all_roles()` | — | list[AgentRole] | 全部角色 |
-| `list_roles()` | — | list[str] | role_id 列表 |
-| `start()` | — | None | 启动全部 worker 线程 + 自动注册 talk 工具 |
-| `shutdown(wait=True)` | bool | None | 停止 |
-| `assign_task(role_name, task)` | str, Task | None | 投递任务 |
-| `journal_all(entry)` | str | None | 全局通知，写入每个角色的活动日志 |
-| `journal_all(entry)` | str | None | 全局通知，写入每个角色的活动日志 |
+| `add_role(role)` | AgentRole | None | Register (must be before start) |
+| `get_role(name)` | str | AgentRole | Raises KeyError if absent |
+| `all_roles()` | — | list[AgentRole] | All roles |
+| `list_roles()` | — | list[str] | role_id list |
+| `start()` | — | None | Start all worker threads + auto-register the talk tool |
+| `shutdown(wait=True)` | bool | None | Stop |
+| `assign_task(role_name, task)` | str, Task | None | Deliver a task |
+| `journal_all(entry)` | str | None | Global notification; writes to every role's activity journal |
+| `journal_all(entry)` | str | None | Global notification; writes to every role's activity journal |
 | `get_status()` | — | dict | {role_id: {busy, queue_depth, current_task, next_urgency}} |
 
 ```python
 from src.core.roles import AgentRole, RolePool, Task, Urgency
 pool = RolePool()
-coder = AgentRole(name="张三", role_id="coder", title="后端工程师",
-                  personality="严谨", skills=["Python"])
+coder = AgentRole(name="Zhang San", role_id="coder", title="Backend Engineer",
+                  personality="rigorous", skills=["Python"])
 pool.add_role(coder)
 pool.start()
-pool.assign_task("coder", Task(description="修复登录bug", urgency=Urgency.HIGH))
+pool.assign_task("coder", Task(description="Fix login bug", urgency=Urgency.HIGH))
 print(pool.get_status())
 pool.shutdown()
 ```
 
 ---
 
-## 事件系统
+## Event System
 
-### `EventBus` — 定时事件调度表
-### `EventBus` — 定时事件调度表
-文件: `src/core/event_bus.py`
+### `EventBus` — scheduled-event dispatch table
+### `EventBus` — scheduled-event dispatch table
+File: `src/core/event_bus.py`
 
-只承担"定时事件注册 / 取消 / 到期取出"的调度表职责；**不含过滤管线**
-（3 层过滤是每角色独立的 `AgentRole.evaluate_event`，见角色系统章）。
+Only handles the dispatch-table responsibilities of "registering / canceling / retrieving due scheduled events"; **does not include the filtering pipeline**
+(the 3-layer filtering is each role's independent `AgentRole.evaluate_event`; see the Role System section).
 
-只承担"定时事件注册 / 取消 / 到期取出"的调度表职责；**不含过滤管线**
-（3 层过滤是每角色独立的 `AgentRole.evaluate_event`，见角色系统章）。
+Only handles the dispatch-table responsibilities of "registering / canceling / retrieving due scheduled events"; **does not include the filtering pipeline**
+(the 3-layer filtering is each role's independent `AgentRole.evaluate_event`; see the Role System section).
 
 ```python
-EventBus()   # TimeEventBus 是其子类 (time_manager.py), 提供时间线程
-EventBus()   # TimeEventBus 是其子类 (time_manager.py), 提供时间线程
+EventBus()   # TimeEventBus is its subclass (time_manager.py), providing the time thread
+EventBus()   # TimeEventBus is its subclass (time_manager.py), providing the time thread
 ```
 
-| 方法 | 参数 | 返回 | 说明 |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `register_event(event, tick)` | Event, int | str(事件ID) | 注册定时事件到调度表（tick 必须显式；立即触发用 TimeEventBus） |
-| `cancel_event(event_id)` | str | bool | 取消定时事件 |
-| `list_scheduled_events()` | — | list[dict] | 待触发事件（按 tick 排序） |
-| `_check_due_events(current_tick)` | int | list[Event] | 取出到期事件（时间线程调用） |
-| 方法 | 参数 | 返回 | 说明 |
+| `register_event(event, tick)` | Event, int | str(event ID) | Register a scheduled event into the dispatch table (tick must be explicit; use TimeEventBus for immediate triggering) |
+| `cancel_event(event_id)` | str | bool | Cancel a scheduled event |
+| `list_scheduled_events()` | — | list[dict] | Pending events (sorted by tick) |
+| `_check_due_events(current_tick)` | int | list[Event] | Retrieve due events (called by the time thread) |
+| Method | Parameter | Returns | Description |
 |------|------|------|------|
-| `register_event(event, tick)` | Event, int | str(事件ID) | 注册定时事件到调度表（tick 必须显式；立即触发用 TimeEventBus） |
-| `cancel_event(event_id)` | str | bool | 取消定时事件 |
-| `list_scheduled_events()` | — | list[dict] | 待触发事件（按 tick 排序） |
-| `_check_due_events(current_tick)` | int | list[Event] | 取出到期事件（时间线程调用） |
+| `register_event(event, tick)` | Event, int | str(event ID) | Register a scheduled event into the dispatch table (tick must be explicit; use TimeEventBus for immediate triggering) |
+| `cancel_event(event_id)` | str | bool | Cancel a scheduled event |
+| `list_scheduled_events()` | — | list[dict] | Pending events (sorted by tick) |
+| `_check_due_events(current_tick)` | int | list[Event] | Retrieve due events (called by the time thread) |
 
-### `EventDispatcher` — 多角色广播/定向分发
-文件: `src/core/dispatcher.py`
+### `EventDispatcher` — multi-role broadcast/targeted dispatch
+File: `src/core/dispatcher.py`
 
 ```python
 EventDispatcher(pool: RolePool)
 ```
 
 `trigger(event) -> dict[role_id, {"accepted", "reason", "task_id"}]`
-- **广播**（`target_role=None`）：所有角色各自跑 3 层过滤
-- **定向**（`target_role=xxx`）：只投递给目标角色（直接接受），其余跳过
+- **Broadcast** (`target_role=None`): every role runs its own 3-layer filtering
+- **Targeted** (`target_role=xxx`): delivered only to the target role (accepted directly); the others are skipped
 
 ```python
 dispatcher = EventDispatcher(pool)
@@ -393,137 +393,137 @@ results = dispatcher.trigger(Event(source="github", event_type="new_pr",
 
 ---
 
-## 系统管理
+## System Management
 
-文件: `src/core/agent_system.py` — **推荐统一入口**
+File: `src/core/agent_system.py` — **recommended unified entry point**
 
 ```python
 AgentSystem(roles=None, role_ids=None, check_interval=30, auto_toolkits=True)
 ```
-- `roles`：预构建 AgentRole 列表；`role_ids`：模板 id 列表
-- `auto_toolkits=True`：自动注册 memory/time/task 工具 + 绑定共享 TimeEventBus
-- `auto_toolkits=True`：自动注册 memory/time/task 工具 + 绑定共享 TimeEventBus
+- `roles`: a list of pre-built AgentRole objects; `role_ids`: a list of template ids
+- `auto_toolkits=True`: auto-register memory/time/task tools + bind a shared TimeEventBus
+- `auto_toolkits=True`: auto-register memory/time/task tools + bind a shared TimeEventBus
 
-| 方法/属性 | 说明 |
+| Method/Property | Description |
 |-----------|------|
-| `add_role(role)` | 注册角色（绑定共享时间源 + 自动工具） |
-| `add_default_roles()` | 注册 4 个默认管理角色，返回列表 |
-| `get_role(role_id)` | 获取角色 |
-| `get_status()` | 状态快照 |
-| `trigger(event)` | 投递事件（广播/定向） |
-| `assign_task(role_id, task)` | 直接分配任务 |
-| `start()` | 启动角色池 + 时间线程（Tick 0 / 第 1 天） |
-| `stop()` | 停止一切 |
-| `tick` / `day` | 当前 Tick / 第几天 |
-| `describe()` | 作息描述 |
-| `pool` / `time_manager` / `dispatcher` | 底层组件访问 |
+| `add_role(role)` | Register a role (bind shared time source + auto tools) |
+| `add_default_roles()` | Register the 4 default management roles and return the list |
+| `get_role(role_id)` | Get a role |
+| `get_status()` | Status snapshot |
+| `trigger(event)` | Deliver an event (broadcast/targeted) |
+| `assign_task(role_id, task)` | Directly assign a task |
+| `start()` | Start the role pool + time thread (Tick 0 / Day 1) |
+| `stop()` | Stop everything |
+| `tick` / `day` | Current tick / day number |
+| `describe()` | Shift description |
+| `pool` / `time_manager` / `dispatcher` | Access to underlying components |
 
 ```python
 from src.core.agent_system import AgentSystem
 system = AgentSystem(role_ids=["ceo", "coo", "hr", "cfo"], check_interval=1)
 system.start()
-print(system.describe())   # 第 1 天, Tick 0
+print(system.describe())   # Day 1, Tick 0
 system.trigger(Event(...))
 system.stop()
 ```
 
 ---
 
-## 角色模板与工厂
+## Role Templates and Factory
 
-文件: `src/core/role_templates.py`
+File: `src/core/role_templates.py`
 
-- `TEMPLATES`：12 个模板（4 管理 + 8 业务）
-- `DEFAULT_ROLES = ["CEO", "COO", "HR"]`（CFO 模板保留但暂不默认启用，后续再加）
-- `get_template(name) -> AgentRole`：克隆模板
-- `create_all_roles() -> list[AgentRole]`：全部 12 个
-- `create_default_roles() -> list[AgentRole]`：默认角色（当前为 CEO/COO/HR，CFO 后续再加）
+- `TEMPLATES`: 12 templates (4 management + 8 business)
+- `DEFAULT_ROLES = ["CEO", "COO", "HR"]` (the CFO template is kept but not enabled by default for now; it will be added later)
+- `get_template(name) -> AgentRole`: clone a template
+- `create_all_roles() -> list[AgentRole]`: all 12
+- `create_default_roles() -> list[AgentRole]`: default roles (currently CEO/COO/HR; CFO to be added later)
 
-文件: `src/core/role_factory.py`
+File: `src/core/role_factory.py`
 
 ```python
 RoleFactory(llm=None)
 factory.create_role(requirement: str) -> AgentRole
-# 用人需求 → LLM 生成角色配置(role_id/title/responsibilities/...) → 建角色
+# hiring requirement → LLM generates the role configuration (role_id/title/responsibilities/...) → create the role
 ```
-`create_role` 会从姓名池分配未使用的人名，并注册到角色模板池。
+`create_role` allocates an unused person name from the name pool and registers the role in the role-template pool.
 
 ---
 
-## 工具系统
+## Tool System
 
-文件: `src/core/tools.py`
+File: `src/core/tools.py`
 
-### `ToolDef`（dataclass）
-`{name, description, input_schema, handler, source("python"/"mcp:包名"), mcp_tool}`
+### `ToolDef` (dataclass)
+`{name, description, input_schema, handler, source("python"/"mcp:<package name>"), mcp_tool}`
 
-### `ToolKit` — 工具类（一组相关工具）
+### `ToolKit` — a toolkit (a group of related tools)
 ```python
 ToolKit(name, description="")
 tk.add_python_tool(name, description, input_schema, handler) -> ToolDef
 tk.tool_names / tk.tool_count / tk.get_tool(name) / __iter__ / __contains__
 ```
-内置: `create_coding_toolkit()`（read_file/edit_file/run_cmd）、`create_web_toolkit()`（http_get/http_post）。
+Built-in: `create_coding_toolkit()` (read_file/edit_file/run_cmd), `create_web_toolkit()` (http_get/http_post).
 
-### `ToolRegistry` — 角色级工具注册表
-| 方法 | 参数 | 返回 |
+### `ToolRegistry` — role-level tool registry
+| Method | Parameter | Returns |
 |------|------|------|
-| `add_toolkit(toolkit)` | ToolKit | int（新增数，重名跳过） |
+| `add_toolkit(toolkit)` | ToolKit | int (number added; duplicate names skipped) |
 | `remove_toolkit(name)` | str | int |
 | `add_tool(...)` / `remove_tool(name)` | — | — |
-| `list_tools()` | — | list[dict]（name/description/input_schema） |
+| `list_tools()` | — | list[dict] (name/description/input_schema) |
 | `call_tool(name, arguments)` | str, dict | CallToolResult |
-| `get_tools_prompt()` | — | str（LLM 可读的工具说明） |
+| `get_tools_prompt()` | — | str (LLM-readable tool descriptions) |
 | `tool_names` / `toolkit_names` / `tool_count` | — | — |
 
 ---
 
-## Python 工具类
+## Python Toolkits
 
-目录: `src/python_tools/`。角色通过 `role.add_toolkit(create_xxx_toolkit())` 导入，自动绑定。
+Directory: `src/python_tools/`. Roles import toolkits via `role.add_toolkit(create_xxx_toolkit())`; they are bound automatically.
 
-| 工具类 | 工具 | 用途 |
+| Toolkit | Tools | Purpose |
 |--------|------|------|
-| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | 角色间异步通信（投递到对方队列；**仅限同组成员**，跨组请用邮件） |
-| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | 公司邮件（员工之间邮件交流；虚拟邮箱默认，配 SMTP 后真实发送；邮箱 = username@用户后缀） |
-| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | 角色间异步通信（投递到对方队列；**仅限同组成员**，跨组请用邮件） |
-| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | 公司邮件（员工之间邮件交流；虚拟邮箱默认，配 SMTP 后真实发送；邮箱 = username@用户后缀） |
-| `hr_toolkit` | `post_job_posting(requirement)` / `list_candidates()` | 发布招聘启事 / 列出候选人（后台完成新角色创建与入职登记） |
-| `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | 每日总结（保存后切 OFF_DUTY）+ 笔记（**带 remind_tick = 定时提醒**，已合并原定时任务工具） |
-| `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo 清单（个人待办, id+状态 pending/in_progress/completed, 持久化 data/todos/<role_id>.json） |
-| `task_view_toolkit` | `my_tasks(scope?)` | 任务列表（待处理队列 + 最近完成/失败历史, 只读视图） |
-| `hermes_toolkit` | `hermes_new_conversation()` / `hermes_send(conversation_id, content)` | 调用电脑上安装的 Hermes Agent：新建对话返回对话 id, 发送对话同步等待 Hermes 跑完返回全部结果 |
-| `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | 每日总结（保存后切 OFF_DUTY）+ 笔记（**带 remind_tick = 定时提醒**，已合并原定时任务工具） |
-| `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo 清单（个人待办, id+状态 pending/in_progress/completed, 持久化 data/todos/<role_id>.json） |
-| `task_view_toolkit` | `my_tasks(scope?)` | 任务列表（待处理队列 + 最近完成/失败历史, 只读视图） |
-| `hermes_toolkit` | `hermes_new_conversation()` / `hermes_send(conversation_id, content)` | 调用电脑上安装的 Hermes Agent：新建对话返回对话 id, 发送对话同步等待 Hermes 跑完返回全部结果 |
-| `time_toolkit` | `get_time()` / `take_rest()` | 查看作息时间 / 休息（无参数, 进入 ON_DUTY_IDLE, 事件自动唤醒） |
-| `mcp_manager` | `mcp_search(keyword)` / `mcp_list()` / `mcp_add(tool_name)` / `mcp_remove(tool_name)` / `mcp_my_tools()` | MCP 工具自助管理（搜索/添加/移除本地 MCP 工具，角色自动装配） |
-| `client_toolkit` | `talk_to_client(message)` | 与甲方实时交流（阻塞等待用户输入） |
+| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | Asynchronous communication between roles (delivered to the other party's queue; **same-group members only**; use mail across groups) |
+| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | Company mail (mail exchange between employees; virtual mailbox by default, real sending once SMTP is configured; mailbox = username@user suffix) |
+| `talk_toolkit` | `talk(target, message, urgency, wait?, attachment?)` | Asynchronous communication between roles (delivered to the other party's queue; **same-group members only**; use mail across groups) |
+| `email_toolkit` | `send_email(to, subject, body, cc?)` / `read_mail(limit?, unread_only?)` / `open_mail(message_id)` / `mail_address_book(group?)` | Company mail (mail exchange between employees; virtual mailbox by default, real sending once SMTP is configured; mailbox = username@user suffix) |
+| `hr_toolkit` | `post_job_posting(requirement)` / `list_candidates()` | Post a job posting / list candidates (new-role creation and onboarding are done in the background) |
+| `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | Daily summary (switches to OFF_DUTY after saving) + notes (**with remind_tick = scheduled reminder**; merged from the former scheduled-task tool) |
+| `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo list (personal to-dos, id + status pending/in_progress/completed, persisted in data/todos/<role_id>.json) |
+| `task_view_toolkit` | `my_tasks(scope?)` | Task list (pending queue + recent completed/failed history; read-only view) |
+| `hermes_toolkit` | `hermes_new_conversation()` / `hermes_send(conversation_id, content)` | Call the Hermes Agent installed on the computer: creating a conversation returns a conversation id; sending a conversation synchronously waits for Hermes to finish and returns all results |
+| `memory_toolkit` | `summary(content, day)` / `write_note(title, content, remind_tick, remind_day)` / `edit_note` / `list_notes` / `read_note` | Daily summary (switches to OFF_DUTY after saving) + notes (**with remind_tick = scheduled reminder**; merged from the former scheduled-task tool) |
+| `todo_toolkit` | `todo_add(title, detail)` / `todo_list(status?)` / `todo_update(todo_id, status)` / `todo_delete(todo_id)` | Todo list (personal to-dos, id + status pending/in_progress/completed, persisted in data/todos/<role_id>.json) |
+| `task_view_toolkit` | `my_tasks(scope?)` | Task list (pending queue + recent completed/failed history; read-only view) |
+| `hermes_toolkit` | `hermes_new_conversation()` / `hermes_send(conversation_id, content)` | Call the Hermes Agent installed on the computer: creating a conversation returns a conversation id; sending a conversation synchronously waits for Hermes to finish and returns all results |
+| `time_toolkit` | `get_time()` / `take_rest()` | View the shift time / take a rest (no parameters; enters ON_DUTY_IDLE; events wake it automatically) |
+| `mcp_manager` | `mcp_search(keyword)` / `mcp_list()` / `mcp_add(tool_name)` / `mcp_remove(tool_name)` / `mcp_my_tools()` | Self-service management of MCP tools (search/add/remove local MCP tools; auto-attached to roles) |
+| `client_toolkit` | `talk_to_client(message)` | Real-time communication with Client A (blocks waiting for user input) |
 
 ```python
 ceo = system.get_role("ceo")
-ceo.add_toolkit(create_client_toolkit())          # 甲方工具
-ceo.add_toolkit(create_memory_toolkit())          # 总结/笔记 (add_toolkit 自动绑定)
+ceo.add_toolkit(create_client_toolkit())          # Client A tool
+ceo.add_toolkit(create_memory_toolkit())          # summary/notes (add_toolkit binds automatically)
 ```
 
 ---
 
-## MCP 加载器
+## MCP Loader
 
-文件: `src/python_tools/mcp_toolkit.py`。**不自动安装**——用户用 npx 准备服务器，配置只写包名。
+File: `src/python_tools/mcp_toolkit.py`. **Not auto-installed** — the user prepares the server with npx; the configuration only writes the package name.
 
 ### `MCPServer(package, args=None)`
-单个服务器连接。`connect()` / `close()` / `list_tools()` / `call_tool(name, args)`。
+A single server connection. `connect()` / `close()` / `list_tools()` / `call_tool(name, args)`.
 
 ### `MCPToolLoader(rules_file=None, server_args=None)`
-| 方法 | 说明 |
+| Method | Description |
 |------|------|
-| `load() -> dict[str, ToolKit]` | 连接所有服务器 → 拉工具 → 按规则分组 |
-| `list_loaded_tools()` | 已加载工具明细 |
-| `close()` | 关闭全部连接 |
+| `load() -> dict[str, ToolKit]` | Connect to all servers → pull tools → group by rules |
+| `list_loaded_tools()` | Details of loaded tools |
+| `close()` | Close all connections |
 
-### 配置 `src/config/mcp_group_rules.json`
+### Configuration `src/config/mcp_group_rules.json`
 ```json
 {
   "servers": ["@modelcontextprotocol/server-memory"],
@@ -534,38 +534,38 @@ ceo.add_toolkit(create_memory_toolkit())          # 总结/笔记 (add_toolkit �
 
 ```python
 from src.python_tools.mcp_toolkit import MCPToolLoader, load_mcp_toolkits
-toolkits = load_mcp_toolkits()                    # 一键加载
-dev.add_toolkit(toolkits["file_ops"])             # 导入某组
-# 或管理生命周期:
+toolkits = load_mcp_toolkits()                    # one-click loading
+dev.add_toolkit(toolkits["file_ops"])             # import a group
+# or manage the lifecycle manually:
 loader = MCPToolLoader()
 toolkits = loader.load()
 loader.close()
 ```
 
-## LLM 客户端
+## LLM Client
 
-文件: `src/core/llm.py`
+File: `src/core/llm.py`
 
 ```python
-OpenAICompatLLM(api_key=None, base_url=None, model=None)   # 配置: 显式参数 > -D 系统属性 > 环境变量 > ConfigStore
-# 统一 OpenAI 接口, 不区分后端; 任意 OpenAI 兼容端点均可 (改 base_url/model)
+OpenAICompatLLM(api_key=None, base_url=None, model=None)   # configuration: explicit args > -D system properties > environment variables > ConfigStore
+# unified OpenAI interface, backend-agnostic; any OpenAI-compatible endpoint works (change base_url/model)
 ```
 
-| 方法 | 参数 | 返回 |
+| Method | Parameter | Returns |
 |------|------|------|
 | `chat(system, user, max_tokens=512)` | str, str, int | `(text, tokens)` |
 | `summarize(text)` | str | `(summary, tokens)` |
 | `chat_with_tools(messages, tools)` | list, list | `(content, tool_calls, usage)` |
 | `chat_with_tools(messages, tools)` | list, list | `(content, tool_calls, usage)` |
 
-环境变量: `OPENAI_API_KEY`（API 密钥，免 Key 的本地端点可省略）、`OPENAI_BASE_URL`（默认 https://api.openai.com）、
-`OPENAI_MODEL`（默认 gpt-4o-mini）；也可用配置文件键 `llm.api_key` / `llm.base_url` / `llm.model`。
+Environment variables: `OPENAI_API_KEY` (API key; may be omitted for key-free local endpoints), `OPENAI_BASE_URL` (default https://api.openai.com),
+`OPENAI_MODEL` (default gpt-4o-mini); config-file keys `llm.api_key` / `llm.base_url` / `llm.model` may also be used.
 
 ---
 
-## 完整示例
+## Complete Example
 
-### 最小多角色系统
+### Minimal multi-role system
 ```python
 import os
 os.environ["OPENAI_API_KEY"] = "sk-xxx"
@@ -574,44 +574,44 @@ from src.core.agent_system import AgentSystem
 from src.core.types import Event, Priority
 
 system = AgentSystem(role_ids=["ceo", "coo", "hr", "cfo"])
-system.start()                                   # Tick 0 / 第 1 天, SHIFT_START 全员上班
+system.start()                                   # Tick 0 / Day 1, SHIFT_START: everyone on duty
 
 system.trigger(Event(source="github", event_type="new_pr",
                      priority=Priority.HIGH,
                      payload={"pr_number": 188, "title": "fix: NPE"}))
 
-# 定向投递给 CEO
+# targeted delivery to the CEO
 system.trigger(Event(source="client", event_type="requirements",
                      priority=Priority.HIGH, target_role="ceo",
-                     payload={"instruction": "收集需求"}))
+                     payload={"instruction": "Collect requirements"}))
 
-# CEO 笔记提醒: 第 2 天 Tick 30 (笔记与定时任务统一)
+# CEO note reminder: Day 2, Tick 30 (notes and scheduled tasks are unified)
 system.get_role("ceo").note_store.write_note(
-    "开始写周报", "周报模板与本周工作小结", remind_tick=30, remind_day=2)
-# CEO 笔记提醒: 第 2 天 Tick 30 (笔记与定时任务统一)
+    "Start writing the weekly report", "Weekly report template and this week's work summary", remind_tick=30, remind_day=2)
+# CEO note reminder: Day 2, Tick 30 (notes and scheduled tasks are unified)
 system.get_role("ceo").note_store.write_note(
-    "开始写周报", "周报模板与本周工作小结", remind_tick=30, remind_day=2)
+    "Start writing the weekly report", "Weekly report template and this week's work summary", remind_tick=30, remind_day=2)
 
 print(system.describe(), system.get_status())
 system.stop()
 ```
 
-### 添加自定义 Python 工具
+### Adding a custom Python tool
 ```python
 from src.core.tools import ToolKit
 
-tk = ToolKit("my_tools", "自定义工具")
+tk = ToolKit("my_tools", "custom tools")
 def _ping(args):
     return "pong"
-tk.add_python_tool("ping", "测试工具", {"type": "object", "properties": {}}, _ping)
+tk.add_python_tool("ping", "test tool", {"type": "object", "properties": {}}, _ping)
 
 role = system.get_role("coo")
-role.add_toolkit(tk)     # 或 role.add_mcp_tool(...) 单个注册
+role.add_toolkit(tk)     # or register individually with role.add_mcp_tool(...)
 ```
 
-### 加载 MCP 工具
+### Loading MCP tools
 ```bash
-npx -y @modelcontextprotocol/server-memory    # 用户先准备服务器
+npx -y @modelcontextprotocol/server-memory    # the user prepares the server first
 ```
 ```python
 from src.python_tools.mcp_toolkit import load_mcp_toolkits
@@ -619,27 +619,30 @@ toolkits = load_mcp_toolkits()
 system.get_role("coo").add_toolkit(toolkits.get("memory_ops"))
 ```
 
-### 运行完整演示
+### Running the complete demo
 ```bash
 cd AgentCompany && source .venv/bin/activate
-OPENAI_API_KEY=sk-xxx python -m src.main        # 多日循环演示
-OPENAI_API_KEY=sk-xxx python -m src.role_demo   # 角色并发演示
-OPENAI_API_KEY=sk-xxx python -m src.talk_demo   # 角色通信演示
+OPENAI_API_KEY=sk-xxx python -m src.main        # multi-day loop demo
+OPENAI_API_KEY=sk-xxx python -m src.role_demo   # role concurrency demo
+OPENAI_API_KEY=sk-xxx python -m src.talk_demo   # role communication demo
 ```
 
 ---
 
-## Web 界面 (Java 版, 分组聊天 + 甲方对话)
+## Web UI (Java version, group chat + Client A conversation)
 
-Java 版内置零依赖 Web 界面 (`com.sun.net.httpserver` + Jackson, 不新增依赖):
+The Java version ships a zero-dependency built-in Web UI (`com.sun.net.httpserver` + Jackson, no new dependencies):
 
-| 类 | 说明 |
+| Class | Description |
 |---|---|
-| `web/ChatStore` | 聊天消息存储 (talk / client 两类消息, 单调 seq) + 甲方对话协调 (beginClientWait / awaitClientReply / postClientReply), 每套 `AgentSystem` 自持一份 (`AgentSystem.chatStore`) |
-| `web/ChatWebServer` | HTTP 服务器: 静态资源 `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; 端口 `AGENTCOMPANY_WEB_PORT` (默认 8787) |
-| `demo/WebDemo` | 轻量演示: 最小团队 + 预置消息 + 一次甲方对话 |
+| `web/ChatStore` | Chat message store (talk / client message types, monotonic seq) + Client A conversation coordination (beginClientWait / awaitClientReply / postClientReply); each `AgentSystem` owns one (`AgentSystem.chatStore`) |
+| `web/ChatWebServer` | HTTP server: static assets `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; port `AGENTCOMPANY_WEB_PORT` (default 8787) |
+| `demo/WebDemo` | Lightweight demo: minimal team + preset messages + one Client A conversation |
 
-消息来源: `talk` 工具投递成功时记录组内消息; `talk_to_client` 记录领导组与甲方
-的对话。输入框启用条件 (Web 前端): 选中「领导组」且 `clientTalk.active` 为 true
-(有成员正等待甲方回复)。`talk_to_client` 有 Web 挂载时走网页回复 (超时
-`AGENTCOMPANY_CLIENT_REPLY_TIMEOUT`, 默认 20 分钟), 否则回退控制台 `System.in`。
+Message sources: when the `talk` tool delivers successfully, the in-group message is
+recorded; `talk_to_client` records the conversation between the Leadership Group and
+Client A. Input-box enabling conditions (Web frontend): the "Leadership Group" is
+selected and `clientTalk.active` is true (a member is waiting for Client A's reply).
+When the Web UI is mounted, `talk_to_client` replies through the web page (timeout
+`AGENTCOMPANY_CLIENT_REPLY_TIMEOUT`, default 20 minutes); otherwise it falls back to
+the console `System.in`.

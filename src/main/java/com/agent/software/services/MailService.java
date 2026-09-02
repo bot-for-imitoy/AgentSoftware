@@ -25,11 +25,11 @@ import java.util.Properties;
 import java.util.UUID;
 
 /**
- * 公司邮件系统核心 (MailService) — 员工邮件收发 (Python 版 mail_service.py).
+ * Core company mail system (MailService) — employee email send/receive (Python version mail_service.py).
  *
- * 虚拟邮箱 (默认): 邮件投递到内部邮箱, 按需持久化到 data/mail/mailboxes.json.
- * 真实邮箱: 配置 SMTP 环境变量后自动切换为真实发送 (jakarta.mail);
- * 同时仍把邮件副本投递到内部员工邮箱.
+ * Virtual mailbox (default): mail is delivered to internal mailboxes, persisted on demand to data/mail/mailboxes.json.
+ * Real mailbox: after configuring the SMTP environment variables, automatically switches to real sending (jakarta.mail);
+ * it also still delivers a copy of the mail to the internal employee mailbox.
  */
 public class MailService {
 
@@ -41,7 +41,7 @@ public class MailService {
 
     // ── MailConfig ─────────────────────────────────────────────
 
-    /** 邮件配置: 后缀 + SMTP 参数 (从环境变量读取, 也可编程构造). */
+    /** Mail configuration: suffix + SMTP parameters (read from environment variables, or constructed programmatically). */
     public static final class MailConfig {
         public String suffix = DEFAULT_MAIL_SUFFIX;
         public String smtpHost = "";
@@ -76,7 +76,7 @@ public class MailService {
             return c;
         }
 
-        /** 投递方式: "smtp" = 真实发送 (已配置 SMTP), "virtual" = 虚拟实现. */
+        /** Delivery mode: "smtp" = real sending (SMTP configured), "virtual" = virtual implementation. */
         public String mode() {
             return smtpHost.isEmpty() ? "virtual" : "smtp";
         }
@@ -84,7 +84,7 @@ public class MailService {
 
     // ── MailMessage ────────────────────────────────────────────
 
-    /** 一封邮件. */
+    /** A single email. */
     public static final class MailMessage {
         public String messageId;
         public String senderEmail;
@@ -150,16 +150,16 @@ public class MailService {
                     Json.boolVal(d, "via_smtp", false));
         }
 
-        /** 单行摘要 (read_mail 列表用). */
+        /** One-line summary (for the read_mail list). */
         public String preview() {
             String flag = read ? "read" : "unread";
             String stamp = new SimpleDateFormat("MM-dd HH:mm").format(new Date((long) (timestamp * 1000)));
             String bodyPreview = body != null && body.length() > 60 ? body.substring(0, 60) : body;
-            return "[" + flag + "] " + senderName + " <" + senderEmail + "> 「" + subject + "」 "
+            return "[" + flag + "] " + senderName + " <" + senderEmail + "> '" + subject + "' "
                     + bodyPreview + " (" + stamp + ", id=" + messageId + ")";
         }
 
-        /** 完整邮件内容 (open_mail 用). */
+        /** Full mail content (for open_mail). */
         public String fullText() {
             String stamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date((long) (timestamp * 1000)));
             String toLine = String.join(", ", recipients);
@@ -196,9 +196,9 @@ public class MailService {
         this(null, null);
     }
 
-    // ── 邮箱地址分配 ──────────────────────────────────────
+    // ── Email address assignment ──────────────────────────────────────
 
-    /** 角色 → 公司邮箱地址 (后缀由用户定义, 默认 company.com). */
+    /** Role → company email address (suffix defined by the user, default company.com). */
     public String emailFor(AgentRole role) {
         String explicit = role.email == null ? "" : role.email.strip();
         if (!explicit.isEmpty()) {
@@ -209,11 +209,11 @@ public class MailService {
         return (local + "@" + config.suffix).toLowerCase();
     }
 
-    // ── 发送 ──────────────────────────────────────────────
+    // ── Sending ──────────────────────────────────────────────
 
     /**
-     * 发送一封邮件. 虚拟模式: 投递到每个收件人邮箱; SMTP 模式: 先真实发送,
-     * 成功后把副本投递到内部收件人邮箱. 返回发送结果摘要.
+     * Send an email. Virtual mode: deliver to each recipient's mailbox; SMTP mode: send for real first,
+     * then deliver a copy to the internal recipient mailbox on success. Returns a summary of the send result.
      */
     public String send(String senderEmail, String senderName, List<String> to,
                        String subject, String body, List<String> cc) {
@@ -246,12 +246,12 @@ public class MailService {
             try {
                 sendViaSmtp(msg);
             } catch (Exception exc) {
-                logger.error("SMTP 发送失败: {}", exc.getMessage());
+                logger.error("SMTP send failed: {}", exc.getMessage());
                 return "Error: SMTP send failed: " + exc.getMessage() + " (email not delivered)";
             }
             msg.viaSmtp = true;
         }
-        // 虚拟投递 (SMTP 模式也投递内部副本, 供角色在模拟内网阅读)
+        // Virtual delivery (SMTP mode also delivers an internal copy, for roles to read in the simulated intranet)
         synchronized (lock) {
             load();
             List<String> all = new ArrayList<>(toList);
@@ -259,7 +259,7 @@ public class MailService {
             for (String addr : all) {
                 String key = addr.toLowerCase();
                 mailboxes.computeIfAbsent(key, k -> new ArrayList<>())
-                        .add(MailMessage.fromDict(msg.toDict()));  // 每邮箱独立副本
+                        .add(MailMessage.fromDict(msg.toDict()));  // Independent copy per mailbox
             }
             save();
         }
@@ -268,7 +268,7 @@ public class MailService {
         return "Email sent to " + recipientsDesc + ", subject " + msg.subject + ", " + way + ".";
     }
 
-    /** 用 jakarta.mail 真实发送邮件 (需已配置 SMTP_HOST). */
+    /** Send mail for real with jakarta.mail (SMTP_HOST must be configured). */
     private void sendViaSmtp(MailMessage msg) throws MessagingException {
         Properties props = new Properties();
         props.put("mail.smtp.host", config.smtpHost);
@@ -287,7 +287,7 @@ public class MailService {
             mime = new MimeMessage(session);
             mime.setFrom(new InternetAddress(msg.senderEmail, msg.senderName, "UTF-8"));
         } catch (java.io.UnsupportedEncodingException e) {
-            throw new MessagingException("发件人编码失败: " + e.getMessage(), e);
+            throw new MessagingException("Failed to encode sender: " + e.getMessage(), e);
         }
         try {
             mime.setSubject(msg.subject, "UTF-8");
@@ -310,9 +310,9 @@ public class MailService {
         }
     }
 
-    // ── 收件 ──────────────────────────────────────────────
+    // ── Receiving ──────────────────────────────────────────────
 
-    /** 读取某个邮箱的收件列表 (新到优先, limit 截取). */
+    /** Read the inbox list of a mailbox (newest first, truncated by limit). */
     public List<MailMessage> inbox(String email, Integer limit) {
         synchronized (lock) {
             load();
@@ -325,7 +325,7 @@ public class MailService {
         }
     }
 
-    /** 未读邮件数. */
+    /** Number of unread emails. */
     public int unreadCount(String email) {
         synchronized (lock) {
             load();
@@ -339,7 +339,7 @@ public class MailService {
         }
     }
 
-    /** 打开一封邮件 (标记为已读). 不存在返回 null. */
+    /** Open an email (marks it as read). Returns null if it does not exist. */
     public MailMessage read(String email, String messageId) {
         synchronized (lock) {
             load();
@@ -360,7 +360,7 @@ public class MailService {
         }
     }
 
-    /** 当前投递方式描述. */
+    /** Description of the current delivery mode. */
     public String describe() {
         if ("smtp".equals(config.mode())) {
             return "Real email (SMTP: " + config.smtpHost + ":" + config.smtpPort + ")";
@@ -368,13 +368,13 @@ public class MailService {
         return "Virtual mailbox (SMTP not configured, internal delivery only)";
     }
 
-    // ── 持久化 (data/mail/mailboxes.json) ─────────────────
+    // ── Persistence (data/mail/mailboxes.json) ─────────────────
 
     private Path path() {
         return Paths.get(dataDir).resolve(MAILBOX_FILE);
     }
 
-    /** 从磁盘加载邮箱 (幂等; 仅在首次访问时读取). */
+    /** Load mailboxes from disk (idempotent; reads only on first access). */
     @SuppressWarnings("unchecked")
     private void load() {
         if (loaded) {
@@ -401,11 +401,11 @@ public class MailService {
                 }
             }
         } catch (Exception e) {
-            logger.warn("邮箱持久化读取失败, 从空邮箱开始: {}", e.getMessage());
+            logger.warn("Failed to read mailbox persistence, starting with empty mailboxes: {}", e.getMessage());
         }
     }
 
-    /** 邮箱原子写盘 (tmp + rename). */
+    /** Atomically write mailboxes to disk (tmp + rename). */
     private void save() {
         try {
             Map<String, Object> boxes = new LinkedHashMap<>();
@@ -420,15 +420,15 @@ public class MailService {
             data.put("mailboxes", boxes);
             Json.atomicWrite(path(), Json.stringifyPretty(data));
         } catch (IOException e) {
-            logger.warn("邮箱持久化写盘失败: {}", e.getMessage());
+            logger.warn("Failed to write mailbox persistence to disk: {}", e.getMessage());
         }
     }
 
-    // ── 全局共享实例 (懒加载单例) ────────────────────────────
+    // ── Global shared instance (lazy-loaded singleton) ────────────────────────────
 
     private static volatile MailService mailService;
 
-    /** 获取进程级共享 MailService (懒加载, 配置读环境变量). */
+    /** Get the process-wide shared MailService (lazy-loaded, config read from environment variables). */
     public static MailService getMailService() {
         if (mailService == null) {
             synchronized (MailService.class) {
@@ -440,7 +440,7 @@ public class MailService {
         return mailService;
     }
 
-    /** 测试用: 重置全局实例. */
+    /** For testing: reset the global instance. */
     public static void resetInstance() {
         synchronized (MailService.class) {
             mailService = null;

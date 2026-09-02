@@ -5,7 +5,7 @@ import com.agent.software.store.TodoStore;
 import com.agent.software.tools.Toolkit;
 
 /**
- * Todo 清单工具类 (Todo Toolkit) — 管理自己的待办事项:
+ * Todo list toolkit (Todo Toolkit) — manage your own todo items:
  * todo_add / todo_list / todo_update / todo_delete.
  */
 public class Todo extends Toolkit {

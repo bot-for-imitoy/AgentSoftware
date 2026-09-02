@@ -14,8 +14,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * summary — 总结今天的工作. 保存后下一天自动注入系统提示词,
- * 并将角色切换为 OFF_DUTY (下班), 一天结束自动关闭个人电脑.
+ * summary - summarize today's work. After saving, it is automatically injected into the system prompt
+ * the next day, and the role is switched to OFF_DUTY (off duty); at the end of the day the personal
+ * computer is shut down automatically.
  */
 public class Summary extends Tool {
 
@@ -64,19 +65,19 @@ public class Summary extends Tool {
         }
         Path path = this.noteStore.saveSummary(content, day);
         if (agentRole != null) {
-            agentRole.journal("保存第 " + day + " 天总结 (" + content.length() + " 字符)");
+            agentRole.journal("Saved summary for day " + day + " (" + content.length() + " characters)");
             if (agentRole.state != Types.AgentState.OFF_DUTY) {
                 agentRole.setState(Types.AgentState.OFF_DUTY);
-                logger.info("[{}] 总结完成, 角色已切换为 OFF_DUTY", agentRole.roleId);
+                logger.info("[{}] summary complete, role switched to OFF_DUTY", agentRole.roleId);
             }
             try {
                 Computer comp = agentRole.computerIfCreated();
                 if (comp != null && comp.isOn()) {
                     comp.powerOff();
-                    logger.info("[{}] 一天结束, 电脑已自动关机", agentRole.roleId);
+                    logger.info("[{}] end of day, computer powered off automatically", agentRole.roleId);
                 }
             } catch (Exception e) {
-                logger.warn("[{}] 电脑自动关机失败", agentRole.roleId);
+                logger.warn("[{}] failed to power off the computer automatically", agentRole.roleId);
             }
             return "summary: Day " + day + " summary saved: " + path
                     + ". You are now OFF_DUTY, computer powered off.";
@@ -84,7 +85,7 @@ public class Summary extends Tool {
         return "summary: Day " + day + " summary saved: " + path;
     }
 
-    /** 兼容 Integer / Number / 数字字符串. 无法解析返回 null. */
+    /** Accepts Integer / Number / numeric string. Returns null if it cannot be parsed. */
     private static Integer toInt(Object o) {
         if (o instanceof Integer) {
             return (Integer) o;

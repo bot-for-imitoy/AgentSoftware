@@ -10,11 +10,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 事件分发器 (EventDispatcher) — 事件广播到所有角色的 Layer 1-3 过滤
- * (Python 版 dispatcher.py).
+ * Event dispatcher (EventDispatcher) — broadcasts events to all roles' Layer 1-3 filtering
+ * (Python version dispatcher.py).
  *
- * trigger(event) 广播事件: 每个角色独立运行 Layer 1-3 过滤, PASS 事件
- * 自动转 Task 插入该角色的优先级队列.
+ * trigger(event) broadcasts an event: each role independently runs Layer 1-3 filtering;
+ * PASS events are automatically converted into Tasks inserted into that role's priority queue.
  */
 public class EventDispatcher {
 
@@ -33,10 +33,10 @@ public class EventDispatcher {
     }
 
     /**
-     * 触发事件广播. 返回 {role_id: {accepted, reason, task_id}}.
+     * Trigger an event broadcast. Returns {role_id: {accepted, reason, task_id}}.
      *
-     * - 广播事件 (target_role=null): 所有角色各自运行 Layer 1-3 过滤.
-     * - 定向事件 (target_role=xxx): 只投递给指定角色, 直接接受 (跳过过滤).
+     * - Broadcast event (target_role=null): all roles each run Layer 1-3 filtering.
+     * - Targeted event (target_role=xxx): delivered only to the specified role, accepted directly (skips filtering).
      */
     public Map<String, Map<String, Object>> trigger(Types.Event event) {
         stats.merge("total_events", 1, Integer::sum);
@@ -44,12 +44,12 @@ public class EventDispatcher {
 
         logger.info("EventDispatcher trigger: id={} type={}/{} priority={} target={}",
                 event.id, event.source, event.eventType, event.priority,
-                event.targetRole == null ? "(广播)" : event.targetRole);
+                event.targetRole == null ? "(broadcast)" : event.targetRole);
 
-        // 定向事件: 只投递给 target_role, 其他角色跳过
+        // Targeted event: only delivered to target_role; other roles skip
         if (event.targetRole != null) {
             if (pool.getRoleOrNull(event.targetRole) == null) {
-                logger.warn("EventDispatcher: 定向事件目标角色 '{}' 不存在, 事件丢弃 (id={} type={})",
+                logger.warn("EventDispatcher: targeted event target role '{}' does not exist, event dropped (id={} type={})",
                         event.targetRole, event.id, event.eventType);
                 return results;
             }
@@ -61,7 +61,7 @@ public class EventDispatcher {
                 stats.merge("roles_skipped", 1, Integer::sum);
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("accepted", false);
-                m.put("reason", "定向事件, 目标: " + event.targetRole);
+                m.put("reason", "targeted event, target: " + event.targetRole);
                 m.put("task_id", null);
                 results.put(role.roleId, m);
             }
@@ -75,25 +75,25 @@ public class EventDispatcher {
                 if (!roleName.equals(event.targetRole)) {
                     continue;
                 }
-                // 已下班/收尾/等待中的角色不被非紧急定向事件打扰
+                // Roles that are off duty / wrapping up / waiting are not disturbed by non-urgent targeted events
                 if (event.priority.value < Types.Priority.EMERGENCY.value
                         && (role.state == Types.AgentState.OFF_DUTY
                         || role.state == Types.AgentState.WRAPPING_UP
                         || role.state == Types.AgentState.WAIT)) {
                     stats.merge("roles_skipped", 1, Integer::sum);
-                    logger.info("  → [{}] SKIPPED: 角色已{}, 非紧急定向事件不打扰",
+                    logger.info("  → [{}] SKIPPED: role is already {}, non-urgent targeted events do not disturb",
                             roleName, role.state.value);
-                    role.journal("定向通知 [" + event.source + "/" + event.eventType + "] ("
-                            + event.priority + "): 跳过 — 角色已" + role.state.value);
+                    role.journal("Targeted notification [" + event.source + "/" + event.eventType + "] ("
+                            + event.priority + "): skipped — role is already " + role.state.value);
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("accepted", false);
-                    m.put("reason", "角色已" + role.state.value + ", 非紧急定向事件不打扰");
+                    m.put("reason", "role is already " + role.state.value + ", non-urgent targeted events do not disturb");
                     m.put("task_id", null);
                     results.put(roleName, m);
                     continue;
                 }
                 accepted = true;
-                reason = "定向任务提醒 (target_role=" + roleName + ")";
+                reason = "Targeted task reminder (target_role=" + roleName + ")";
             } else {
                 stats.merge("roles_notified", 1, Integer::sum);
                 Map.Entry<Boolean, String> r = role.evaluateEvent(event);
@@ -113,8 +113,8 @@ public class EventDispatcher {
             } else {
                 stats.merge("roles_skipped", 1, Integer::sum);
                 logger.info("  → [{}] SKIPPED: {}", roleName, reason);
-                role.journal("全局通知 [" + event.source + "/" + event.eventType + "] ("
-                        + event.priority + "): 跳过 — " + reason);
+                role.journal("Global notification [" + event.source + "/" + event.eventType + "] ("
+                        + event.priority + "): skipped — " + reason);
             }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("accepted", accepted);

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * TimeEventBus 核心时间逻辑测试 (Python 版 test_time_manager.py 的 Java 对应物).
+ * TimeEventBus core time logic tests (the Java counterpart of the Python test_time_manager.py).
  */
 class TimeManagerTest {
 
@@ -55,7 +55,7 @@ class TimeManagerTest {
         }
     }
 
-    // ── Tick 数学 (显式状态, 不依赖时钟) ─────────────────
+    // ── Tick math (explicit state, independent of the clock) ─────
 
     @Test
     void testTickZeroAtStart() {
@@ -85,12 +85,12 @@ class TimeManagerTest {
     void testTickFrozenAgainstWallClock() {
         TimeEventBus bus = makeBus();
         bus.start();
-        sleep(300);  // 真实时间流逝 0.3s
-        assertEquals(0, bus.currentTick());  // Tick 冻结在 0
+        sleep(300);  // 0.3s of real time elapses
+        assertEquals(0, bus.currentTick());  // Tick stays frozen at 0
         bus.stop();
     }
 
-    // ── 快进候选计算 ─────────────────────────────────────
+    // ── Fast-forward candidate computation ────────────────────
 
     @Test
     void testScheduledEventAndTaskCandidates() {
@@ -123,7 +123,7 @@ class TimeManagerTest {
         assertEquals(SHIFT_END_TICK, bus.debugNextEventTick());
     }
 
-    // ── SHIFT_START/SHIFT_END 区间判定 + 每天只触发一次 ───
+    // ── SHIFT_START/SHIFT_END window detection + firing once per day ─
 
     @Test
     void testShiftStartFiresWhenWindowMissed() {
@@ -131,22 +131,22 @@ class TimeManagerTest {
         List<String> events = new ArrayList<>();
         bus.setEventSender(e -> events.add(e.eventType));
         bus.start();
-        sleep(150);  // 等首轮检查 (tick 0 → 第 1 天 SHIFT_START)
+        sleep(150);  // wait for the first check (tick 0 → Day 1 SHIFT_START)
         assertEquals(1, count(events, TimeEventBus.EVENT_SHIFT_START));
         jump(bus, 60);
         assertEquals(1, count(events, TimeEventBus.EVENT_SHIFT_END));
-        // 大步跳到第 2 天上班时段 (tick 145 → day2 tod=1): 区间判定仍必须触发
+        // big jump into the Day 2 shift-start window (tick 145 → day2 tod=1): the window check must still fire
         jump(bus, 145);
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
-        jump(bus, 204);  // 第 2 天下班
+        jump(bus, 204);  // Day 2 shift end
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_END));
-        jump(bus, 294);  // 第 3 天上班时段
+        jump(bus, 294);  // Day 3 shift-start window
         assertEquals(3, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_END));
     }
 
-    // ── 任务 fired 去重: 跨天后不重复触发 ─────────────────
+    // ── Task fired dedup: no re-fire across days ──────────────
 
     @Test
     void testTaskFiresOnceAcrossDays() {
@@ -155,16 +155,16 @@ class TimeManagerTest {
         bus.setEventSender(e -> events.add(e.eventType));
         bus.start();
         sleep(150);
-        TimeEventBus.ScheduledTask task = bus.scheduleTask("提醒", "CEO", 2, 1, null);
-        jump(bus, 3);  // 跳过 tick 2 → 触发一次, 标记 fired
+        TimeEventBus.ScheduledTask task = bus.scheduleTask("Reminder", "CEO", 2, 1, null);
+        jump(bus, 3);  // skip tick 2 → fires once, marked fired
         assertEquals(1, count(events, TimeEventBus.EVENT_TASK_DUE));
         assertTrue(task.fired);
-        jump(bus, 145);  // 第 2 天上班: 不得重新注册已 fired 任务
+        jump(bus, 145);  // Day 2 shift start: fired tasks must not be re-registered
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(1, count(events, TimeEventBus.EVENT_TASK_DUE));
     }
 
-    // ── edit_task 防呆: 禁止改到已过去的时间 ──────────────
+    // ── edit_task guard: cannot change to a past time ─────────
 
     @Test
     void testEditToPastRaises() {
@@ -172,7 +172,7 @@ class TimeManagerTest {
         bus.start();
         sleep(150);
         TimeEventBus.ScheduledTask task = bus.scheduleTask("t", "CEO", 5, 1, null);
-        jump(bus, 6);  // tick 6 — 已过 tick 5
+        jump(bus, 6);  // tick 6 — past tick 5
         assertThrows(IllegalArgumentException.class, () -> bus.editTask(task.taskId, null, 3, null));
         assertThrows(IllegalArgumentException.class, () -> bus.editTask(task.taskId, null, 5, 1));
         TimeEventBus.ScheduledTask updated = bus.editTask(task.taskId, null, 20, null);
@@ -186,19 +186,19 @@ class TimeManagerTest {
         bus.start();
         sleep(150);
         TimeEventBus.ScheduledTask task = bus.scheduleTask("t", "CEO", 1, 2, null);
-        jump(bus, 147);  // 第 2 天已开始后, 把任务改回第 1 天 → 拒绝
+        jump(bus, 147);  // after Day 2 has started, moving the task back to Day 1 → rejected
         assertThrows(IllegalArgumentException.class, () -> bus.editTask(task.taskId, null, 1, 1));
     }
 
-    // ── 定时任务注册语义 ─────────────────────────────────
+    // ── Scheduled task registration semantics ────────────────
 
     @Test
     void testTaskRegisteredOnceOnCreation() {
         TimeEventBus bus = makeBus();
         bus.start();
         sleep(150);
-        bus.scheduleTask("今天的事", "r1", 5, 1, null);
-        assertEquals(1, bus.tickSchedule.size());  // 创建时已注册
+        bus.scheduleTask("Today's task", "r1", 5, 1, null);
+        assertEquals(1, bus.tickSchedule.size());  // registered at creation time
         bus.debugLoadTodayTasksToBus();
         assertEquals(1, bus.tickSchedule.size());
         List<Types.Event> due = bus.checkDueEvents(999);
@@ -211,12 +211,12 @@ class TimeManagerTest {
         TimeEventBus bus = makeBus();
         bus.start();
         sleep(150);
-        TimeEventBus.ScheduledTask task = bus.scheduleTask("明天的事", "r1", 5, 2, null);
-        assertTrue(task.eventId.isEmpty());  // 创建时是隔天 → 仅保存
+        TimeEventBus.ScheduledTask task = bus.scheduleTask("Tomorrow's task", "r1", 5, 2, null);
+        assertTrue(task.eventId.isEmpty());  // next-day task at creation → only saved
         assertEquals(0, bus.tickSchedule.size());
-        bus.debugSetTick(144);  // 快进跳到第 2 天
+        bus.debugSetTick(144);  // fast-forward to Day 2
         bus.debugLoadTodayTasksToBus();
-        assertTrue(!task.eventId.isEmpty());  // 现在补注册了
+        assertTrue(!task.eventId.isEmpty());  // now registered
         assertEquals(1, bus.tickSchedule.size());
         bus.debugLoadTodayTasksToBus();
         assertEquals(1, bus.tickSchedule.size());
@@ -227,14 +227,14 @@ class TimeManagerTest {
         TimeEventBus bus = makeBus();
         bus.start();
         sleep(150);
-        TimeEventBus.ScheduledTask task = bus.scheduleTask("只注册一次", "r1", 5, 1, null);
+        TimeEventBus.ScheduledTask task = bus.scheduleTask("Register only once", "r1", 5, 1, null);
         assertEquals(1, bus.tickSchedule.size());
-        // 异常路径: 重复注册 → 不重复入表
+        // abnormal path: duplicate registration → not added twice
         bus.debugRegisterTaskEventIfToday(task);
         assertEquals(1, bus.tickSchedule.size());
     }
 
-    // ── 辅助 ──────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────
 
     private static Types.Event ev(String eventType) {
         return new Types.Event("test", eventType, Types.Priority.NORMAL);

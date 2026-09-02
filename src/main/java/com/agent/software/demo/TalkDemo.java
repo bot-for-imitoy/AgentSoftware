@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 通信演示 (Python 版 talk_demo.py): 演示多角色 talk 协作链.
+ * Talk demo (Python version talk_demo.py): demonstrates multi-role talk collaboration chains.
  */
 public final class TalkDemo {
 
@@ -42,24 +42,24 @@ public final class TalkDemo {
         header("Inter-Role Communication — talk Tool Demo");
 
         AgentRole coder = AgentRole.builder()
-                .name("李明").roleId("coder").title("Senior Backend Engineer")
-                .personality("严谨细致，写完代码后主动找 reviewer 审查。遇到架构问题会咨询 architect。")
+                .name("Li Ming").roleId("coder").title("Senior Backend Engineer")
+                .personality("Rigorous and meticulous, proactively asks the reviewer to review after writing code. Consults the architect when facing architecture problems.")
                 .skills(List.of("Python", "Go", "PostgreSQL", "Kubernetes"))
                 .interestKeywords(new java.util.LinkedHashSet<>(List.of("bug", "fix", "crash", "code", "implement")))
                 .build();
 
         AgentRole reviewer = AgentRole.builder()
-                .name("张伟").roleId("reviewer").title("Code Review Lead")
-                .personality("审查代码时发现架构隐患会立即通知 architect。对安全问题零容忍。")
+                .name("Zhang Wei").roleId("reviewer").title("Code Review Lead")
+                .personality("Immediately notifies the architect when a review uncovers architecture risks. Zero tolerance for security issues.")
                 .skills(List.of("Code Review", "Security Audit"))
                 .interestKeywords(new java.util.LinkedHashSet<>(List.of("pr", "review", "security", "code")))
                 .build();
 
         AgentRole architect = AgentRole.builder()
-                .name("王建国").roleId("architect").title("System Architect")
-                .personality("收到咨询后给出简洁方案。如果需要代码实现，会委托 coder 执行。")
+                .name("Wang Jianguo").roleId("architect").title("System Architect")
+                .personality("Gives concise solutions when consulted. If code implementation is needed, delegates the execution to the coder.")
                 .skills(List.of("System Design", "Microservices", "DDD"))
-                .interestKeywords(new java.util.LinkedHashSet<>(List.of("architecture", "design", "migration", "架构")))
+                .interestKeywords(new java.util.LinkedHashSet<>(List.of("architecture", "design", "migration", "architecture")))
                 .build();
 
         RolePool pool = new RolePool();
@@ -98,15 +98,15 @@ public final class TalkDemo {
         System.out.println("  " + YELLOW + "Starting: Coder implements a feature, should ask reviewer to review" + RESET + "\n");
 
         pool.assignTask("coder", new AgentRole.Task(AgentRole.Urgency.HIGH.value,
-                "我刚实现了一个 JWT refresh token 轮换功能。代码在 PR #188。\n"
-                        + "请使用 talk 工具通知 reviewer 进行代码审查，urgency 设为 HIGH。\n"
-                        + "先简单描述你实现了什么，然后调用 talk 发送审查请求。",
+                "I just implemented a JWT refresh token rotation feature. The code is in PR #188.\n"
+                        + "Please use the talk tool to notify the reviewer to do a code review, and set urgency to HIGH.\n"
+                        + "First briefly describe what you implemented, then call talk to send the review request.",
                 "github", new LinkedHashMap<>()));
 
         sleep(20_000);
 
         header("Direct talk: Architect asks Coder a question");
-        coder.talkTo("architect", "需要确认一下：新的 API gateway 应该用 REST 还是 gRPC？", "NORMAL");
+        coder.talkTo("architect", "Need to confirm: should the new API gateway use REST or gRPC?", "NORMAL");
 
         sleep(10_000);
 

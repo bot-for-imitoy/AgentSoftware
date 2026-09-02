@@ -6,20 +6,20 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 核心数据类型 (Python 版 types.py 的 Java 对应物).
+ * Core data types (the Java counterpart of the Python types.py).
  */
 public final class Types {
 
     private Types() {
     }
 
-    /** Agent 生命周期状态枚举. */
+    /** Agent lifecycle state enum. */
     public enum AgentState {
-        OFF_DUTY("OFF_DUTY"),       // 下班 — context flushed, not processing
-        ON_DUTY_IDLE("ON_DUTY_IDLE"), // 上班空闲 — alive, listening for events
-        ON_DUTY_BUSY("ON_DUTY_BUSY"), // 上班忙碌 — executing a workflow
-        WRAPPING_UP("WRAPPING_UP"),  // 收尾中 — finishing last task before shift end
-        WAIT("WAIT");                // 等待中 — talk wait=true 同步等待对方回复
+        OFF_DUTY("OFF_DUTY"),       // off duty — context flushed, not processing
+        ON_DUTY_IDLE("ON_DUTY_IDLE"), // on duty, idle — alive, listening for events
+        ON_DUTY_BUSY("ON_DUTY_BUSY"), // on duty, busy — executing a workflow
+        WRAPPING_UP("WRAPPING_UP"),  // wrapping up — finishing the last task before shift end
+        WAIT("WAIT");                // waiting — talk wait=true, synchronously waiting for the other party's reply
 
         public final String value;
 
@@ -33,7 +33,7 @@ public final class Types {
                     return s;
                 }
             }
-            throw new IllegalArgumentException("未知 AgentState: " + value);
+            throw new IllegalArgumentException("Unknown AgentState: " + value);
         }
 
         @Override
@@ -42,7 +42,7 @@ public final class Types {
         }
     }
 
-    /** 事件优先级: 数值越大越紧急. LOW=1, NORMAL=3, HIGH=6, EMERGENCY=10. */
+    /** Event priority: higher value is more urgent. LOW=1, NORMAL=3, HIGH=6, EMERGENCY=10. */
     public enum Priority {
         LOW(1), NORMAL(3), HIGH(6), EMERGENCY(10);
 
@@ -67,15 +67,14 @@ public final class Types {
         }
     }
 
-    /** 失败文本谓词: 统一错误前缀约定 (is_failure_text). */
+    /** Failure-text predicate: unified error prefix convention (is_failure_text). */
     public static boolean isFailureText(String s) {
-        return s.startsWith("[exit") || s.startsWith("错误") || s.startsWith("Error")
-                || s.startsWith("error") || s.startsWith("文件不存在")
-                || s.startsWith("File not found") || s.startsWith("目录不存在")
+        return s.startsWith("[exit") || s.startsWith("Error")
+                || s.startsWith("error") || s.startsWith("File not found")
                 || s.startsWith("Directory not found");
     }
 
-    /** 标准化事件 (types.py 的 Event). */
+    /** Normalized event (the Event of types.py). */
     public static final class Event {
         public String id;
         public String source = "";        // e.g. "github", "email", "slack", "cron", "time", "task"
@@ -83,9 +82,9 @@ public final class Types {
         public Priority priority = Priority.NORMAL;
         public Map<String, Object> payload = new LinkedHashMap<>();
         public Instant timestamp = Instant.now();
-        /** 定向投递: 只发给指定 role_id (null = 广播给所有角色). */
+        /** Directed delivery: only sent to the given role_id (null = broadcast to all roles). */
         public String targetRole = null;
-        /** 触发 Tick: null = 立即触发; 整数 = 在指定绝对 Tick 触发. */
+        /** Trigger tick: null = fire immediately; an integer = fire at the given absolute tick. */
         public Integer triggerTick = null;
 
         public Event() {

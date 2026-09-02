@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * get_time — 查看当前作息时间 (当前 Tick 数和作息状态).
- * 时间规则: 1 Tick = 10 分钟, 系统启动 = Tick 0, 每天第 60 Tick 下班.
+ * get_time — view the current schedule time (current tick count and schedule state).
+ * Time rules: 1 tick = 10 minutes, system start = tick 0, off work at tick 60 each day.
  */
 public class GetTime extends Tool {
 

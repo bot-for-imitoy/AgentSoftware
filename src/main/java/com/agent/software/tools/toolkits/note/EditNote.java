@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * edit_note — 编辑已有笔记 (覆盖原内容), 不存在则自动创建.
- * 提供 reminder_tick 可重置提醒时间; 不提供则保留原提醒.
+ * edit_note - edit an existing note (overwrites the original content); creates it automatically if it does not exist.
+ * Providing reminder_tick resets the reminder time; omitting it keeps the original reminder.
  */
 public class EditNote extends Tool {
 
@@ -76,7 +76,7 @@ public class EditNote extends Tool {
         return "edit_note: Note updated: " + name;
     }
 
-    /** 兼容 Integer / Number / 数字字符串. 无法解析返回 null. */
+    /** Accepts Integer / Number / numeric string. Returns null if it cannot be parsed. */
     private static Integer toInt(Object o) {
         if (o instanceof Integer) {
             return (Integer) o;

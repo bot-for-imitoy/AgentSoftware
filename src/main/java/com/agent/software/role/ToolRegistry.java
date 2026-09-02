@@ -12,23 +12,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * MCP + Python Tool System (Python 版 tools.py 的 Java 对应物).
+ * MCP + Python Tool System (Java counterpart of the Python tools.py).
  *
- * 两层架构:
- *   ToolKit      — 一组相关工具的命名集合 (MCP 或 Python 原生).
- *   ToolRegistry — 每角色工具注册表, 管理 ToolKit.
+ * Two-layer architecture:
+ *   ToolKit      — a named collection of related tools (MCP or Python native).
+ *   ToolRegistry — per-role tool registry, managing ToolKits.
  */
 public class ToolRegistry {
 
     private static final Logger logger = LoggerFactory.getLogger(ToolRegistry.class);
 
-    /** 工具 handler: 接收参数字典, 返回字符串结果 (Python ToolHandler 语义). */
+    /** Tool handler: receives an argument dictionary, returns a string result (Python ToolHandler semantics). */
     @FunctionalInterface
     public interface ToolHandler {
         String handle(Map<String, Object> args);
     }
 
-    /** 统一工具定义 — MCP 与 Python 原生工具共用. */
+    /** Unified tool definition — shared by MCP and Python native tools. */
     public static final class ToolDef {
         public String name;
         public String description = "";
@@ -47,7 +47,7 @@ public class ToolRegistry {
         }
     }
 
-    /** MCP 工具结果文本内容 (CallToolResult 的组成). */
+    /** Text content of an MCP tool result (a component of CallToolResult). */
     public static final class TextContent {
         public String type = "text";
         public String text = "";
@@ -57,7 +57,7 @@ public class ToolRegistry {
         }
     }
 
-    /** MCP 工具调用结果. */
+    /** MCP tool call result. */
     public static final class CallToolResult {
         public List<TextContent> content = new ArrayList<>();
         public boolean isError = false;
@@ -68,12 +68,12 @@ public class ToolRegistry {
         }
     }
 
-    /** 一组相关工具 (Python 原生 / MCP / 混合). */
+    /** A group of related tools (Python native / MCP / mixed). */
     public static final class ToolKit {
         public String name;
         public String description;
         private final Map<String, ToolDef> tools = new LinkedHashMap<>();
-        /** 工具类上下文绑定 (role / manager / store 等). */
+        /** Toolkit context bindings (role / manager / store, etc.). */
         private final Map<String, Object> bindings = new LinkedHashMap<>();
 
         public ToolKit(String name, String description) {
@@ -81,7 +81,7 @@ public class ToolRegistry {
             this.description = description != null ? description : "";
         }
 
-        // ── 上下文绑定 (bind/require) ─────────────────────────
+        // ── Context bindings (bind/require) ─────────────────────────
 
         public void bind(String key, Object value) {
             bindings.put(key, value);
@@ -91,18 +91,18 @@ public class ToolRegistry {
             return bindings.getOrDefault(key, def);
         }
 
-        /** 读取绑定上下文, 未绑定时抛清晰错误. */
+        /** Read a bound context value; throws a clear error if unbound. */
         public Object require(String key, String what) {
             Object v = bindings.get(key);
             if (v == null) {
-                throw new RuntimeException(what + "尚未绑定, 请通过 role.addToolkit() 注册该工具类");
+                throw new RuntimeException(what + " is not bound; register this toolkit via role.addToolkit()");
             }
             return v;
         }
 
         // ── Python tool management ────────────────────────────
 
-        /** 添加 Python 原生工具. */
+        /** Add a Python native tool. */
         public ToolDef addPythonTool(String name, String description,
                                      Map<String, Object> inputSchema, ToolHandler handler) {
             if (tools.containsKey(name)) {
@@ -114,7 +114,7 @@ public class ToolRegistry {
             return td;
         }
 
-        /** 直接添加已构建的 ToolDef (source 由 td 自带, 供 MCP 工具等使用). */
+        /** Directly add a pre-built ToolDef (source comes from td itself, for MCP tools, etc.). */
         public void addTool(ToolDef td) {
             if (tools.containsKey(td.name)) {
                 throw new IllegalArgumentException("Tool '" + td.name + "' already exists in toolkit '" + this.name + "'");
@@ -123,7 +123,7 @@ public class ToolRegistry {
             logger.info("ToolKit[{}] tool added: {} (source={})", this.name, td.name, td.source);
         }
 
-        /** 删除工具. 返回是否存在. */
+        /** Remove a tool. Returns whether it existed. */
         public boolean removeTool(String name) {
             return tools.remove(name) != null;
         }
@@ -151,7 +151,7 @@ public class ToolRegistry {
     private final Map<String, ToolKit> toolkits = new LinkedHashMap<>(); // loaded toolkits by name
     private final Map<String, String> toolSource = new LinkedHashMap<>(); // tool_name → toolkit_name
 
-    /** 导入整个工具类. 返回新增工具数 (重复跳过). */
+    /** Import an entire toolkit. Returns the number of newly added tools (duplicates skipped). */
     public int addToolkit(ToolKit toolkit) {
         if (toolkits.containsKey(toolkit.name)) {
             logger.warn("Toolkit '{}' already loaded, skipping", toolkit.name);
@@ -176,10 +176,10 @@ public class ToolRegistry {
     }
 
     /**
-     * 直接导入模板风格工具类 (tools.Toolkit / tools.Tool, 见 toolkits.* 实现).
-     * 每个 Tool 注册为 Python 原生工具: 工具名/描述取自 Tool,
-     * 扁平参数说明由 {@link Tool#getInputSchema()} 转为 OpenAI 风格 input_schema,
-     * handler 即 Tool 的执行方法.
+     * Directly import a template-style toolkit (tools.Toolkit / tools.Tool, see toolkits.* implementations).
+     * Each Tool is registered as a Python native tool: tool name/description are taken from the Tool,
+     * the flat parameter spec is converted from {@link Tool#getInputSchema()} into an OpenAI-style input_schema,
+     * and the handler is the Tool's execution method.
      */
     public int addToolkit(Toolkit toolkit) {
         ToolKit tk = new ToolKit(toolkit.getName(), toolkit.getDescription());
@@ -190,7 +190,7 @@ public class ToolRegistry {
         return addToolkit(tk);
     }
 
-    /** 移除一个工具类及其全部工具. 返回移除的工具数. */
+    /** Remove a toolkit and all of its tools. Returns the number of tools removed. */
     public int removeToolkit(String name) {
         ToolKit tk = toolkits.remove(name);
         if (tk == null) {
@@ -207,7 +207,7 @@ public class ToolRegistry {
         return removed;
     }
 
-    /** 注册单个工具. */
+    /** Register a single tool. */
     public void addTool(String name, String description, Map<String, Object> inputSchema,
                         ToolHandler handler, String source) {
         if (tools.containsKey(name)) {
@@ -224,7 +224,7 @@ public class ToolRegistry {
         toolSource.remove(name);
     }
 
-    /** 返回全部工具 (LLM 兼容格式). */
+    /** Return all tools (LLM-compatible format). */
     public List<Map<String, Object>> listTools() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (ToolDef td : tools.values()) {
@@ -237,7 +237,7 @@ public class ToolRegistry {
         return out;
     }
 
-    /** 执行工具. 搜索所有已加载的工具类. */
+    /** Execute a tool. Searches all loaded toolkits. */
     public CallToolResult callTool(String name, Map<String, Object> arguments) {
         ToolDef td = tools.get(name);
         if (td == null) {
@@ -257,7 +257,7 @@ public class ToolRegistry {
         }
     }
 
-    /** 生成 OpenAI 原生 function calling 格式的工具声明列表. */
+    /** Generate tool declarations in OpenAI native function-calling format. */
     public List<Map<String, Object>> toOpenaiTools() {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<String, Object> t : listTools()) {
@@ -296,7 +296,7 @@ public class ToolRegistry {
         return tools.get(name);
     }
 
-    /** 构造 MCP 工具调用 handler: handler(args) → server.callTool(toolName, args). */
+    /** Build an MCP tool-call handler: handler(args) → server.callTool(toolName, args). */
     public static ToolHandler makeMcpHandler(MCPServer server, String toolName) {
         return args -> server.callTool(toolName, args);
     }

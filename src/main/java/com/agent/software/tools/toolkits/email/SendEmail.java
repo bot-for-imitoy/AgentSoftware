@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * send_email — 给同事发送公司邮件 (员工之间正式沟通/跨组沟通的方式).
- * to 用同事姓名 (见 mail_address_book 通讯录) 或完整邮箱地址; 可一次发给多人.
+ * send_email - send company mail to colleagues (the way employees communicate formally/across groups).
+ * to takes a colleague name (see the mail_address_book directory) or a full email address; can be sent to multiple people at once.
  */
 public class SendEmail extends Tool {
 
@@ -75,11 +75,11 @@ public class SendEmail extends Tool {
         if (!failed.isEmpty()) {
             result += " Note: the following recipients were not found and were not sent: " + String.join(", ", failed);
         }
-        agentRole.journal("发送邮件: 「" + subject + "」 → " + String.join(", ", to));
+        agentRole.journal("Sent mail: \"" + subject + "\" -> " + String.join(", ", to));
         return "send_email: " + result;
     }
 
-    /** 批量解析收件人 (人名或邮箱混合, 支持逗号分隔字符串/列表). */
+    /** Resolve recipients in batch (a mix of names or emails, supports comma-separated strings/lists). */
     private List<String> resolveRecipients(RolePool pool, Object values, List<String> failed) {
         List<String> parts = new ArrayList<>();
         if (values instanceof String s) {
@@ -110,7 +110,7 @@ public class SendEmail extends Tool {
         return emails;
     }
 
-    /** 把一个人名/邮箱解析为邮箱地址; 无法解析返回空串. */
+    /** Resolve a name/email to an email address; returns an empty string if it cannot be resolved. */
     private String resolveAddress(RolePool pool, String value) {
         String v = (value == null ? "" : value).strip();
         if (v.isEmpty()) {

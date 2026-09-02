@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * mcp_my_tools — 查看当前角色已添加的 MCP 工具列表.
+ * mcp_my_tools - view the list of MCP tools already added to the current role.
  */
 public class McpMyTools extends Tool {
 

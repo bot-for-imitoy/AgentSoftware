@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * delete_note — 删除笔记 (同时取消其关联提醒).
+ * delete_note - delete a note (also cancels its associated reminder).
  */
 public class DeleteNote extends Tool {
 

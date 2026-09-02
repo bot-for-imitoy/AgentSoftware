@@ -25,19 +25,19 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Web 界面服务器 (JDK 内置 HttpServer, 零新增依赖):
+ * Web UI server (JDK built-in HttpServer, zero extra dependencies):
  *
  * <ul>
- *   <li>静态资源: classpath {@code /web/*} (index.html / style.css / app.js);</li>
- *   <li>{@code GET /api/state}   — 分组花名册 + 系统时间 + 甲方对话状态;</li>
- *   <li>{@code GET /api/messages?since=N} — seq 大于 N 的新消息;</li>
- *   <li>{@code POST /api/reply}  — 甲方提交回复 {@code {"text": "..."}};</li>
- *   <li>{@code POST /api/attach} — Web 前端挂载心跳 (任意 API 轮询也会刷新心跳).</li>
+ *   <li>Static resources: classpath {@code /web/*} (index.html / style.css / app.js);</li>
+ *   <li>{@code GET /api/state}   — group roster + system time + client dialogue state;</li>
+ *   <li>{@code GET /api/messages?since=N} — new messages with seq &gt; N;</li>
+ *   <li>{@code POST /api/reply}  — the client submits a reply {@code {"text": "..."}};</li>
+ *   <li>{@code POST /api/attach} — Web frontend attach heartbeat (any API poll also refreshes the heartbeat).</li>
  * </ul>
  *
- * <p>绑定地址/端口/甲方回复超时通过环境变量或系统属性配置
- * ({@code AGENTCOMPANY_WEB_HOST} / {@code AGENTCOMPANY_WEB_PORT} /
- * {@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}), 约定与 PathManager 一致.
+ * <p>Bind address/port/client-reply timeout are configured via environment variables or system
+ * properties ({@code AGENTCOMPANY_WEB_HOST} / {@code AGENTCOMPANY_WEB_PORT} /
+ * {@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}), following the same convention as PathManager.
  */
 public final class ChatWebServer {
 
@@ -45,7 +45,7 @@ public final class ChatWebServer {
 
     public static final String DEFAULT_HOST = "0.0.0.0";
     public static final int DEFAULT_PORT = 8787;
-    /** 甲方回复超时默认 20 分钟 (Web 模式). */
+    /** Default client-reply timeout is 20 minutes (Web mode). */
     public static final long DEFAULT_REPLY_TIMEOUT_MS = 20 * 60 * 1000L;
 
     private static final Map<String, String> MIME = new LinkedHashMap<>();
@@ -61,26 +61,26 @@ public final class ChatWebServer {
         MIME.put("txt", "text/plain; charset=utf-8");
     }
 
-    /** 分组英文名 → 中文标签 (Web 界面展示). */
+    /** Group English name → display label (shown in the Web UI). */
     private static final Map<String, String> GROUP_LABELS = new LinkedHashMap<>();
 
     static {
-        GROUP_LABELS.put("Leadership Group", "领导组");
-        GROUP_LABELS.put("Frontend Development Group", "前端开发组");
-        GROUP_LABELS.put("Backend Development Group", "后端开发组");
-        GROUP_LABELS.put("Mobile Development Group", "移动开发组");
-        GROUP_LABELS.put("Full-Stack Development Group", "全栈开发组");
-        GROUP_LABELS.put("Testing Group", "测试组");
-        GROUP_LABELS.put("Security Group", "安全组");
-        GROUP_LABELS.put("Architecture & Release Group", "架构与发布组");
-        GROUP_LABELS.put("Operations Group", "运维组");
-        GROUP_LABELS.put("Marketing Group", "市场组");
-        GROUP_LABELS.put("Data Group", "数据组");
-        GROUP_LABELS.put("Support Group", "客服组");
-        GROUP_LABELS.put("", "未分组");
+        GROUP_LABELS.put("Leadership Group", "Leadership Group");
+        GROUP_LABELS.put("Frontend Development Group", "Frontend Development Group");
+        GROUP_LABELS.put("Backend Development Group", "Backend Development Group");
+        GROUP_LABELS.put("Mobile Development Group", "Mobile Development Group");
+        GROUP_LABELS.put("Full-Stack Development Group", "Full-Stack Development Group");
+        GROUP_LABELS.put("Testing Group", "Testing Group");
+        GROUP_LABELS.put("Security Group", "Security Group");
+        GROUP_LABELS.put("Architecture & Release Group", "Architecture & Release Group");
+        GROUP_LABELS.put("Operations Group", "Operations Group");
+        GROUP_LABELS.put("Marketing Group", "Marketing Group");
+        GROUP_LABELS.put("Data Group", "Data Group");
+        GROUP_LABELS.put("Support Group", "Support Group");
+        GROUP_LABELS.put("", "Unassigned");
     }
 
-    /** 配置读取: 环境变量优先, 回退系统属性 (与 PathManager 约定一致). */
+    /** Config reading: environment variable first, falling back to system property (same convention as PathManager). */
     private static String config(String key, String def) {
         String v = System.getenv(key);
         if (v != null && !v.isEmpty()) {
@@ -90,12 +90,12 @@ public final class ChatWebServer {
         return p == null || p.isEmpty() ? def : p;
     }
 
-    /** 绑定地址 (默认 0.0.0.0). */
+    /** Bind address (default 0.0.0.0). */
     public static String configuredHost() {
         return config("AGENTCOMPANY_WEB_HOST", DEFAULT_HOST);
     }
 
-    /** 监听端口 (默认 8787; 0 = 随机端口, 测试用). */
+    /** Listening port (default 8787; 0 = random port, for tests). */
     public static int configuredPort() {
         try {
             return Integer.parseInt(config("AGENTCOMPANY_WEB_PORT", String.valueOf(DEFAULT_PORT)));
@@ -104,7 +104,7 @@ public final class ChatWebServer {
         }
     }
 
-    /** 甲方回复超时毫秒数. */
+    /** Client reply timeout in milliseconds. */
     public static long replyTimeoutMs() {
         try {
             return Long.parseLong(config("AGENTCOMPANY_CLIENT_REPLY_TIMEOUT",
@@ -120,37 +120,37 @@ public final class ChatWebServer {
     private final String host;
     private final int port;
 
-    /** 默认配置创建 (host/port 走环境变量或系统属性). */
+    /** Created with default config (host/port via environment variable or system property). */
     public ChatWebServer(AgentSystem system) throws IOException {
         this(system, configuredHost(), configuredPort());
     }
 
-    /** 显式 host/port 创建 (port=0 时使用随机端口, 便于测试). */
+    /** Created with explicit host/port (port=0 uses a random port, convenient for tests). */
     public ChatWebServer(AgentSystem system, String host, int port) throws IOException {
         this.system = system;
-        this.store = system.chatStore;  // 每套 AgentSystem 自持 ChatStore
+        this.store = system.chatStore;  // each AgentSystem holds its own ChatStore
         this.host = host;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.port = server.getAddress().getPort();
         server.createContext("/", this::handle);
-        // 默认单线程 executor 即可: API 极轻量, 静态资源读取也很快
+        // A default single-thread executor is enough: the API is very lightweight and static resources are fast to read
         server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
     }
 
-    /** 启动服务器 (非阻塞). */
+    /** Starts the server (non-blocking). */
     public void start() {
         server.start();
-        logger.info("ChatWebServer 已启动: http://{}:{}/ (分组聊天 + 甲方对话 Web 界面)",
+        logger.info("ChatWebServer started: http://{}:{}/ (group chat + client dialogue Web UI)",
                 host, port);
     }
 
-    /** 停止服务器. */
+    /** Stops the server. */
     public void stop() {
         server.stop(0);
-        logger.info("ChatWebServer 已停止");
+        logger.info("ChatWebServer stopped");
     }
 
-    /** 实际监听端口 (配置 0 时返回随机分配的真实端口). */
+    /** Actual listening port (returns the real randomly assigned port when configured with 0). */
     public int port() {
         return port;
     }
@@ -159,7 +159,7 @@ public final class ChatWebServer {
         return host;
     }
 
-    // ── HTTP 处理 ───────────────────────────────────────────
+    // ── HTTP handling ───────────────────────────────────────────
 
     private void handle(HttpExchange ex) throws IOException {
         try {
@@ -170,12 +170,12 @@ public final class ChatWebServer {
                 handleStatic(ex, path);
             }
         } catch (Exception e) {
-            logger.error("ChatWebServer: 请求处理失败 {} {}", ex.getRequestMethod(),
-                    ex.getRequestURI(), e);
+            logger.error("ChatWebServer: request handling failed {} {}",
+                    ex.getRequestMethod(), ex.getRequestURI(), e);
             try {
                 sendJson(ex, 500, Map.of("ok", false, "reason", "internal error: " + e.getMessage()));
             } catch (IOException io) {
-                logger.warn("ChatWebServer: 发送 500 响应失败", io);
+                logger.warn("ChatWebServer: failed to send 500 response", io);
             }
         } finally {
             ex.close();
@@ -184,7 +184,7 @@ public final class ChatWebServer {
 
     private void handleApi(HttpExchange ex, String path) throws IOException {
         if (store != null) {
-            store.markAttached();  // 任意 API 轮询都刷新 Web 挂载心跳
+            store.markAttached();  // any API poll refreshes the Web attach heartbeat
         }
         switch (path) {
             case "/api/state" -> sendJson(ex, 200, apiState());
@@ -223,17 +223,17 @@ public final class ChatWebServer {
         return resp;
     }
 
-    /** 分组花名册: 当前角色池 (在职) + 角色模板 (未入职但属于该组) 合并, 领导组排最前. */
+    /** Group roster: current role pool (active members) + role templates (not yet hired but in the group) merged; leadership group first. */
     private List<Map<String, Object>> buildGroups() {
         Map<String, Map<String, Object>> groups = new LinkedHashMap<>();
         Set<String> seenRoleIds = new HashSet<>();
-        // 1) 当前角色池 (在职成员, 含动态入职新人)
+        // 1) Current role pool (active members, including dynamically hired newcomers)
         if (system.pool != null) {
             for (AgentRole r : system.pool.allRoles()) {
                 addMember(groups, seenRoleIds, r);
             }
         }
-        // 2) 模板补全: 未入职但属于某组的成员 (完整花名册)
+        // 2) Template completion: members not hired but belonging to a group (full roster)
         for (Map.Entry<String, Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
             if (!seenRoleIds.contains(e.getKey())) {
                 addMember(groups, seenRoleIds, e.getValue().get());
@@ -246,7 +246,7 @@ public final class ChatWebServer {
             g.put("label", labelFor(e.getKey()));
             out.add(g);
         }
-        // 领导组排最前, 其余按组名排序
+        // Leadership group first, the rest sorted by group name
         out.sort(Comparator
                 .comparingInt((Map<String, Object> g) -> Toolkits.LEADERSHIP_GROUP.equals(g.get("key")) ? 0 : 1)
                 .thenComparing(g -> (String) g.get("key")));
@@ -272,7 +272,7 @@ public final class ChatWebServer {
     }
 
     private static String labelFor(String groupKey) {
-        return GROUP_LABELS.getOrDefault(groupKey, groupKey.isEmpty() ? "未分组" : groupKey);
+        return GROUP_LABELS.getOrDefault(groupKey, groupKey.isEmpty() ? "Unassigned" : groupKey);
     }
 
     // ── /api/messages ───────────────────────────────────────
@@ -319,12 +319,12 @@ public final class ChatWebServer {
             return;
         }
         if (reply.isEmpty()) {
-            sendJson(ex, 400, Map.of("ok", false, "reason", "回复内容不能为空"));
+            sendJson(ex, 400, Map.of("ok", false, "reason", "reply text must not be empty"));
             return;
         }
         ChatStore.ChatMessage recorded = store.postClientReply(reply);
         if (recorded == null) {
-            sendJson(ex, 409, Map.of("ok", false, "reason", "当前没有等待中的甲方对话"));
+            sendJson(ex, 409, Map.of("ok", false, "reason", "no client dialogue is currently pending"));
             return;
         }
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -334,7 +334,7 @@ public final class ChatWebServer {
         sendJson(ex, 200, resp);
     }
 
-    // ── 静态资源 ────────────────────────────────────────────
+    // ── Static resources ────────────────────────────────────
 
     private void handleStatic(HttpExchange ex, String path) throws IOException {
         String name = path.equals("/") ? "index.html" : path.substring(1);
@@ -364,7 +364,7 @@ public final class ChatWebServer {
         }
     }
 
-    // ── 响应工具 ────────────────────────────────────────────
+    // ── Response helpers ────────────────────────────────────
 
     private static void sendJson(HttpExchange ex, int status, Object body) throws IOException {
         byte[] bytes = Json.stringify(body).getBytes(StandardCharsets.UTF_8);

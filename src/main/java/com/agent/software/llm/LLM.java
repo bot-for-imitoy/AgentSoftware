@@ -4,19 +4,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * LLM 客户端接口 (Python 版 llm.py 公共接口, 与 MockLLM 同形):
+ * LLM client interface (the public interface of the Python llm.py, same shape as MockLLM):
  * <ul>
  *   <li>{@link #chat} → (responseText, tokensConsumed)</li>
  *   <li>{@link #summarize} → (summaryText, tokensConsumed)</li>
- *   <li>{@link #chatWithTools} → 原生 function calling</li>
+ *   <li>{@link #chatWithTools} → native function calling</li>
  * </ul>
  */
 public interface LLM {
 
-    /** LLM 调用失败时的错误文本标记 (本包产生这些前缀, 消费方 roles 据此把任务标记为失败). */
+    /** Error text marker when an LLM call fails (this package produces these prefixes, and consumer roles use them to mark tasks as failed). */
     String LLM_ERROR_MARKERS = "[API error:";
 
-    /** 聊天响应: 文本 + Token 数. */
+    /** Chat response: text + token count. */
     final class ChatResponse {
         public final String text;
         public final int tokens;
@@ -27,7 +27,7 @@ public interface LLM {
         }
     }
 
-    /** 原生 function calling 响应: content + 原始 tool_calls + usage. */
+    /** Native function calling response: content + raw tool_calls + usage. */
     final class ToolsResponse {
         public final String content;
         public final List<Map<String, Object>> toolCalls;
@@ -40,7 +40,7 @@ public interface LLM {
             this.usage = usage;
         }
 
-        /** 单任务累计 token (usage.total_tokens, 无 usage 时 0). */
+        /** Total tokens for a single task (usage.total_tokens, 0 when usage is absent). */
         public int totalTokens() {
             if (usage == null) {
                 return 0;
@@ -53,13 +53,13 @@ public interface LLM {
         }
     }
 
-    /** 发送聊天请求. */
+    /** Send a chat request. */
     ChatResponse chat(String system, String user, double temperature, Integer maxTokens);
 
-    /** 从日志/文本生成简洁总结. */
+    /** Generate a concise summary from logs/text. */
     ChatResponse summarize(String logText, double temperature, Integer maxTokens);
 
-    /** 原生 function calling 请求 (OpenAI 兼容). */
+    /** Native function calling request (OpenAI compatible). */
     ToolsResponse chatWithTools(List<Map<String, Object>> messages,
                                 List<Map<String, Object>> tools,
                                 double temperature, Integer maxTokens);

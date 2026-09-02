@@ -16,20 +16,20 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Podman 容器虚拟电脑 (默认实现) — Python 版 PodmanComputer.
+ * Podman container virtual computer (default implementation) — the Java counterpart of the Python PodmanComputer.
  *
- * 每个角色一个容器 (名 maf-&lt;role_id&gt;), 命令经 podman exec 执行.
- * 需要本机安装 podman; 未安装时构造直接抛 RuntimeException.
+ * Each role gets one container (named maf-&lt;role_id&gt;); commands run via podman exec.
+ * Requires podman installed on the host; the constructor throws RuntimeException if it is missing.
  */
 public class PodmanComputer extends Computer {
 
     private static final Logger logger = LoggerFactory.getLogger(PodmanComputer.class);
 
     public final String image;
-    public final String username;      // 容器内用户名 = 员工名字的汉语拼音
-    public final int uid;              // 容器内 uid (文件所有权区分)
-    public final boolean isCeo;        // Public 目录属主 (CEO 的用户)
-    public final String name;          // 角色中文名 (云盘个人目录名)
+    public final String username;      // in-container username = pinyin of the employee name
+    public final int uid;              // in-container uid (distinguishes file ownership)
+    public final boolean isCeo;        // owner of the Public dir (the CEO's user)
+    public final String name;          // role display name (kept for reference)
     public final String containerName;
 
     private boolean mcpPkgInstalled = false;
@@ -45,12 +45,13 @@ public class PodmanComputer extends Computer {
         this.containerName = "maf-" + (roleId == null || roleId.isEmpty() ? "shared" : roleId);
         if (findExecutable("podman") == null) {
             throw new RuntimeException(
-                    "Podman 未安装, 无法创建角色 " + roleId + " 的电脑容器 (PodmanComputer 需要 podman; "
-                            + "如需本地模拟请显式使用 create_computer(kind='local')).");
+                    "Podman is not installed; cannot create the computer container for role " + roleId
+                            + " (PodmanComputer requires podman; "
+                            + "for local emulation, explicitly use create_computer(kind='local')).");
         }
     }
 
-    /** 在 PATH 中查找可执行文件. */
+    /** Finds an executable on the PATH. */
     public static String findExecutable(String exe) {
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) {
@@ -68,14 +69,14 @@ public class PodmanComputer extends Computer {
         return null;
     }
 
-    /** 云盘个人目录名: 员工名字 (根目录文件夹 = 各角色名字). */
+    /** Cloud drive personal directory name: the employee's username (each role's own folder). */
     private String driveDirName() {
-        return !name.isEmpty() ? name : username;
+        return !username.isEmpty() ? username : name;
     }
 
     @Override
     public String hostDir() {
-        // 容器挂载的宿主机目录: data/computers/<role> ↔ 容器内 /home/<username>
+        // Host directory mounted into the container: data/computers/<role> ↔ in-container /home/<username>
         return Paths.get("./data/computers").toAbsolutePath().resolve(roleId == null || roleId.isEmpty() ? "shared" : roleId).toString();
     }
 
@@ -84,7 +85,7 @@ public class PodmanComputer extends Computer {
         return "/home/" + username;
     }
 
-    /** 获取本电脑在自定义桥接网络 (maf-net) 中的 IP 地址. */
+    /** Gets this computer's IP address on the custom bridge network (maf-net). */
     public String getLanIp() {
         try {
             String fmt = "{{(index .NetworkSettings.Networks \"%s\").IPAddress}}"
@@ -93,31 +94,31 @@ public class PodmanComputer extends Computer {
             String ip = (r.stdout == null ? "" : r.stdout).strip();
             return ip.isEmpty() ? "" : ip;
         } catch (Exception e) {
-            logger.warn("电脑[{}] 获取内网 IP 失败", roleId);
+            logger.warn("Computer[{}] failed to get in-container IP", roleId);
             return "";
         }
     }
 
     @Override
     public List<String> installMcpServer() {
-        // C 方案: MCP 服务器跑在容器内 (podman exec -i 保持 stdio 管道)
+        // Plan C: the MCP server runs inside the container (podman exec -i keeps the stdio pipe)
         if (mcpServer != null) {
             return listInstalledMcpTools();
         }
         if (!autoMcp) {
-            logger.info("电脑[{}] 非自动创建, 不自动安装 MCP 服务器", roleId);
+            logger.info("Computer[{}] not auto-created; skipping automatic MCP server install", roleId);
             return new ArrayList<>();
         }
         try {
-            ensureContainer();  // 确保容器运行 + 包已预装
+            ensureContainer();  // ensure the container is running + the package is preinstalled
             mcpServer = new MCPServer(MCP_FILESYSTEM_PACKAGE,
-                    List.of("/"),  // 授权容器内全部文件
+                    List.of("/"),  // authorize all files inside the container
                     "podman",
                     List.of("exec", "-i", "--user", username, containerName, "node",
                             "/usr/local/bin/mcp-server-filesystem", "/"));
             mcpServer.connect();
             if (!mcpServer.isAlive(5.0)) {
-                throw new RuntimeException("容器内 MCP 服务器连接失败");
+                throw new RuntimeException("Failed to connect to the in-container MCP server");
             }
             for (Map<String, Object> tool : mcpServer.listTools()) {
                 String tname = String.valueOf(tool.get("name"));
@@ -133,11 +134,11 @@ public class PodmanComputer extends Computer {
                         "mcp:" + MCP_FILESYSTEM_PACKAGE + " (inside container " + containerName + ")");
                 mcpTools.put(tname, td);
             }
-            logger.info("电脑[{}] 容器内 MCP 服务器已安装, {} 个工具: {}",
+            logger.info("Computer[{}] in-container MCP server installed, {} tools: {}",
                     roleId, mcpTools.size(), listInstalledMcpTools());
         } catch (Exception exc) {
             connectError = String.valueOf(exc.getMessage());
-            logger.error("电脑[{}] 容器内 MCP 服务器安装失败", roleId, exc);
+            logger.error("Computer[{}] failed to install the in-container MCP server", roleId, exc);
             return new ArrayList<>();
         }
         return listInstalledMcpTools();
@@ -153,7 +154,7 @@ public class PodmanComputer extends Computer {
         return new java.util.LinkedHashMap<>();
     }
 
-    /** 执行 podman 命令 (默认 60s 超时: 容器操作均为秒级, 卡住应快速失败进入重试/报错, 而非静默数天). */
+    /** Runs a podman command (default 60s timeout: container operations are sub-second; hanging should fail fast into retry/error, not silently wait). */
     protected ProcessResult pod(String... args) {
         return pod(60, args);
     }
@@ -166,8 +167,9 @@ public class PodmanComputer extends Computer {
     }
 
     /**
-     * 确保容器存在并运行 (不存在则创建), 并创建工作目录/用户/云盘目录.
-     * 容器内用户名 = 员工名字的汉语拼音, 每员工一个固定 uid.
+     * Ensures the container exists and is running (creates it if missing), and sets up the
+     * working directory/user/cloud drive dir. The in-container username is the pinyin of the
+     * employee name; each employee gets a fixed uid.
      */
     public void ensureContainer() {
         String hostDir = hostDir();
@@ -178,10 +180,10 @@ public class PodmanComputer extends Computer {
             Files.createDirectories(driveHost);
             Files.createDirectories(npmCacheHost);
         } catch (IOException e) {
-            throw new RuntimeException("创建目录失败: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to create directories: " + e.getMessage(), e);
         }
 
-        // 确保基础镜像存在 (并发下加锁双检)
+        // Ensure the base image exists (double-checked locking under concurrency)
         String imageName = ComputerManager.getInstance().ensureBaseImage();
 
         ProcessResult r = pod("ps", "-a", "--format", "{{.Names}}");
@@ -208,7 +210,7 @@ public class PodmanComputer extends Computer {
                     ok = true;
                     break;
                 }
-                logger.warn("电脑[{}] podman run 第 {} 次失败 ({}), 清理残留后重试",
+                logger.warn("Computer[{}] podman run attempt {} failed ({}); cleaning up leftovers and retrying",
                         roleId, attempt, truncate(r.stderr != null ? r.stderr : r.stdout, 200));
                 pod("rm", "-f", containerName);
                 try {
@@ -218,7 +220,7 @@ public class PodmanComputer extends Computer {
                 }
             }
             if (!ok) {
-                throw new RuntimeException("podman run 创建容器失败 (" + r.returnCode + "): "
+                throw new RuntimeException("podman run failed to create the container (" + r.returnCode + "): "
                         + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
             }
         }
@@ -226,11 +228,11 @@ public class PodmanComputer extends Computer {
         if (r.stdout == null || !r.stdout.contains(containerName)) {
             r = pod("start", containerName);
             if (r.returnCode != 0) {
-                throw new RuntimeException("podman start 启动容器失败 (" + r.returnCode + "): "
+                throw new RuntimeException("podman start failed to start the container (" + r.returnCode + "): "
                         + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
             }
         }
-        // 员工用户级初始化 (幂等, 毫秒级)
+        // Employee user-level initialization (idempotent, millisecond-level)
         String u = shlexQuote(username);
         String wd = shlexQuote(workdir());
         String setup = "id -u " + u + " >/dev/null 2>&1 || useradd -s /bin/bash -u " + uid
@@ -239,10 +241,10 @@ public class PodmanComputer extends Computer {
                 + "mkdir -p " + wd + "; chown -R " + uid + ":" + uid + " " + wd;
         r = pod("exec", containerName, "sh", "-c", setup);
         if (r.returnCode != 0) {
-            throw new RuntimeException("podman exec 创建用户失败 (" + r.returnCode + "): "
+            throw new RuntimeException("podman exec failed to create the user (" + r.returnCode + "): "
                     + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
         }
-        // 企业云盘初始化
+        // Company cloud drive initialization
         String dname = shlexQuote("/mnt/drive/" + driveDirName());
         String driveInit = "mkdir -p /mnt/drive/Public " + dname + "; "
                 + "chmod 777 /mnt/drive/Public; chmod 755 " + dname + "; "
@@ -252,24 +254,24 @@ public class PodmanComputer extends Computer {
         }
         r = pod("exec", containerName, "sh", "-c", driveInit);
         if (r.returnCode != 0) {
-            throw new RuntimeException("podman exec 初始化云盘失败 (" + r.returnCode + "): "
+            throw new RuntimeException("podman exec failed to initialize the cloud drive (" + r.returnCode + "): "
                     + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
         }
-        // 预装 MCP filesystem 服务器包 (容器内全局安装)
+        // Preinstall the MCP filesystem server package (globally inside the container)
         if (!mcpPkgInstalled) {
             r = pod(300, "exec", containerName, "sh", "-c",
                     "npm ls -g --depth=0 2>/dev/null | grep -q 'server-filesystem' "
                             + "|| npm install -g --no-fund --no-audit " + shlexQuote(MCP_FILESYSTEM_PACKAGE));
             if (r.returnCode != 0) {
-                throw new RuntimeException("容器内预装 MCP filesystem 包失败 (" + r.returnCode + "): "
+                throw new RuntimeException("Failed to preinstall the MCP filesystem package in the container (" + r.returnCode + "): "
                         + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
             }
             mcpPkgInstalled = true;
-            logger.info("电脑[{}] 容器内已预装 MCP filesystem 服务器 (npm -g)", roleId);
+            logger.info("Computer[{}] MCP filesystem server preinstalled in container (npm -g)", roleId);
         }
     }
 
-    /** shell 单引号引用 (shlex.quote 语义). */
+    /** Shell single-quote quoting (shlex.quote semantics). */
     public static String shlexQuote(String s) {
         if (s == null || s.isEmpty()) {
             return "''";
@@ -282,7 +284,7 @@ public class PodmanComputer extends Computer {
         try {
             ensureContainer();
             on = true;
-            // 跨天重连: 容器 stop 会杀死 MCP stdio 管道, 开机后检测会话存活
+            // Reconnect across days: stopping the container kills the MCP stdio pipe, so check session liveness after power-on
             reconnectMcpServer();
             return "Computer [" + roleId + "] (podman container " + containerName + ") powered on. Work directory: " + workdir();
         } catch (Exception exc) {
@@ -307,7 +309,7 @@ public class PodmanComputer extends Computer {
             return "Error: computer is not powered on.";
         }
         try {
-            // 以员工用户执行: 云盘/家目录权限按该用户判定
+            // Run as the employee user: cloud drive / home dir permissions are judged for that user
             ProcessResult r = pod(timeout, "exec", "--user", username, containerName, "sh", "-c", command);
             return formatResult(r, maxChars);
         } catch (Exception exc) {
@@ -317,7 +319,7 @@ public class PodmanComputer extends Computer {
 
     @Override
     public String readFile(String path) {
-        // 路径经 argv 传入 (sh -c 的 $1), 不经 shell 解析 — 无注入面
+        // Path is passed via argv ($1 of sh -c), not parsed by the shell — no injection surface
         return execArgv("cat -- \"$1\"", path);
     }
 
@@ -337,7 +339,7 @@ public class PodmanComputer extends Computer {
         return output.isEmpty() ? "(no output)" : truncate(output, 2000);
     }
 
-    /** 以 argv 方式执行容器内命令 (脚本 + 参数分离, 路径不经 shell 解析). */
+    /** Runs an in-container command via argv (script + args separated, paths not parsed by the shell). */
     protected String execArgv(String script, String... args) {
         if (!on) {
             return "Error: computer is not powered on.";

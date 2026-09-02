@@ -18,36 +18,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 工具类注册表 (Python 版 python_tools/__init__.py 的 Java 对应物).
+ * Toolkit registry (the Java counterpart of the Python python_tools/__init__.py).
  *
- * DEFAULT_TOOLKITS (角色自动装配的工具类, 全部为模板风格 toolkits.* 实现):
+ * DEFAULT_TOOLKITS (toolkits auto-assembled for roles, all template-style toolkits.* implementations):
  *   memory / note / time / todo / task_view / pc / mcp_manager /
- *   skill_manager / email (hermes 默认关闭, 与 Python 版一致).
+ *   skill_manager / email (hermes is disabled by default, consistent with the Python version).
  *
- * 注意:
- *   - note 工具已从 memory 中分离: memory 只保留记忆相关内容 (summary),
- *     笔记操作 (write_note/edit_note/list_notes/read_note/delete_note) 在
- *     toolkits.note.Note 中.
- *   - pc 即 computer 工具 (toolkits.pc.Pc): run_command / computer_status /
+ * Notes:
+ *   - The note tool has been split out of memory: memory only keeps memory-related content (summary),
+ *     note operations (write_note/edit_note/list_notes/read_note/delete_note) live in
+ *     toolkits.note.Note.
+ *   - pc is the computer tool (toolkits.pc.Pc): run_command / computer_status /
  *     lan_devices / reboot.
  *
- * DEFAULT_MCP_GROUPS: 角色加入/启动时自动把该组 MCP 工具安装到个人电脑.
+ * DEFAULT_MCP_GROUPS: when a role joins/starts, the MCP tools of the group are automatically installed on the personal computer.
  */
 public final class Toolkits {
 
     private Toolkits() {
     }
 
-    /** 全局共享 MCP 管理器. */
+    /** Globally shared MCP manager. */
     private static final MCPManager MCP_MANAGER = new MCPManager();
 
-    /** 全局共享技能库管理器. */
+    /** Globally shared skill library manager. */
     private static final SkillManager SKILL_MANAGER = new SkillManager();
 
-    /** 默认 MCP 工具组: 文件操作 MCP 工具集. */
+    /** Default MCP tool group: file operation MCP tools. */
     public static final List<String> DEFAULT_MCP_GROUPS = List.of("file_ops");
 
-    /** 领导组组名 (对应 role_templates.json 的 group 字段). */
+    /** Leadership group name (corresponds to the group field in role_templates.json). */
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     public static MCPManager getMcpManager() {
@@ -59,14 +59,14 @@ public final class Toolkits {
     }
 
     /**
-     * 默认工具类注册表: 角色被添加进 AgentSystem 时 (autoToolkits=true)
-     * 自动逐个加载 (RolePool.setupRole 调用, 传入具体角色以便工具类绑定).
-     * 每个调用返回新的独立模板风格工具类实例 (AgentRole.addToolkit(Toolkit)
-     * 直接注册到 ToolRegistry 暴露给 LLM).
+     * Default toolkit registry: when a role is added to an AgentSystem (autoToolkits=true)
+     * the toolkits are loaded one by one automatically (RolePool.setupRole calls this, passing the concrete role so the toolkits can bind).
+     * Each call returns a new independent template-style toolkit instance (AgentRole.addToolkit(Toolkit)
+     * registers directly into the ToolRegistry exposed to the LLM).
      *
-     * <p>工具类使用的协作对象 (MCP/技能/邮箱/对话锁) 优先取角色所属
-     * {@link com.agent.software.AgentSystem} 的每系统实例, 未绑定系统的独立角色
-     * 回退到本类的进程级默认单例 (旧行为).
+     * <p>Collaboration objects used by the toolkits (MCP/skills/mailbox/conversation lock) prefer the per-system
+     * instance of the {@link com.agent.software.AgentSystem} the role belongs to; standalone roles not bound to a system
+     * fall back to the process-level default singletons of this class (legacy behavior).
      */
     public static List<Toolkit> defaultToolkits(AgentRole role) {
         MCPManager mcpManager = role != null ? role.mcpManager() : MCP_MANAGER;
@@ -81,7 +81,7 @@ public final class Toolkits {
         out.add(new McpManager(role, mcpManager));
         out.add(new Skill(role, skillManager));
         out.add(new Email(role, role != null ? role.mailService() : null));
-        // 领导组全员装备与甲方沟通工具 (talk_to_client, 全局互斥)
+        // all leadership group members get the tool for communicating with the client (talk_to_client, globally exclusive)
         if (role != null && LEADERSHIP_GROUP.equals(role.group)) {
             out.add(new Client(role));
         }

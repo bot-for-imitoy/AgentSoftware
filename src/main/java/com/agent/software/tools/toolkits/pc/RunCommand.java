@@ -8,8 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * run_command — 在个人电脑上运行一条命令 (如 ls, cat, python, git 等),
- * 返回命令输出. 适合查看电脑上的文件、执行脚本、检查项目状态.
+ * run_command - run a command on the personal computer (e.g. ls, cat, python, git, etc.),
+ * and return the command output. Useful for viewing files on the computer, running scripts, and checking project status.
  */
 public class RunCommand extends Tool {
 

@@ -7,15 +7,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * SSH 远程电脑 — Python 版 SSHComputer.
+ * SSH remote computer - Python version SSHComputer.
  *
- * 通过 ssh 在远程主机上执行命令. 需要 host/user 配置. 工作目录: ~/maf-&lt;role_id&gt;/.
+ * Executes commands on a remote host over ssh. Requires host/user configuration. Work directory: ~/maf-&lt;role_id&gt;/.
  */
 public class SSHComputer extends Computer {
 
     private static final Logger logger = LoggerFactory.getLogger(SSHComputer.class);
 
-    public final String name;     // 角色中文名
+    public final String name;     // role Chinese name
     public final String host;
     public final String user;
     public final String keyPath;
@@ -26,7 +26,7 @@ public class SSHComputer extends Computer {
         super(roleId, autoMcp);
         this.name = name != null ? name : "";
         if (host == null || host.isEmpty()) {
-            throw new IllegalArgumentException("SSHComputer 需要 host 参数 (远程主机地址)");
+            throw new IllegalArgumentException("SSHComputer requires a host parameter (remote host address)");
         }
         this.host = host;
         this.user = user;
@@ -39,7 +39,7 @@ public class SSHComputer extends Computer {
         return "~/maf-" + (roleId == null || roleId.isEmpty() ? "shared" : roleId);
     }
 
-    /** 执行远程命令, 返回输出文本. */
+    /** Execute a remote command, returning the output text. */
     protected String ssh(String remoteCmd, int timeout, int maxChars) {
         List<String> cmd = sshBase(remoteCmd);
         try {
@@ -74,7 +74,7 @@ public class SSHComputer extends Computer {
 
     @Override
     public String powerOn() {
-        // ssh 无"开机"概念, 建立会话即视为开机
+        // ssh has no "power on" concept; establishing a session counts as powered on
         String r = ssh("echo ok", 60, 2000);
         if (r.contains("ok")) {
             on = true;

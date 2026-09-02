@@ -25,32 +25,32 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 多 AgentSystem 实例隔离测试 (docs/agent-system-multi-instance.md 改造验证):
+ * Multi-AgentSystem instance isolation tests (verification of the docs/agent-system-multi-instance.md refactor):
  *
- * 改造前进程级全局单例 (ComputerManager / MailService / MCPManager / SkillManager /
- * ClientCommunicationLock / 默认时钟) 与全局数据路径使同一进程内只能安全运行一个
- * AgentSystem; 改造后每套 AgentSystem 直接持有自己的协作对象 (时钟/电脑注册表/
- * 邮箱/工具管理器/对话锁/聊天存储) 与数据目录, 一套系统可独立运行, 多套系统
- * 互不干扰. 本测试在同一 JVM 内创建两套同角色集系统, 验证互不干扰.
+ * Before the refactor, process-level global singletons (ComputerManager / MailService / MCPManager / SkillManager /
+ * ClientCommunicationLock / default clock) and global data paths meant that only one
+ * AgentSystem could run safely per process; after the refactor each AgentSystem holds its own
+ * collaboration objects (clock / computer registry / mailbox / tool managers / dialogue lock / chat store)
+ * and its own data directory, so a system can run independently and multiple systems do not interfere.
  */
 class AgentSystemIsolationTest {
 
     @TempDir
     Path tmp;
 
-    /** 创建一套数据目录为 dir 的 AgentSystem (同角色集, autoToolkits=false 避免 podman/LLM). */
+    /** Creates an AgentSystem whose data dir is dir (same role set; autoToolkits=false avoids podman/LLM). */
     private AgentSystem make(Path dir) {
         return new AgentSystem(dir, null, List.of("CEO", "CTO"), 30.0, false);
     }
 
-    // ── 1. 两套系统的协作对象与角色完全独立 ─────────────────
+    // ── 1. The two systems' collaboration objects and roles are fully independent ─
 
     @Test
     void twoSystemsUseIndependentServicesAndRoles() {
         AgentSystem a = make(tmp.resolve("a"));
         AgentSystem b = make(tmp.resolve("b"));
 
-        // 每套系统独立持有协作对象
+        // each system holds its own collaboration objects
         assertNotSame(a.timeManager, b.timeManager);
         assertNotSame(a.pool, b.pool);
         assertNotSame(a.dispatcher, b.dispatcher);
@@ -62,12 +62,12 @@ class AgentSystemIsolationTest {
         assertNotSame(a.clientLock, b.clientLock);
         assertNotSame(a.chatStore, b.chatStore);
 
-        // 同 role_id 的角色是各自系统内的独立对象
+        // roles with the same role_id are independent objects within their own systems
         assertNotSame(a.getRole("CEO"), b.getRole("CEO"));
         assertNotSame(a.getRole("CTO"), b.getRole("CTO"));
 
-        // 角色已绑定所属系统: 时钟/电脑/邮箱/锁/聊天全部解析到本系统实例,
-        // 而不是进程级默认单例 (默认时钟等全局回退不再被系统内角色触发)
+        // roles are bound to their owning system: clock/computer/mailbox/lock/chat all resolve to this system's
+        // instances, not process-level default singletons (global fallbacks such as the default clock are no longer triggered by in-system roles)
         AgentRole ra = a.getRole("CEO");
         AgentRole rb = b.getRole("CEO");
         assertSame(a, ra.system());
@@ -84,23 +84,23 @@ class AgentSystemIsolationTest {
         assertSame(b.chatStore, rb.chatStore());
     }
 
-    // ── 2. 时钟独立: 恢复进度只影响本系统 ────────────────────
+    // ── 2. Independent clocks: restoring progress only affects this system ─
 
     @Test
     void clocksAreIndependent() {
         AgentSystem a = make(tmp.resolve("a"));
         AgentSystem b = make(tmp.resolve("b"));
 
-        // a 设置恢复进度 (第 3 天 Tick 10) — b 完全不受影响
+        // a sets restore progress (Day 3 Tick 10) — b is completely unaffected
         a.timeManager.setProgress(3, 10);
         assertEquals(0, a.timeManager.currentTick());
         assertEquals(0, b.timeManager.currentTick());
-        // 角色读取的是各自系统的时钟
+        // roles read their own systems' clocks
         assertEquals(1, a.getRole("CEO").timeManager().dayNumber());
         assertEquals(1, b.getRole("CEO").timeManager().dayNumber());
     }
 
-    // ── 3. 电脑注册表独立: 同 role_id 各自注册不互相覆盖 ─────
+    // ── 3. Independent computer registries: same role_id registered separately without clobbering ─
 
     @Test
     void computerRegistriesAreIndependent() {
@@ -109,7 +109,7 @@ class AgentSystemIsolationTest {
         ComputerManager ma = a.computerManager;
         ComputerManager mb = b.computerManager;
 
-        // 同一 role_id 在两套系统分别注册独立的 local 电脑
+        // the same role_id registers an independent local computer in each system
         Map<String, Object> kwA = new LinkedHashMap<>();
         kwA.put("base_dir", tmp.resolve("a").resolve("computers").toString());
         kwA.put("drive_dir", tmp.resolve("a").resolve("drive").toString());
@@ -118,19 +118,19 @@ class AgentSystemIsolationTest {
         kwB.put("drive_dir", tmp.resolve("b").resolve("drive").toString());
         Computer ca = ma.createComputer("local", "CEO", false, kwA);
         Computer cb = mb.createComputer("local", "CEO", false, kwB);
-        ma.register(ca, "林总");
-        mb.register(cb, "林总");
+        ma.register(ca, "Lin Zong");
+        mb.register(cb, "Lin Zong");
 
         assertSame(ca, ma.get("CEO"));
         assertSame(cb, mb.get("CEO"));
-        // 各自系统只看到自己的注册表
+        // each system only sees its own registry
         assertThrows(IllegalArgumentException.class, () -> mb.get("CTO"));
         assertThrows(IllegalArgumentException.class, () -> ma.get("CTO"));
         assertEquals(1, ma.listAll().size());
         assertEquals(1, mb.listAll().size());
     }
 
-    // ── 4. 邮箱独立: 系统 A 发信不进入系统 B 的收件箱 ────────
+    // ── 4. Independent mailboxes: system A's mail never enters system B's inbox ──
 
     @Test
     void mailboxesAreIndependent() {
@@ -139,15 +139,15 @@ class AgentSystemIsolationTest {
         MailService ma = a.mailService;
         MailService mb = b.mailService;
 
-        ma.send("ceo@company.com", "林总", List.of("cto@company.com"), "Hello", "body-A", null);
+        ma.send("ceo@company.com", "Lin Zong", List.of("cto@company.com"), "Hello", "body-A", null);
         assertEquals(1, ma.inbox("cto@company.com", null).size());
         assertEquals(0, mb.inbox("cto@company.com", null).size());
-        // 各系统邮箱落在各自数据目录
+        // each system's mailbox lives under its own data dir
         assertTrue(Files.exists(tmp.resolve("a").resolve("mail").resolve("mailboxes.json")));
         assertFalse(Files.exists(tmp.resolve("b").resolve("mail").resolve("mailboxes.json")));
     }
 
-    // ── 5. 与甲方对话锁独立: 系统 A 占用不影响系统 B ─────────
+    // ── 5. Independent client dialogue locks: system A's hold does not affect system B ─
 
     @Test
     void clientLocksAreIndependent() {
@@ -156,9 +156,9 @@ class AgentSystemIsolationTest {
         ClientCommunicationLock la = a.clientLock;
         ClientCommunicationLock lb = b.clientLock;
 
-        assertNull(la.tryAcquire("CEO", "林总"));
-        // 系统 B 的成员不受系统 A 的锁影响 (改造前共享全局单例会被阻塞)
-        assertNull(lb.tryAcquire("CTO", "陈总"));
+        assertNull(la.tryAcquire("CEO", "Lin Zong"));
+        // system B members are not blocked by system A's lock (before the refactor, the shared global singleton would block)
+        assertNull(lb.tryAcquire("CTO", "Chen Zong"));
         assertTrue(la.isHeld());
         assertTrue(lb.isHeld());
         la.release("CEO");
@@ -167,18 +167,18 @@ class AgentSystemIsolationTest {
         assertFalse(lb.isHeld());
     }
 
-    // ── 6. 聊天存储独立: 系统 A 的消息不进入系统 B ───────────
+    // ── 6. Independent chat stores: system A's messages never enter system B ──
 
     @Test
     void chatStoresAreIndependent() {
         AgentSystem a = make(tmp.resolve("a"));
         AgentSystem b = make(tmp.resolve("b"));
-        a.chatStore.record("talk", "g", "CEO", "林总", "CTO", "高远", "msg-A", "NORMAL");
+        a.chatStore.record("talk", "g", "CEO", "Lin Zong", "CTO", "Gao Yuan", "msg-A", "NORMAL");
         assertEquals(1, a.chatStore.messagesSince(0).size());
         assertEquals(0, b.chatStore.messagesSince(0).size());
     }
 
-    // ── 7. 数据文件独立: 笔记/待办/活动日志按系统数据目录隔离 ──
+    // ── 7. Independent data files: notes/todos/journals isolated per system data dir ─
 
     @Test
     void notesTodosJournalsAreNamespaced() throws Exception {
@@ -187,30 +187,30 @@ class AgentSystemIsolationTest {
         AgentRole ra = a.getRole("CEO");
         AgentRole rb = b.getRole("CEO");
 
-        // 笔记
-        ra.noteStore().writeNote("需求文档", "系统 A 的需求", null, null);
+        // notes
+        ra.noteStore().writeNote("Requirements doc", "System A's requirements", null, null);
         assertTrue(Files.exists(tmp.resolve("a").resolve("notes").resolve("CEO")
-                .resolve("notes").resolve("需求文档.md")));
+                .resolve("notes").resolve("Requirements_doc.md")));
         assertTrue(rb.noteStore().listNotes().isEmpty());
 
-        // 待办
-        ra.todoStore().add("系统 A 的任务", "detail");
+        // todos
+        ra.todoStore().add("System A's task", "detail");
         assertFalse(ra.todoStore().list(null).isEmpty());
         assertTrue(rb.todoStore().list(null).isEmpty());
         assertTrue(Files.exists(tmp.resolve("a").resolve("todos").resolve("CEO.json")));
         assertFalse(Files.exists(tmp.resolve("b").resolve("todos").resolve("CEO.json")));
 
-        // 活动日志: 各系统角色都写自己的"角色就位", 但 a 的日志条目只出现在 a 的文件里
-        ra.journal("系统 A 的日志条目");
+        // journals: roles in each system write their own "Role ready", but a's entries only appear in a's file
+        ra.journal("System A's journal entry");
         Path aLog = tmp.resolve("a").resolve("journals").resolve("CEO.md");
         Path bLog = tmp.resolve("b").resolve("journals").resolve("CEO.md");
         assertTrue(Files.exists(aLog));
-        assertTrue(Files.exists(bLog));  // b 的角色就位日志写在自己的目录
-        assertTrue(Files.readString(aLog).contains("系统 A 的日志条目"));
-        assertFalse(Files.readString(bLog).contains("系统 A 的日志条目"));
+        assertTrue(Files.exists(bLog));  // b's role-ready journal is written under its own dir
+        assertTrue(Files.readString(aLog).contains("System A's journal entry"));
+        assertFalse(Files.readString(bLog).contains("System A's journal entry"));
     }
 
-    // ── 8. 默认系统保持历史布局 (./data/*) ──────────────────
+    // ── 8. Default system keeps the legacy layout (./data/*) ─────
 
     @Test
     void defaultSystemUsesLegacyDataLayout() {
@@ -226,11 +226,11 @@ class AgentSystemIsolationTest {
         assertEquals(Paths.get("data", "state.json"), def.stateFile());
     }
 
-    // ── 9. 未绑定系统的独立角色回退进程级默认 (旧行为保留) ──
+    // ── 9. Standalone roles not bound to a system fall back to process defaults (legacy behavior) ─
 
     @Test
     void standaloneRoleFallsBackToProcessDefaults() {
-        AgentRole standalone = AgentRole.builder().name("新人").roleId("newbie_1").build();
+        AgentRole standalone = AgentRole.builder().name("Newcomer").roleId("newbie_1").build();
         assertNull(standalone.system());
         assertNull(standalone.chatStore());
         assertSame(TimeEventBus.getDefaultBus(), standalone.timeManager());

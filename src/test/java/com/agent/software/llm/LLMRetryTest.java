@@ -21,18 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * LLM API 请求重试测试 (Python 版 test_llm_retry.py 的 Java 对应物).
- * 用本地 HTTP 服务器模拟 chat/completions 端点 (限速/5xx/4xx/超时).
+ * LLM API request retry tests (the Java counterpart of the Python test_llm_retry.py).
+ * Uses a local HTTP server to emulate the chat/completions endpoint (rate limit / 5xx / 4xx / timeout).
  */
 class LLMRetryTest {
 
-    /** 按序返回状态码的假服务器; 最后一个状态码重复用于剩余请求. */
+    /** Fake server returning status codes in order; the last code repeats for remaining requests. */
     private static final class FakeServer implements AutoCloseable {
         final HttpServer server;
         final List<Integer> statuses;
         final AtomicInteger calls = new AtomicInteger(0);
         volatile int sleepMillis = 0;
-        volatile int sleepFirstCount = 0;  // 仅前 N 个请求睡眠 (模拟超时)
+        volatile int sleepFirstCount = 0;  // only the first N requests sleep (simulate a timeout)
 
         FakeServer(int... statuses) throws IOException {
             this.statuses = new ArrayList<>();
@@ -93,7 +93,7 @@ class LLMRetryTest {
     private OpenAICompatLLM client(FakeServer s) {
         OpenAICompatLLM llm = new OpenAICompatLLM(null, s.baseUrl(), null, null,
                 new ConfigStore(), Map.of(), Map.of());
-        llm.retryDelay = 0;   // 关闭重试延时
+        llm.retryDelay = 0;   // disable the retry delay
         llm.retryMax = 3;
         return llm;
     }
@@ -127,8 +127,8 @@ class LLMRetryTest {
     void testRetryExhaustedReturnsError() throws IOException {
         FakeServer s = fake(500, 500, 500, 500);
         LLM.ChatResponse r = client(s).chat("s", "u", 0.7, 8);
-        assertTrue(r.text.startsWith("[API error: 重试 3 次仍失败"));
-        assertEquals(3, s.calls.get());  // 恰好重试 3 次后放弃
+        assertTrue(r.text.startsWith("[API error: Retried 3 times and still failed"));
+        assertEquals(3, s.calls.get());  // gives up after exactly 3 retries
     }
 
     @Test
@@ -142,8 +142,8 @@ class LLMRetryTest {
     @Test
     void testTimeoutRetries() throws IOException {
         FakeServer s = fake(200);
-        s.sleepMillis = 1500;    // 首个请求慢于客户端超时 (1s) → 超时
-        s.sleepFirstCount = 1;   // 仅首个请求睡眠 → 重试成功
+        s.sleepMillis = 1500;    // the first request is slower than the client timeout (1s) → timeout
+        s.sleepFirstCount = 1;   // only the first request sleeps → retry succeeds
         OpenAICompatLLM llm = client(s);
         llm.apiTimeoutSeconds = 1;
         LLM.ChatResponse r = llm.chat("s", "u", 0.7, 8);
@@ -155,7 +155,7 @@ class LLMRetryTest {
     void testChatWithToolsReturnsToolCalls() throws IOException {
         FakeServer s = new FakeServer(200);
         servers.add(s);
-        // 覆盖默认响应: 自定义工具调用响应
+        // override the default response: custom tool-call response
         s.server.removeContext("/v1/chat/completions");
         s.server.createContext("/v1/chat/completions", ex -> {
             s.calls.incrementAndGet();
@@ -177,9 +177,9 @@ class LLMRetryTest {
         assertEquals(5, r.totalTokens());
     }
 
-    // ── 配置优先级 (Java 参数 > 环境变量 > ConfigStore) ──────
+    // ── Config precedence (Java args > env vars > ConfigStore) ────
 
-    /** 无系统属性/环境变量时, 配置回落到 ConfigStore (llm.*). */
+    /** Without system properties/env vars, config falls back to ConfigStore (llm.*). */
     @Test
     void testConfigFileUsedWhenNoSystemSources(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -194,7 +194,7 @@ class LLMRetryTest {
         assertEquals("config-model", client.model);
     }
 
-    /** 环境变量优先于配置文件. */
+    /** Env vars take precedence over the config file. */
     @Test
     void testEnvironmentPrecedesConfigFile(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -204,7 +204,7 @@ class LLMRetryTest {
         assertEquals("http://env.example", client.baseUrl);
     }
 
-    /** Java 参数 (-D 系统属性) 优先于环境变量. */
+    /** Java args (-D system properties) take precedence over env vars. */
     @Test
     void testSystemPropertyPrecedesEnvironment(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -214,7 +214,7 @@ class LLMRetryTest {
         assertEquals("http://prop.example", client.baseUrl);
     }
 
-    /** 构造器显式参数优先于一切来源. */
+    /** Explicit constructor args take precedence over all sources. */
     @Test
     void testExplicitArgumentPrecedesAllSources(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -227,7 +227,7 @@ class LLMRetryTest {
         assertEquals("explicit-model", client.model);
     }
 
-    /** 无任何来源时使用 OpenAI 默认值, 不强制 API Key. */
+    /** With no sources, OpenAI defaults are used; the API key is not required. */
     @Test
     void testDefaultsWithoutAnySource(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -238,7 +238,7 @@ class LLMRetryTest {
         assertEquals(OpenAICompatLLM.DEFAULT_MODEL, client.model);
     }
 
-    /** API Key 也走 OpenAI 环境变量 (OPENAI_API_KEY). */
+    /** The API key also follows the OpenAI env var (OPENAI_API_KEY). */
     @Test
     void testOpenaiApiKeyFromEnvironment(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));
@@ -247,7 +247,7 @@ class LLMRetryTest {
         assertEquals("sk-env", client.apiKey);
     }
 
-    /** 配置文件 llm.api_key / llm.model 单独读取. */
+    /** The config file's llm.api_key / llm.model are read individually. */
     @Test
     void testOpenaiApiKeyFromConfigFile(@TempDir Path tmp) {
         ConfigStore config = new ConfigStore(tmp.resolve("config.json"));

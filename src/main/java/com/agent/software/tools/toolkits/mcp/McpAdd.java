@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * mcp_add — 为当前角色添加一个本地已有的 MCP 工具.
- * 添加后即可在后续任务中直接调用该工具.
+ * mcp_add - add a locally available MCP tool to the current role.
+ * After adding, the tool can be called directly in subsequent tasks.
  */
 public class McpAdd extends Tool {
 

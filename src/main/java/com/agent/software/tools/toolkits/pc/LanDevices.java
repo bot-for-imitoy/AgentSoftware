@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * lan_devices — 查看内网电脑设备列表: 每个人名, 电脑名称, 内网 IP.
- * 各角色电脑在同一桥接网络 (maf-net) 中, 可据此找到其他电脑并通信.
+ * lan_devices - view the list of LAN computer devices: each person name, computer name, LAN IP.
+ * All role computers are on the same bridged network (maf-net); you can use this to find other computers and communicate with them.
  *
- * 设备列表取本角色所属系统的电脑注册表 (每系统一份), 未绑定上下文的
- * 独立角色回退到进程级默认单例.
+ * The device list comes from the computer registry of the system the role belongs to (one per system); standalone roles
+ * without a bound context fall back to the process-level default singleton.
  */
 public class LanDevices extends Tool {
 

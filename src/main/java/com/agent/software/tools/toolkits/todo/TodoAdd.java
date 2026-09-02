@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * todo_add — 添加一条待办事项到自己的 Todo 清单 (返回待办 id).
+ * todo_add — add a todo item to your own Todo list (returns the todo id).
  */
 public class TodoAdd extends Tool {
 

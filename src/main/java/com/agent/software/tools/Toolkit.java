@@ -5,11 +5,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 工具类基类 (模板: toolkits/note 中的 Note 即按此实现).
+ * Toolkit base class (template: Note in toolkits/note is implemented this way).
  *
- * 每个 Toolkit 对应一个业务域, 通过 addTool() 聚合多个 Tool.
- * trigger() 按工具名分发到对应 Tool 的 handler, 返回其执行结果
- * (未找到时返回 null).
+ * Each Toolkit corresponds to a business domain and aggregates multiple Tools via addTool().
+ * trigger() dispatches to the handler of the matching Tool by tool name and returns its result
+ * (returns null when not found).
  */
 public abstract class Toolkit {
 
@@ -32,7 +32,7 @@ public abstract class Toolkit {
     }
 
     /**
-     * 按工具名调用. 返回 handler 的执行结果; 工具不存在返回 null.
+     * Invokes by tool name. Returns the handler's result; returns null if the tool does not exist.
      */
     public String trigger(String toolName, Map<String, Object> arg){
         for(Tool tool : tools){
@@ -43,12 +43,12 @@ public abstract class Toolkit {
         return null;
     }
 
-    /** 工具类名 (供注册表/日志使用). 默认取类名转 snake_case. */
+    /** Toolkit name (for the registry/logs). By default the class name converted to snake_case. */
     public String getName(){
         return snakeCase(getClass().getSimpleName());
     }
 
-    /** 工具类描述 (可选, 供注册表使用). */
+    /** Toolkit description (optional, for the registry). */
     public String getDescription(){
         return "Toolkit " + getName() + " (" + tools.size() + " tools)";
     }

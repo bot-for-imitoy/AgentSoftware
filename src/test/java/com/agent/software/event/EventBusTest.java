@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * EventBus 调度表测试 (Python 版 test_event_bus.py 的 Java 对应物).
+ * EventBus schedule table tests (the Java counterpart of the Python test_event_bus.py).
  */
 class EventBusTest {
 
@@ -27,10 +27,10 @@ class EventBusTest {
         bus.registerEvent(ev("B"), 3);
         List<Map<String, Object>> scheduled = bus.listScheduledEvents();
         assertEquals(List.of(3, 5), scheduled.stream().map(s -> s.get("tick")).toList());
-        // 到期取出 (已从调度表移除)
+        // due events are popped (already removed from the schedule table)
         List<Types.Event> due = bus.checkDueEvents(4);
         assertEquals(List.of("B"), due.stream().map(e -> e.eventType).toList());
-        // 未到期事件仍在表中 → 可取消
+        // not-yet-due events remain in the table → can be cancelled
         assertTrue(bus.cancelEvent(eid));
     }
 

@@ -15,19 +15,21 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Web 界面演示 (轻量): 最小团队 (CEO/COO + 前端组长/前端开发) + 聊天服务器,
- * 不启动角色 worker / 不创建电脑, 手动模拟几条组内消息与一次甲方对话.
+ * Web UI demo (lightweight): a minimal team (CEO/COO + frontend lead/frontend dev) + a chat server,
+ * does not start role workers / does not create computers, manually simulating a few intra-team
+ * messages and one Client A conversation.
  *
  * <pre>
  *   mvn exec:java -Dexec.mainClass=com.agent.software.demo.WebDemo
  * </pre>
- * 然后打开控制台打印的地址, 左侧选择「领导组」即可看到 CEO 与您的对话,
- * 输入框自动启用, 可直接回复.
+ * Then open the address printed in the console; select "Leadership Group" on the left to see
+ * the conversation between the CEO and you. The input box is enabled automatically, so you can
+ * reply directly.
  */
 public class WebDemo {
 
     public static void main(String[] args) throws Exception {
-        // 1. 最小团队 (autoToolkits=false: 不装配电脑/MCP, 轻量)
+        // 1. Minimal team (autoToolkits=false: no computer/MCP toolkits, lightweight)
         AgentSystem system = new AgentSystem(List.of(
                 RoleLoader.getTemplate("CEO"),
                 RoleLoader.getTemplate("COO"),
@@ -39,7 +41,7 @@ public class WebDemo {
         AgentRole fLead = system.getRole("frontend_lead");
         AgentRole fDev = system.getRole("frontend_dev_1");
 
-        // 2. 手动装配 talk / talk_to_client 工具
+        // 2. Manually assemble the talk / talk_to_client tools
         Talk ceoTalkTk = new Talk(ceo, system.pool);
         Talk cooTalkTk = new Talk(coo, system.pool);
         Talk fLeadTalkTk = new Talk(fLead, system.pool);
@@ -54,40 +56,40 @@ public class WebDemo {
         Tool talkCeo = ceoTalkTk.getTools().stream().filter(t -> "talk".equals(t.getToolName())).findFirst().orElseThrow();
         Tool talkToClient = new Client(ceo).getTools().stream().filter(t -> "talk_to_client".equals(t.getToolName())).findFirst().orElseThrow();
 
-        // 3. 启动 Web 服务器
+        // 3. Start the Web server
         ChatWebServer web = new ChatWebServer(system);
         web.start();
-        System.out.println("\n  Web 界面已启动: http://127.0.0.1:" + web.port() + "/");
-        System.out.println("  左侧选择「领导组」可看到 CEO 与您的对话 (输入框自动启用);");
-        System.out.println("  选择「前端开发组」可看到组内消息。Ctrl+C 退出。\n");
+        System.out.println("\n  Web UI started: http://127.0.0.1:" + web.port() + "/");
+        System.out.println("  Select \"Leadership Group\" on the left to see the conversation between the CEO and you (the input box is enabled automatically);");
+        System.out.println("  Select \"Frontend Development Group\" to see intra-team messages. Press Ctrl+C to exit.\n");
 
-        // 4. 模拟组内消息 (talk)
-        talkFDev.handler(Map.of("target", "陈思远", "message", "登录页组件重构完成, 请验收。", "urgency", "NORMAL"));
-        talkFDev.handler(Map.of("target", "陈思远", "message", "移动端适配已提交, 附件在云盘 Public/mobile.md。", "urgency", "HIGH"));
-        talkCeo.handler(Map.of("target", "陈总", "message", "收到甲方新需求, 我会先确认范围, 稍后同步给你。", "urgency", "NORMAL"));
+        // 4. Simulate intra-team messages (talk)
+        talkFDev.handler(Map.of("target", "Chen Siyuan", "message", "The login page component refactor is done, please review.", "urgency", "NORMAL"));
+        talkFDev.handler(Map.of("target", "Chen Siyuan", "message", "The mobile adaptation has been submitted; the attachment is in the cloud drive Public/mobile.md.", "urgency", "HIGH"));
+        talkCeo.handler(Map.of("target", "Chen Zong", "message", "I received a new requirement from Client A; I will confirm the scope first and sync it to you later.", "urgency", "NORMAL"));
 
-        // 5. 模拟甲方对话: CEO 调用 talk_to_client (Web 模式), 3 秒后甲方在"网页上"回复
+        // 5. Simulate a Client A conversation: CEO calls talk_to_client (Web mode); Client A replies "on the web page" 3 seconds later
         ChatStore store = system.chatStore;
         store.markAttached();
         AtomicReference<String> result = new AtomicReference<>();
         Thread ceoThread = new Thread(() -> result.set(
-                talkToClient.handler(Map.of("message", "您好，我是林总。我们收到了您的项目需求，请问能否具体描述一下您想开发的系统？"))));
+                talkToClient.handler(Map.of("message", "Hello, I am Lin Zong. We received your project requirements. Could you describe in detail the system you would like to develop?"))));
         ceoThread.start();
         if (waitUntil(store::isClientWaitPending, 5000)) {
-            System.out.println("  [甲方] CEO 正在等您回复 —— 现在可以打开浏览器在「领导组」输入框回复。");
-            System.out.println("  (演示将在 8 秒后自动代您回复一条, 便于查看效果)");
+            System.out.println("  [Client A] The CEO is waiting for your reply — you can now open the browser and reply in the \"Leadership Group\" input box.");
+            System.out.println("  (The demo will automatically reply on your behalf after 8 seconds, so you can see the effect)");
             Thread.sleep(8000);
-            store.postClientReply("帮我开发一个员工报销审批系统，支持移动端提交与领导审批。");
+            store.postClientReply("Please help me develop an employee expense reimbursement approval system that supports mobile submission and manager approval.");
         }
         ceoThread.join(10_000);
-        System.out.println("  CEO 收到甲方回复: " + result.get());
+        System.out.println("  CEO received the reply from Client A: " + result.get());
 
-        // 6. 保持运行直到 Ctrl+C
+        // 6. Keep running until Ctrl+C
         CountDownLatch keepAlive = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             web.stop();
             system.stop();
-            System.out.println("\n演示结束 ✓");
+            System.out.println("\nDemo finished ✓");
         }));
         keepAlive.await();
     }

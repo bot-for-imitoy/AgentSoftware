@@ -4,10 +4,10 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 技能工具类 (Skill Toolkit) — 基于 SKILL.md 的技能包管理:
+ * Skill toolkit — skill package management based on SKILL.md:
  * skill_search / skill_list / skill_add / skill_remove / skill_my_skills.
  *
- * 底层复用全局共享的 {@link SkillManager} (扫描技能库 SKILL.md).
+ * Under the hood it reuses the globally shared {@link SkillManager} (scans the skill library SKILL.md).
  */
 public class Skill extends Toolkit {
 

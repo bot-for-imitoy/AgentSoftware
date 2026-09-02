@@ -20,12 +20,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * MCP 工具管理器 — 管理每角色电脑上的 MCP 服务器工具
- * (原 MCPManagerToolkit.MCPManager, 随旧工具类删除迁入模板风格包).
+ * MCP tool manager - manages the MCP server tools on each role's computer
+ * (originally MCPManagerToolkit.MCPManager; moved into the template-style package when the old toolkit class was removed).
  *
- * 架构 (C 方案): 每个角色的电脑 (podman 容器) 内运行独立的 MCP filesystem
- * 服务器, 授权目录 = 容器内工作目录. MCPManager 不维护全局工具池, 所有查询
- * /安装都基于当前角色自己的电脑服务器.
+ * Architecture (plan C): each role's computer (podman container) runs an independent MCP filesystem
+ * server, with the authorized directory being the container working directory. MCPManager keeps no global
+ * tool pool; all queries/installs are based on the current role's own computer server.
  */
 public final class MCPManager {
 
@@ -33,19 +33,19 @@ public final class MCPManager {
 
     private final Map<String, Set<String>> roleTools = new LinkedHashMap<>();
 
-    /** 加载 MCP 分组规则 JSON (classpath: /mcp_group_rules.json). */
+    /** Load the MCP group rules JSON (classpath: /mcp_group_rules.json). */
     public static Map<String, Object> loadRules() {
         try (InputStream in = MCPManager.class.getResourceAsStream("/mcp_group_rules.json")) {
             if (in == null) {
-                throw new IllegalStateException("MCP 分组规则文件不存在: mcp_group_rules.json");
+                throw new IllegalStateException("MCP group rules file not found: mcp_group_rules.json");
             }
             return Json.parseObject(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new IllegalStateException("读取 MCP 分组规则失败", e);
+            throw new IllegalStateException("Failed to read MCP group rules", e);
         }
     }
 
-    /** 判断工具名是否匹配分组规则 (支持通配符 *). */
+    /** Return whether a tool name matches the group rules (supports wildcard *). */
     public static boolean matchGroup(String toolName, List<String> patterns) {
         if (patterns == null || patterns.isEmpty()) {
             return false;
@@ -64,19 +64,19 @@ public final class MCPManager {
     }
 
     /**
-     * 把指定组的 MCP 工具作为默认工具安装到角色 (从角色电脑的独立服务器).
-     * 返回成功安装的工具名列表.
+     * Install the MCP tools of the given group to the role as default tools (from the role computer's independent server).
+     * Returns the list of tool names that were installed successfully.
      */
     public List<String> installGroupDefaults(AgentRole role, String group) {
-        // 1) 确保角色电脑的独立 MCP 服务器已安装
+        // 1) Make sure the role computer's independent MCP server is installed
         Computer computer = role.computer();
         computer.installMcpServer();
         List<String> installed = computer.listInstalledMcpTools();
         if (installed.isEmpty()) {
-            logger.warn("[{}] 电脑无 MCP 服务器工具, 跳过默认组 '{}'", role.roleId, group);
+            logger.warn("[{}] computer has no MCP server tools, skipping default group '{}'", role.roleId, group);
             return new ArrayList<>();
         }
-        // 2) 按分组规则过滤
+        // 2) Filter according to the group rules
         List<String> patterns = new ArrayList<>();
         Map<String, Object> rules = loadRules();
         Object groups = rules.get("groups");
@@ -100,7 +100,7 @@ public final class MCPManager {
                 targets.add(n);
             }
         }
-        // 3) 逐个安装到角色
+        // 3) Install to the role one by one
         List<String> ok = new ArrayList<>();
         for (String name : targets) {
             try {
@@ -109,15 +109,15 @@ public final class MCPManager {
                     ok.add(name);
                 }
             } catch (Exception e) {
-                logger.error("[{}] MCP 默认工具安装失败: {}", role.roleId, name, e);
+                logger.error("[{}] failed to install MCP default tool: {}", role.roleId, name, e);
             }
         }
-        logger.info("[{}] MCP 默认工具组 '{}' 已安装 {} 个工具: {}",
+        logger.info("[{}] MCP default tool group '{}' installed {} tools: {}",
                 role.roleId, group, ok.size(), ok);
         return ok;
     }
 
-    /** 为角色安装一个 MCP 工具 (来自该角色电脑的独立 MCP 服务器). */
+    /** Install an MCP tool for the role (from the role computer's independent MCP server). */
     public String addTool(AgentRole role, String toolName) {
         Computer computer = role.computer();
         computer.installMcpServer();
@@ -133,18 +133,18 @@ public final class MCPManager {
                     ? "(none)" : computer.listInstalledMcpTools())
                     + ". Use mcp_search / mcp_list to see all available tools.";
         }
-        // 角色注册代理 handler → 转发到电脑服务器上执行
+        // The role registers a proxy handler -> forwards to the computer server for execution
         Computer compRef = computer;
         String tname = toolName;
         role.addSingleTool(td.name, td.description, td.inputSchema,
                 args -> compRef.runMcpTool(tname, args), td.source);
         mine.add(toolName);
-        logger.info("[{}] MCP 工具已安装到电脑: {} (来源 {})", roleId, toolName, td.source);
+        logger.info("[{}] MCP tool installed to computer: {} (source {})", roleId, toolName, td.source);
         return "Success: tool '" + toolName + "' installed to " + roleId
                 + " (" + truncate(td.description, 60) + ")";
     }
 
-    /** 从角色电脑卸载一个 MCP 工具. */
+    /** Uninstall an MCP tool from the role's computer. */
     public String removeTool(AgentRole role, String toolName) {
         String roleId = role.roleId;
         Set<String> mine = roleTools.getOrDefault(roleId, new LinkedHashSet<>());
@@ -155,11 +155,11 @@ public final class MCPManager {
         computer.uninstallMcpTool(toolName);
         role.removeSingleTool(toolName);
         mine.remove(toolName);
-        logger.info("[{}] MCP 工具已从电脑卸载: {}", roleId, toolName);
+        logger.info("[{}] MCP tool uninstalled from computer: {}", roleId, toolName);
         return "Success: tool '" + toolName + "' has been uninstalled from the computer of " + roleId + ".";
     }
 
-    /** 列出角色电脑上已安装的 MCP 工具. */
+    /** List the MCP tools installed on the role's computer. */
     public List<Map<String, String>> listRoleTools(AgentRole role) {
         Computer computer = role.computer();
         List<Map<String, String>> out = new ArrayList<>();

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * list_notes — 列出当前所有笔记标题 (含提醒时间信息, 若有).
+ * list_notes - list the titles of all current notes (including reminder time info, if any).
  */
 public class ListNotes extends Tool {
 

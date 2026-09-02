@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * todo_list — 列出自己的 Todo 待办清单 (可按状态过滤: pending/in_progress/completed).
+ * todo_list — list your own Todo list (can be filtered by status: pending/in_progress/completed).
  */
 public class TodoList extends Tool {
 

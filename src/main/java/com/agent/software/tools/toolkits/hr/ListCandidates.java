@@ -13,8 +13,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * list_candidates — 列出当前角色模板池中的所有角色 (已入职的成员),
- * 包含 role_id, 姓名, 职位.
+ * list_candidates - list all roles in the current role template pool (members who have onboarded),
+ * including role_id, name, position.
  */
 public class ListCandidates extends Tool {
 

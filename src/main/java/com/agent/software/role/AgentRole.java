@@ -38,31 +38,31 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 角色系统核心: AgentRole (单个角色) — Python 版 roles.py 的 Java 对应物.
+ * Core of the role system: AgentRole (a single role) — the Java counterpart of the Python roles.py.
  *
- * 每个角色拥有: 人格 (姓名/职位/职责/技能)、线程安全优先级任务队列、
- * 独立 LLM 会话 (角色专属 System Prompt)、独立 worker 线程.
+ * Each role has: a persona (name/title/responsibilities/skills), a thread-safe priority task queue,
+ * its own LLM session (role-specific System Prompt), and its own worker thread.
  */
 public class AgentRole {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentRole.class);
 
-    // ── 工具调用循环上限 ───────────────────────────────────────
-    public static final int MAX_TOOL_ROUNDS = 20;               // 最多工具调用轮数
-    public static final Integer MAX_TOOL_TOTAL_TOKENS = null;   // 单任务累计 Token 上限 (暂时放开)
+    // ── Tool-calling loop limits ────────────────────────────────
+    public static final int MAX_TOOL_ROUNDS = 20;               // max tool-calling rounds
+    public static final Integer MAX_TOOL_TOTAL_TOKENS = null;   // cumulative per-task token cap (currently lifted)
 
-    // ── 角色活动日志 ──────────────────────────────────────────
+    // ── Role activity journal ──────────────────────────────────
     public static Path JOURNAL_DIR = Paths.get("data/journals");
     private static final Object JOURNAL_LOCK = new Object();
 
-    /** 工具调用循环超限或 LLM 调用失败. 任务应标记 failed. */
+    /** Tool-calling loop exceeded or LLM call failed. The task should be marked failed. */
     public static class ToolLoopError extends RuntimeException {
         public ToolLoopError(String message) {
             super(message);
         }
     }
 
-    /** 任务紧急度 — 数值越大越紧急, 先处理. */
+    /** Task urgency — higher value means more urgent, processed first. */
     public enum Urgency {
         LOW(1), NORMAL(3), HIGH(6), CRITICAL(10);
 
@@ -82,15 +82,15 @@ public class AgentRole {
         }
     }
 
-    /** 任务状态: pending|running|done|failed. */
+    /** Task status: pending|running|done|failed. */
     public static final String STATUS_PENDING = "pending";
     public static final String STATUS_RUNNING = "running";
     public static final String STATUS_DONE = "done";
     public static final String STATUS_FAILED = "failed";
 
-    /** 角色队列中的任务. 按 urgency 降序弹出. */
+    /** A task in the role's queue. Popped by descending urgency. */
     public static final class Task {
-        public int urgency;                        // 正数紧急度 (队列按降序)
+        public int urgency;                        // positive urgency (queue pops in descending order)
         public String taskId;
         public String description = "";
         public String source = "";
@@ -100,7 +100,7 @@ public class AgentRole {
         public String result = "";
         public int tokensConsumed = 0;
         public String assignedRole = "";
-        private final long seq;                    // 同 urgency 时按入队顺序稳定弹出
+        private final long seq;                    // stable FIFO ordering among equal urgencies
 
         private static long seqCounter = 0;
 
@@ -125,7 +125,7 @@ public class AgentRole {
                     System.currentTimeMillis() / 1000.0, "");
         }
 
-        /** Task → 可序列化 Map (urgency 存正数). */
+        /** Task → serializable Map (urgency stored as a positive number). */
         public Map<String, Object> toDict() {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("urgency", urgency);
@@ -164,50 +164,50 @@ public class AgentRole {
         }
     }
 
-    /** 任务完成回调 (on_task_start / on_task_done). */
+    /** Task completion callback (on_task_start / on_task_done). */
     @FunctionalInterface
     public interface TaskCallback {
         void call(AgentRole role, Task task);
     }
 
-    // ── AgentRole 字段 ──────────────────────────────────────
+    // ── AgentRole fields ──────────────────────────────────────
 
-    public String name;                                  // 人名, e.g. "张三"
-    public String roleId = "";                           // 功能角色, e.g. "coder"
-    public String username = "";                         // 容器/系统用户名 (汉语拼音)
-    public int uid = 0;                                  // 容器内 uid (1100+注册序号)
+    public String name;                                  // person name, e.g. "Zhang San"
+    public String roleId = "";                           // functional role, e.g. "coder"
+    public String username = "";                         // container/system username (pinyin)
+    public int uid = 0;                                  // uid inside the container (1100 + registration seq)
     public String title = "";
     public String responsibilities = "";
     public String personality = "";
     public List<String> skills = new ArrayList<>();
     public String systemPromptExtra = "";
     public boolean isDefault = false;
-    public String group = "";                            // 所属分组 (talk 组内限制)
-    public String email = "";                            // 显式公司邮箱 (可选)
+    public String group = "";                            // group membership (talk in-group restriction)
+    public String email = "";                            // explicit company email (optional)
     public String computerKind = "podman";
     public Map<String, Object> computerKwargs = new LinkedHashMap<>();
 
-    // 事件过滤状态 (per-role)
+    // Event filter state (per-role)
     public Types.AgentState state = Types.AgentState.ON_DUTY_IDLE;
     public double salienceThreshold = 0.4;
     public Set<String> interestKeywords = new LinkedHashSet<>();
 
-    // 内部状态 (由 RolePool 管理)
+    // Internal state (managed by RolePool)
     private final PriorityQueue<Task> queue = new PriorityQueue<>(
             Comparator.comparingInt((Task t) -> -t.urgency).thenComparingLong(t -> t.seq));
     private final ReentrantLock lock = new ReentrantLock();
     private Task currentTask = null;
     private volatile boolean running = true;
-    private LLM llm = null;                              // 惰性初始化
-    private ToolRegistry tools = null;                   // 惰性初始化
-    private RolePool pool = null;                        // talk 用回引
-    private AgentSystem system = null;                   // 所属 AgentSystem (电脑/邮箱/数据目录等来源)
+    private LLM llm = null;                              // lazy initialization
+    private ToolRegistry tools = null;                   // lazy initialization
+    private RolePool pool = null;                        // back-reference used by talk
+    private AgentSystem system = null;                   // owning AgentSystem (source of computer/mail/data dirs)
     private NoteStore noteStore = null;
     private TodoStore todoStore = null;
     private TimeEventBus timeManager = null;
     private Computer computer = null;
 
-    // talk wait=true 同步等待回复状态
+    // talk wait=true synchronous reply-waiting state
     private String waitingReplyFrom = null;
     private final ReentrantLock replyCondLock = new ReentrantLock();
     private final Condition replyCond = replyCondLock.newCondition();
@@ -219,7 +219,7 @@ public class AgentRole {
     public TaskCallback onTaskStart = null;
     public TaskCallback onTaskDone = null;
 
-    // ── 构造 ──────────────────────────────────────────────
+    // ── Construction ──────────────────────────────────────────
 
     public AgentRole(String name, String roleId, String username, int uid, String title,
                      String responsibilities, String personality, List<String> skills,
@@ -250,7 +250,7 @@ public class AgentRole {
         postInit();
     }
 
-    /** 便捷构造: 从构建器创建. */
+    /** Convenience constructor: create from a builder. */
     public static Builder builder() {
         return new Builder();
     }
@@ -300,20 +300,20 @@ public class AgentRole {
     }
 
     /**
-     * 补齐派生字段: username (未显式指定时回退 role_id) 与 uid (容器内用户号).
-     * 模板角色的拼音用户名由 role_templates.json 的 username 字段直接提供
-     * (PinyinMap 已并入 JSON), 此处只处理程序化创建的角色.
+     * Fill in derived fields: username (falls back to role_id when not given) and uid (user id in the container).
+     * Template roles get their pinyin username directly from the username field in role_templates.json
+     * (PinyinMap has been merged into the JSON); this only handles programmatically created roles.
      */
     private void postInit() {
         if (username == null || username.isEmpty()) {
             username = !roleId.isEmpty() ? roleId : "agent";
         }
         if (uid <= 0) {
-            uid = 1100;  // 由 RolePool.addRole 注册时分配 (1100 + 注册序号)
+            uid = 1100;  // assigned by RolePool.addRole at registration (1100 + registration seq)
         }
     }
 
-    /** 该员工的公司邮箱地址 (每位成员都有邮箱). */
+    /** This employee's company email address (every member has a mailbox). */
     public String mailAddress() {
         return mailService().emailFor(this);
     }
@@ -321,21 +321,21 @@ public class AgentRole {
     // ── Event Filter (per-role Layer 1-3) ──────────────────
 
     /**
-     * 运行每角色 3 层过滤.
+     * Run the per-role 3-layer filter.
      *
-     * @return {accepted, reason} 二元组.
+     * @return a {accepted, reason} pair.
      */
     public Map.Entry<Boolean, String> evaluateEvent(Types.Event event) {
-        // Layer 1: State Mask (WAIT 与 OFF_DUTY 同等对待)
+        // Layer 1: State Mask (WAIT and OFF_DUTY treated alike)
         if (state == Types.AgentState.OFF_DUTY || state == Types.AgentState.WRAPPING_UP
                 || state == Types.AgentState.WAIT) {
             if (event.priority.value < Types.Priority.EMERGENCY.value) {
                 return Map.entry(false, "Role " + name + " is " + state.value);
             }
         }
-        // 系统时间事件 (source=time) 绕过内容显著性过滤
+        // System time events (source=time) bypass content salience filtering
         if ("time".equals(event.source)) {
-            return Map.entry(true, "系统时间事件: " + event.eventType
+            return Map.entry(true, "System time event: " + event.eventType
                     + " (tick=" + event.payload.get("tick") + ")");
         }
         // Layer 2: Salience — keyword-based relevance per role
@@ -361,7 +361,7 @@ public class AgentRole {
             }
         }
         // Urgency bonus
-        if (eventText.contains("urgent") || eventText.contains("critical") || eventText.contains("紧急")) {
+        if (eventText.contains("urgent") || eventText.contains("critical")) {
             relevance += 0.15;
         }
         relevance = Math.min(1.0, relevance);
@@ -374,7 +374,7 @@ public class AgentRole {
         return Map.entry(true, String.format("PASS (score=%.2f, relevance=%.2f)", score, relevance));
     }
 
-    /** 将已通过的事件转换为本角色队列的任务. */
+    /** Convert a passed event into a task for this role's queue. */
     public Task eventToTask(Types.Event event) {
         Urgency urgency = switch (event.priority) {
             case LOW -> Urgency.LOW;
@@ -397,7 +397,7 @@ public class AgentRole {
 
     // ── Persona ────────────────────────────────────────────
 
-    /** 构建角色完整 System Prompt. */
+    /** Build the role's full System Prompt. */
     public String buildSystemPrompt() {
         List<String> parts = new ArrayList<>();
         parts.add("You are " + name + ", your title is " + title
@@ -417,7 +417,7 @@ public class AgentRole {
                 + "to contact them at that time.");
         parts.add("The company cloud drive is at /mnt/drive (every computer mounts the same shared folder):\n"
                 + "  - /mnt/drive/Public — public shared directory, readable and writable by all employees (put shared resources, announcements, and collaboration files here)\n"
-                + "  - /mnt/drive/" + name + " — your personal directory; only you can write to it; other employees have read-only access\n"
+                + "  - /mnt/drive/" + username + " — your personal directory; only you can write to it; other employees have read-only access\n"
                 + "  - Other employees' personal directories are read-only for you as well\n"
                 + "Use the computer's file commands directly for file operations (ls / cat / cp / mv / rm, etc.); "
                 + "to share a file with a colleague: write it to Public, or send the cloud drive file path via the talk attachment parameter.");
@@ -437,12 +437,12 @@ public class AgentRole {
                     + "Colleague communication rules: the talk tool can only message members of your own group (quick in-group communication); "
                     + "communication with colleagues in other groups (other teams, release management, leadership, etc.) must use email "
                     + "(send_email to send, read_mail to check the inbox), for example reporting review results to the "
-                    + "release management role 方谨言 (Fang Jinyan), or collaborating with colleagues in other teams.");
+                    + "release management role Fang Jinyan, or collaborating with colleagues in other teams.");
         }
         if (systemPromptExtra != null && !systemPromptExtra.isEmpty()) {
             parts.add(systemPromptExtra);
         }
-        // 注入昨日总结 (如果有) — 只注入严格早于今天(day)的总结
+        // Inject yesterday's summary (if any) — only summaries strictly before today (day) are injected
         String summary = getLatestSummary(timeManager().dayNumber());
         if (summary != null && !summary.isEmpty()) {
             parts.add("\n[Yesterday's Summary]\n" + summary + "\n(The above is yesterday's summary, for you to continue your work.)");
@@ -452,7 +452,7 @@ public class AgentRole {
 
     // ── Queue operations (thread-safe) ─────────────────────
 
-    /** 向本角色优先级队列添加任务 (线程安全). */
+    /** Add a task to this role's priority queue (thread-safe). */
     public void addTask(Task task) {
         task.assignedRole = roleId;
         lock.lock();
@@ -463,10 +463,10 @@ public class AgentRole {
         } finally {
             lock.unlock();
         }
-        journal("收到任务 [" + Urgency.from(task.urgency).name() + "]: " + truncate(task.description, 120));
+        journal("Task received [" + Urgency.from(task.urgency).name() + "]: " + truncate(task.description, 120));
     }
 
-    /** 弹出最高优先级任务; 队列为空返回 null. */
+    /** Pop the highest-priority task; returns null if the queue is empty. */
     public Task popTask() {
         lock.lock();
         try {
@@ -476,7 +476,7 @@ public class AgentRole {
         }
     }
 
-    /** 查看下一个任务的紧急度 (不移除). */
+    /** Peek at the urgency of the next task (without removing it). */
     public Urgency peekNextUrgency() {
         lock.lock();
         try {
@@ -504,55 +504,55 @@ public class AgentRole {
         return currentTask != null;
     }
 
-    // ── 所属 AgentSystem (每系统独立协作对象) ────────────────
+    // ── Owning AgentSystem (per-system collaboration objects) ────
 
     /**
-     * 绑定所属 AgentSystem: 电脑/邮箱/笔记/待办/活动日志/聊天等惰性依赖全部解析到
-     * 本系统实例 (而非进程级全局单例), 使多个 AgentSystem 可安全共存.
-     * 由 {@code AgentSystem.addRoles} / {@code RolePool.setupRole} 注入; 幂等.
+     * Bind the owning AgentSystem: lazy dependencies such as computer/mail/notes/todos/journal/chat
+     * resolve to this system's instances (not process-level global singletons), so multiple AgentSystems can coexist safely.
+     * Injected by {@code AgentSystem.addRoles} / {@code RolePool.setupRole}; idempotent.
      */
     public void bindSystem(AgentSystem system) {
         this.system = system;
     }
 
-    /** 所属 AgentSystem (独立创建未入池的角色为 null, 此时各依赖回退全局默认). */
+    /** The owning AgentSystem (null for standalone roles not added to a pool; dependencies then fall back to global defaults). */
     public AgentSystem system() {
         return system;
     }
 
-    /** 本角色电脑注册表: 有所属系统用系统实例, 否则回退进程级默认单例. */
+    /** This role's computer registry: system instance when bound, otherwise the process-level default singleton. */
     public ComputerManager computerManager() {
         return system != null ? system.computerManager : ComputerManager.getInstance();
     }
 
-    /** 本角色公司邮箱服务: 有所属系统用系统实例, 否则回退进程级默认单例. */
+    /** This role's company mail service: system instance when bound, otherwise the process-level default singleton. */
     public MailService mailService() {
         return system != null ? system.mailService : MailService.getMailService();
     }
 
-    /** 本角色与甲方沟通互斥锁: 有所属系统用系统实例, 否则回退进程级默认单例. */
+    /** This role's client-communication mutex: system instance when bound, otherwise the process-level default singleton. */
     public ClientCommunicationLock clientLock() {
         return system != null ? system.clientLock : ClientCommunicationLock.getInstance();
     }
 
-    /** 本角色 MCP 工具管理器: 有所属系统用系统实例, 否则回退进程级默认单例. */
+    /** This role's MCP tool manager: system instance when bound, otherwise the process-level default singleton. */
     public MCPManager mcpManager() {
         return system != null ? system.mcpManager : Toolkits.getMcpManager();
     }
 
-    /** 本角色技能库管理器: 有所属系统用系统实例, 否则回退进程级默认单例. */
+    /** This role's skill library manager: system instance when bound, otherwise the process-level default singleton. */
     public SkillManager skillManager() {
         return system != null ? system.skillManager : Toolkits.getSkillManager();
     }
 
-    /** 本角色聊天消息存储 (Web 界面数据源); 未绑定系统的独立角色为 null. */
+    /** This role's chat message store (data source for the Web UI); null for standalone roles not bound to a system. */
     public ChatStore chatStore() {
         return system != null ? system.chatStore : null;
     }
 
     // ── Personal computer (per-role) ───────────────────────
 
-    /** 获取该角色的个人电脑 (惰性创建, 角色添加时自动创建并开机). */
+    /** Get this role's personal computer (lazily created; automatically created and powered on when the role is added). */
     public Computer computer() {
         if (computer == null) {
             Map<String, Object> kwargs = new LinkedHashMap<>(computerKwargs);
@@ -569,7 +569,7 @@ public class AgentRole {
 
     // ── Note store (per-role file storage) ─────────────────
 
-    /** 获取该角色的笔记存储实例 (惰性初始化, 按 role_id 隔离, 落本系统数据目录). */
+    /** Get this role's note store instance (lazily initialized, isolated by role_id, under this system's data dir). */
     public NoteStore noteStore() {
         if (noteStore == null) {
             noteStore = new NoteStore(system != null ? system.notesDir().toString() : null,
@@ -578,12 +578,12 @@ public class AgentRole {
         return noteStore;
     }
 
-    /** 读取该角色最近一次的每日总结 (用于下一天冷启动提示词). */
+    /** Read this role's most recent daily summary (used for the next day's cold-start prompt). */
     public String getLatestSummary(Integer beforeDay) {
         return noteStore().getLatestSummary(beforeDay);
     }
 
-    /** 获取该角色的 Todo 清单存储 (惰性初始化, 落本系统数据目录). */
+    /** Get this role's todo list store (lazily initialized, under this system's data dir). */
     public TodoStore todoStore() {
         if (todoStore == null) {
             todoStore = new TodoStore(roleId, system != null
@@ -593,11 +593,11 @@ public class AgentRole {
         return todoStore;
     }
 
-    // ── 活动日志 (journal) ───────────────────────────────
+    // ── Activity journal ─────────────────────────────────────
 
     /**
-     * 写入角色活动日志 (data/journals/&lt;role_id&gt;.md).
-     * 行格式: [D&lt;第几天&gt; T&lt;Tick&gt; HH:MM:SS] 内容.
+     * Write to the role activity journal (data/journals/&lt;role_id&gt;.md).
+     * Line format: [D&lt;day&gt; T&lt;tick&gt; HH:MM:SS] content.
      */
     public void journal(String entry) {
         String line = String.join(" ", String.valueOf(entry).trim().split("\\s+"));
@@ -611,7 +611,7 @@ public class AgentRole {
             tick = 0;
         }
         String ts = new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date());
-        // 活动日志目录: 有所属系统落本系统数据目录, 否则用进程级静态默认 (旧行为)
+        // Journal dir: this system's data dir when bound, otherwise the process-level static default (legacy behavior)
         Path journalDir = system != null ? system.journalDir() : JOURNAL_DIR;
         try {
             synchronized (JOURNAL_LOCK) {
@@ -621,18 +621,18 @@ public class AgentRole {
                 Files.writeString(path, "[D" + day + " T" + tick + " " + ts + "] " + line + "\n",
                         StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             }
-            logger.debug("[{}] 活动日志: {}", roleId, truncate(line, 100));
+            logger.debug("[{}] journal: {}", roleId, truncate(line, 100));
         } catch (Exception e) {
-            logger.warn("[{}] 写活动日志失败: {}", roleId, truncate(line, 100));
+            logger.warn("[{}] failed to write journal: {}", roleId, truncate(line, 100));
         }
     }
 
-    // ── Time manager (作息时间) ───────────────────────────
+    // ── Time manager (work schedule) ───────────────────────
 
     /**
-     * 获取该角色的作息时间管理器.
-     * 系统内角色由 {@code AgentSystem.addRoles} 绑定本系统的 TimeEventBus;
-     * 未显式绑定的独立角色回退到进程级默认共享时钟 (旧行为, 独立角色池/演示用).
+     * Get this role's work-schedule time manager.
+     * Roles inside a system get this system's TimeEventBus via {@code AgentSystem.addRoles};
+     * Standalone roles not explicitly bound fall back to the process-level default shared clock (legacy behavior, for standalone pools/demos).
      */
     public TimeEventBus timeManager() {
         if (timeManager == null) {
@@ -641,7 +641,7 @@ public class AgentRole {
         return timeManager;
     }
 
-    /** 绑定共享 TimeEventBus (所有角色共用同一个时间源). */
+    /** Bind a shared TimeEventBus (all roles share the same time source). */
     public void bindTimeManager(TimeEventBus tm) {
         this.timeManager = tm;
     }
@@ -649,10 +649,10 @@ public class AgentRole {
     // ── MCP & Python Tool Management ────────────────────────
 
     /**
-     * 导入模板风格工具类 (toolkits.*, Tool/Toolkit).
-     * 每个 Tool 注册为 Python 原生工具: 扁平参数说明由 Tool.getInputSchema()
-     * 自动转为 OpenAI 风格 input_schema 供 LLM 调用.
-     * 模板工具类在构造时已注入依赖 (角色/存储/管理器), 无需额外绑定.
+     * Import template-style toolkits (toolkits.*, Tool/Toolkit).
+     * Each Tool is registered as a native tool: the flat parameter descriptions are converted by Tool.getInputSchema()
+     * into an OpenAI-style input_schema for LLM calls.
+     * Template toolkits have their dependencies injected at construction (role/store/manager); no extra binding is needed.
      */
     public int addToolkit(Toolkit toolkit) {
         if (tools == null) {
@@ -667,7 +667,7 @@ public class AgentRole {
 
     // ── Inter-role Communication (talk) ────────────────────
 
-    /** 自动注册 talk 工具类. 在 RolePool.start() 时调用. */
+    /** Automatically register the talk toolkit. Called at RolePool.start(). */
     public void registerTalkTool() {
         if (pool == null) {
             return;
@@ -679,7 +679,7 @@ public class AgentRole {
         logger.info("[{}] talk toolkit loaded — {} tools", roleId, added);
     }
 
-    /** 编程式角色间通信 (non-LLM path). */
+    /** Programmatic inter-role communication (non-LLM path). */
     public String talkTo(String target, String message, String urgency) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("target", target);
@@ -689,18 +689,18 @@ public class AgentRole {
         return r.content.isEmpty() ? "" : r.content.get(0).text;
     }
 
-    // ── talk wait=true 同步等待回复 ───────────────────────
+    // ── talk wait=true synchronous reply waiting ────────────
 
-    /** 进入 WAIT 状态: 记录原状态, 标记在等 target_id 的 talk 回复. */
+    /** Enter WAIT state: record the previous state and mark that we are waiting for a talk reply from target_id. */
     public void beginWait(String targetId) {
         waitingReplyFrom = targetId;
         stateBeforeWait = state;
-        replyBox = null;  // 清空历史回复
+        replyBox = null;  // clear any previous reply
         state = Types.AgentState.WAIT;
-        journal("进入 WAIT, 等待 " + targetId + " 回复");
+        journal("Entered WAIT, waiting for " + targetId + "'s reply");
     }
 
-    /** 阻塞等待回复 (默认无限等待). 返回回复内容, 超时未收到返回 null. */
+    /** Block until a reply arrives (infinite wait by default). Returns the reply, or null on timeout. */
     public String waitForReply(Long timeoutMillis) {
         replyCondLock.lock();
         try {
@@ -726,7 +726,7 @@ public class AgentRole {
         }
     }
 
-    /** 结束 WAIT: 清空等待状态, 恢复进入 WAIT 前的状态. */
+    /** End WAIT: clear the waiting state and restore the state from before WAIT. */
     public void endWait() {
         waitingReplyFrom = null;
         replyBox = null;
@@ -734,10 +734,10 @@ public class AgentRole {
             state = stateBeforeWait;
         }
         stateBeforeWait = null;
-        journal("WAIT 结束, 状态已恢复");
+        journal("WAIT ended, state restored");
     }
 
-    /** 投递 talk 回复给处于 WAIT 的等待者 (唤醒其阻塞的 worker 线程). */
+    /** Deliver a talk reply to a waiting role in WAIT (wakes its blocked worker thread). */
     public void deliverReply(String content) {
         replyCondLock.lock();
         try {
@@ -749,9 +749,9 @@ public class AgentRole {
     }
 
     /**
-     * 公开 WAIT 协议: 阻塞等待目标角色的 talk 回复.
-     * 先进入 WAIT 再投递任务 — 若先投递, 对方秒回时回复会落在 begin_wait 的
-     * 信箱清空之前, 导致回复丢失 (竞态).
+     * Public WAIT protocol: block until the target role's talk reply arrives.
+     * Enter WAIT before delivering the task — if the task were delivered first, an instant reply
+     * would land before begin_wait clears the mailbox, losing the reply (race condition).
      */
     public String talkWait(String targetId, Task task, Long timeoutMillis) {
         beginWait(targetId);
@@ -763,7 +763,7 @@ public class AgentRole {
                 }
                 if (target == null) {
                     throw new IllegalArgumentException(
-                            "talk_wait: 目标角色 " + targetId + " 不在角色池中, 无法投递任务");
+                            "talk_wait: target role " + targetId + " is not in the role pool, cannot deliver task");
                 }
                 target.addTask(task);
             }
@@ -773,29 +773,29 @@ public class AgentRole {
         }
     }
 
-    // ── 公开访问器 (供工具层/存档层使用) ──────────────────
+    // ── Public accessors (for the tool layer / state-store layer) ─
 
-    /** 只读获取个人电脑 (未创建返回 null, 不惰性创建). */
+    /** Read-only access to the personal computer (null if not created; no lazy creation). */
     public Computer computerIfCreated() {
         return computer;
     }
 
-    /** 只读等待链: 该角色正在等待谁的 talk 回复. */
+    /** Read-only wait chain: whose talk reply this role is waiting for. */
     public String waitingReplyFrom() {
         return waitingReplyFrom;
     }
 
-    /** 测试辅助: 当前回复信箱内容 (未收到回复为 null). */
+    /** Test helper: current reply mailbox content (null if no reply received). */
     public String debugReplyBox() {
         return replyBox;
     }
 
-    /** 只读所在角色池. */
+    /** Read-only access to the owning role pool. */
     public RolePool pool() {
         return pool;
     }
 
-    /** 待处理队列的加锁快照. */
+    /** Locked snapshot of the pending queue. */
     public List<Task> pendingTasks() {
         lock.lock();
         try {
@@ -805,7 +805,7 @@ public class AgentRole {
         }
     }
 
-    /** 最近任务历史快照 (limit 截取最近 N 条). */
+    /** Snapshot of recent task history (limit truncates to the most recent N entries). */
     public List<Task> taskHistory(Integer limit) {
         if (limit == null) {
             return new ArrayList<>(taskHistory);
@@ -815,18 +815,18 @@ public class AgentRole {
         return new ArrayList<>(taskHistory.subList(from, size));
     }
 
-    /** 整体替换任务历史 (StateStore 恢复用). */
+    /** Replace the task history wholesale (used by StateStore restore). */
     public void restoreTaskHistory(List<Task> tasks) {
         taskHistory.clear();
         taskHistory.addAll(tasks);
     }
 
-    /** 绑定个人电脑对象 (StateStore 恢复容器绑定时用). */
+    /** Bind a personal computer object (used when StateStore restores container bindings). */
     public void bindComputer(Computer comp) {
         this.computer = comp;
     }
 
-    /** 确保工具注册表已初始化. */
+    /** Ensure the tool registry is initialized. */
     public ToolRegistry ensureTools() {
         if (tools == null) {
             tools = new ToolRegistry();
@@ -834,13 +834,13 @@ public class AgentRole {
         return tools;
     }
 
-    /** 动态注册单个工具到角色. */
+    /** Dynamically register a single tool on the role. */
     public void addSingleTool(String name, String description, Map<String, Object> inputSchema,
                               ToolRegistry.ToolHandler handler, String source) {
         ensureTools().addTool(name, description, inputSchema, handler, source);
     }
 
-    /** 动态移除角色上的单个工具. 返回是否存在. */
+    /** Dynamically remove a single tool from the role. Returns whether it existed. */
     public boolean removeSingleTool(String name) {
         if (tools == null) {
             return false;
@@ -853,7 +853,7 @@ public class AgentRole {
     // ── Tool-calling LLM execution ─────────────────────────
 
     /**
-     * 用工具调用循环执行任务 (原生 function calling).
+     * Execute the task with the tool-calling loop (native function calling).
      *
      * @return {finalText, totalTokens}.
      */
@@ -875,35 +875,35 @@ public class AgentRole {
         while (true) {
             roundNo++;
             /*if (roundNo > MAX_TOOL_ROUNDS) {
-                throw new ToolLoopError("工具调用超过 " + MAX_TOOL_ROUNDS + " 轮仍未收敛 "
-                        + "(累计 " + totalTokens + " tokens), 任务失败");
+                throw new ToolLoopError("Tool calls exceeded " + MAX_TOOL_ROUNDS + " rounds without converging "
+                        + "(total " + totalTokens + " tokens), task failed");
             }*/
             LLM.ToolsResponse response = llm.chatWithTools(messages, openaiTools, 0.7, null);
             totalTokens += response.totalTokens();
             /*if (MAX_TOOL_TOTAL_TOKENS != null && totalTokens > MAX_TOOL_TOTAL_TOKENS) {
-                throw new ToolLoopError("工具调用累计 " + totalTokens + " tokens 超过上限 "
-                        + MAX_TOOL_TOTAL_TOKENS + ", 任务失败");
+                throw new ToolLoopError("Tool calls consumed " + totalTokens + " tokens, exceeding the limit of "
+                        + MAX_TOOL_TOTAL_TOKENS + ", task failed");
             }*/
             List<Map<String, Object>> toolCalls = response.toolCalls;
             if (toolCalls.isEmpty()) {
-                // LLM 调用失败 (API 超时/异常): 不能当作成功结果
+                // LLM call failed (API timeout/exception): must not be treated as a success
                 if (response.content.startsWith(LLM.LLM_ERROR_MARKERS)) {
-                    throw new ToolLoopError("LLM 调用失败 (第 " + roundNo + " 轮): "
+                    throw new ToolLoopError("LLM call failed (round " + roundNo + "): "
                             + truncate(response.content, 120));
                 }
-                logger.debug("[{}] 工具循环: 第 {} 轮收到终答 (无工具调用), 任务完成", roleId, roundNo);
+                logger.debug("[{}] tool loop: final answer received in round {} (no tool calls), task done", roleId, roundNo);
                 return Map.entry(response.content, totalTokens);
             }
-            // 把本轮 LLM 回复 (含原生 tool_calls) 追加进对话历史
+            // Append this round's LLM reply (including native tool_calls) to the conversation history
             Map<String, Object> assistantMsg = new LinkedHashMap<>();
             assistantMsg.put("role", "assistant");
             assistantMsg.put("content", response.content.isEmpty() ? null : response.content);
             assistantMsg.put("tool_calls", toolCalls);
             messages.add(assistantMsg);
-            logger.debug("[{}] 工具循环: 追加 LLM 输出消息 ({} 字符, {} 个原生工具调用)",
+            logger.debug("[{}] tool loop: appended LLM output message ({} chars, {} native tool calls)",
                     roleId, response.content.length(), toolCalls.size());
 
-            // 顺序执行本轮的每个工具调用
+            // Execute this round's tool calls sequentially
             for (Map<String, Object> call : toolCalls) {
                 Object fnObj = call.get("function");
                 Map<String, Object> fn = fnObj instanceof Map
@@ -916,7 +916,7 @@ public class AgentRole {
                     toolArgs = raw instanceof Map ? (Map<String, Object>) raw : new LinkedHashMap<>();
                 } catch (Exception e) {
                     toolArgs = new LinkedHashMap<>();
-                    logger.warn("[{}] 工具 {} 的 arguments 不是合法 JSON: {}",
+                    logger.warn("[{}] arguments of tool {} are not valid JSON: {}",
                             roleId, toolName, fn.get("arguments"));
                 }
                 String toolResult;
@@ -928,12 +928,12 @@ public class AgentRole {
                 }
                 logger.info("[{}] Tool call: {}({}) → {}", roleId, toolName,
                         Json.stringify(toolArgs), truncate(toolResult, 80));
-                journal("调用工具 " + toolName + "(" + truncate(Json.stringify(toolArgs), 80)
+                journal("Called tool " + toolName + "(" + truncate(Json.stringify(toolArgs), 80)
                         + ") → " + truncate(toolResult == null ? "" : toolResult, 100));
-                // 原生协议: 工具结果以 role:"tool" 消息回喂, 关联 tool_call_id
+                // Native protocol: tool results are fed back as role:"tool" messages, linked by tool_call_id
                 messages.add(msgWithToolCallId(toolName, callId, toolResult));
             }
-            logger.debug("[{}] 工具循环: 第 {} 轮仍包含工具调用, 继续下一轮 (上限 {} 轮)",
+            logger.debug("[{}] tool loop: round {} still contains tool calls, continuing (max {} rounds)",
                     roleId, roundNo, MAX_TOOL_ROUNDS);
         }
     }
@@ -953,7 +953,7 @@ public class AgentRole {
         return m;
     }
 
-    // ── 内部访问器 (RolePool 使用) ─────────────────────────
+    // ── Internal accessors (used by RolePool) ────────────────
 
     public boolean isRunning() {
         return running;

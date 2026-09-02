@@ -17,14 +17,15 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 笔记存储 (NoteStore) — 基于文件的笔记与日记存储 (Python 版 note_store.py).
+ * Note storage (NoteStore) — file-based note and diary storage (Python version note_store.py).
  *
- * 每个 Role 绑定一个 NoteStore 实例, 内容按角色隔离:
- *   data/notes/&lt;role_id&gt;/notes/&lt;标题&gt;.md      # 普通笔记
- *   data/notes/&lt;role_id&gt;/summaries/&lt;day&gt;.md   # 每日总结
+ * Each Role is bound to one NoteStore instance; content is isolated per role:
+ *   data/notes/&lt;role_id&gt;/notes/&lt;title&gt;.md      # normal notes
+ *   data/notes/&lt;role_id&gt;/summaries/&lt;day&gt;.md   # daily summaries
  *
- * 默认基础目录为项目内 data/notes (与 .gitignore 及全项目 ./data/* 布局一致);
- * 多 AgentSystem 场景下由 AgentSystem 传入每系统数据目录, 各系统互不干扰.
+ * The default base directory is data/notes inside the project (consistent with .gitignore
+ * and the project-wide ./data/* layout); in multi-AgentSystem scenarios AgentSystem passes
+ * a per-system data directory, so systems do not interfere with each other.
  */
 public class NoteStore {
 
@@ -50,47 +51,47 @@ public class NoteStore {
             Files.createDirectories(notePath);
             Files.createDirectories(summaryPath);
         } catch (IOException e) {
-            throw new RuntimeException("创建笔记目录失败: " + dir, e);
+            throw new RuntimeException("Failed to create note directories: " + dir, e);
         }
     }
 
-    // ── 路径工具 ──────────────────────────────────────────
+    // ── Path utilities ──────────────────────────────────────────
 
-    /** 清洗标题为合法文件名. 非法字符替换为下划线. */
+    /** Sanitize a title into a valid file name. Illegal characters are replaced with underscores. */
     public static String sanitizeTitle(String title) {
         String cleaned = SANITIZE_RE.matcher(title == null ? "" : title.strip()).replaceAll("_");
         return cleaned.isEmpty() ? "untitled" : cleaned;
     }
 
-    /** 笔记文件名. */
+    /** Note file name. */
     public static String noteFilename(String title) {
         return sanitizeTitle(title) + ".md";
     }
 
-    /** 每日总结文件名. */
+    /** Daily summary file name. */
     public static String summaryFilename(int day) {
         return day + ".md";
     }
 
-    // ── 底层读写 ──────────────────────────────────────────
+    // ── Low-level read/write ──────────────────────────────────────────
 
     private void write(Path path, String content) {
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, content, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new RuntimeException("写入文件失败: " + path, e);
+            throw new RuntimeException("Failed to write file: " + path, e);
         }
     }
 
     private String read(Path path) throws java.io.FileNotFoundException {
         if (!Files.exists(path)) {
-            throw new java.io.FileNotFoundException("笔记文件不存在: " + path);
+            throw new java.io.FileNotFoundException("Note file does not exist: " + path);
         }
         try {
             return Files.readString(path, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new RuntimeException("读取文件失败: " + path, e);
+            throw new RuntimeException("Failed to read file: " + path, e);
         }
     }
 
@@ -109,20 +110,20 @@ public class NoteStore {
         }
     }
 
-    // ── 提醒 (笔记 = 任务统一概念) ─────────────────────────
+    // ── Reminders (notes = unified task concept) ─────────────────────────
 
-    /** 注册笔记提醒: 到指定 Tick 向本角色发送提醒事件. */
+    /** Register a note reminder: send a reminder event to this role at the specified tick. */
     public TimeEventBus.ScheduledTask scheduleReminder(String title, int tick, Integer day) {
         if (timeManager == null) {
             throw new IllegalArgumentException(
-                    "当前笔记存储未绑定 TimeEventBus, 无法注册提醒 (请通过 AgentRole.noteStore 使用)");
+                    "The current note store is not bound to a TimeEventBus, cannot register reminders (use it via AgentRole.noteStore)");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("note_title", title);
         return timeManager.scheduleTask("[Note Reminder] " + title, roleId, tick, day, payload);
     }
 
-    /** 取消该标题笔记的提醒. */
+    /** Cancel the reminder for the note with this title. */
     public boolean cancelReminder(String title) {
         if (timeManager == null) {
             return false;
@@ -138,7 +139,7 @@ public class NoteStore {
         return removed;
     }
 
-    /** 查询笔记的提醒信息 (未触发). 返回 {"day", "tick"} 或 null. */
+    /** Query the reminder info of a note (not yet triggered). Returns {"day", "tick"} or null. */
     public Map<String, Object> getReminder(String title) {
         if (timeManager == null) {
             return null;
@@ -155,38 +156,38 @@ public class NoteStore {
         return null;
     }
 
-    // ── 笔记操作 ──────────────────────────────────────────
+    // ── Note operations ──────────────────────────────────────────
 
-    /** 写笔记. 已存在则覆盖. 填 remindTick 后到点发送提醒事件. */
+    /** Write a note. Overwrites if it already exists. If remindTick is set, a reminder event is sent when the time comes. */
     public Path writeNote(String title, String content, Integer remindTick, Integer remindDay) {
         Path path = notePath.resolve(noteFilename(title));
         write(path, content);
         if (remindTick != null) {
             TimeEventBus.ScheduledTask task = scheduleReminder(title, remindTick, remindDay);
-            logger.info("[{}] 笔记已写入并设置提醒: {} (第 {} 天 Tick {})",
+            logger.info("[{}] Note written with reminder set: {} (day {}, tick {})",
                     roleId, path.getFileName(), task.day, task.targetTick);
         } else {
-            logger.info("[{}] 笔记已写入: {}", roleId, path.getFileName());
+            logger.info("[{}] Note written: {}", roleId, path.getFileName());
         }
         return path;
     }
 
-    /** 编辑已有笔记 (覆盖内容). 不存在则创建. */
+    /** Edit an existing note (overwrites the content). Creates it if it does not exist. */
     public Path editNote(String title, String content, Integer remindTick, Integer remindDay) {
         Path path = notePath.resolve(noteFilename(title));
         write(path, content);
         if (remindTick != null) {
             cancelReminder(title);
             TimeEventBus.ScheduledTask task = scheduleReminder(title, remindTick, remindDay);
-            logger.info("[{}] 笔记已编辑并重置提醒: {} (第 {} 天 Tick {})",
+            logger.info("[{}] Note edited with reminder reset: {} (day {}, tick {})",
                     roleId, path.getFileName(), task.day, task.targetTick);
         } else {
-            logger.info("[{}] 笔记已编辑: {}", roleId, path.getFileName());
+            logger.info("[{}] Note edited: {}", roleId, path.getFileName());
         }
         return path;
     }
 
-    /** 列出所有笔记标题 (不含每日总结). 按文件名排序. */
+    /** List all note titles (excluding daily summaries). Sorted by file name. */
     public List<String> listNotes() {
         List<String> titles = new ArrayList<>();
         for (Path p : listMdFiles(notePath)) {
@@ -196,7 +197,7 @@ public class NoteStore {
         return titles;
     }
 
-    /** 读取笔记内容; 不存在返回 null. */
+    /** Read the note content; returns null if it does not exist. */
     public String readNote(String title) {
         Path path = notePath.resolve(noteFilename(title));
         try {
@@ -206,7 +207,7 @@ public class NoteStore {
         }
     }
 
-    /** 删除笔记 (真实删除文件 + 取消关联提醒). 返回是否删除成功. */
+    /** Delete a note (really deletes the file + cancels the associated reminder). Returns whether deletion succeeded. */
     public boolean deleteNote(String title) {
         cancelReminder(title);
         Path path = notePath.resolve(noteFilename(title));
@@ -216,24 +217,24 @@ public class NoteStore {
         try {
             Files.delete(path);
         } catch (IOException e) {
-            throw new RuntimeException("删除笔记失败: " + path, e);
+            throw new RuntimeException("Failed to delete note: " + path, e);
         }
-        logger.info("[{}] 笔记已删除: {}", roleId, path.getFileName());
+        logger.info("[{}] Note deleted: {}", roleId, path.getFileName());
         return true;
     }
 
-    // ── 每日总结 (作息系统, 按天序号存储) ─────────────────
+    // ── Daily summaries (daily routine system, stored by day number) ─────────────────
 
-    /** 保存某一天的总结. */
+    /** Save the summary of a given day. */
     public Path saveSummary(String content, Integer day) {
         int d = day != null ? day : 1;
         Path path = summaryPath.resolve(summaryFilename(d));
         write(path, content);
-        logger.info("[{}] 第 {} 天总结已保存: {}", roleId, d, path.getFileName());
+        logger.info("[{}] Summary for day {} saved: {}", roleId, d, path.getFileName());
         return path;
     }
 
-    /** 读取指定天的总结; 不存在返回 null. */
+    /** Read the summary of a given day; returns null if it does not exist. */
     public String getSummary(Integer day) {
         int d = day != null ? day : 1;
         try {
@@ -243,7 +244,7 @@ public class NoteStore {
         }
     }
 
-    /** 读取最近一次总结 (beforeDay 只找严格早于该天的). */
+    /** Read the most recent summary (beforeDay only looks for summaries strictly earlier than that day). */
     public String getLatestSummary(Integer beforeDay) {
         List<int[]> candidates = new ArrayList<>();  // [day, index]
         List<Path> files = listMdFiles(summaryPath);

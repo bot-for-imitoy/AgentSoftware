@@ -10,8 +10,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * hermes_new_conversation — 在电脑上的 Hermes Agent 中新建一个对话,
- * 返回对话 id. 之后用 hermes_send 向该对话发送内容并拿回复.
+ * hermes_new_conversation - create a new conversation in the Hermes Agent on the computer,
+ * returns the conversation id. Afterwards use hermes_send to send content to that conversation and get a reply.
  */
 public class HermesNewConversation extends Tool {
 
@@ -40,7 +40,7 @@ public class HermesNewConversation extends Tool {
     public String handler(Map<String, Object> args) {
         String cmd = "hermes chat -q " + PodmanQuote(INIT_PROMPT) + " 2>&1 | tail -40";
         String out = computer.runCommand(cmd, HERMES_TIMEOUT, 4000);
-        if (out.startsWith("[exit") || out.startsWith("错误")) {
+        if (out.startsWith("[exit") || out.startsWith("Error")) {
             return errorHint(out);
         }
         Matcher m = SID_RE.matcher(out);
@@ -51,7 +51,7 @@ public class HermesNewConversation extends Tool {
         return errorHint(out.isEmpty() ? "(no output)" : out);
     }
 
-    /** 把 hermes 错误转成给角色的可读提示. */
+    /** Converts a hermes error into a readable hint for the role. */
     private static String errorHint(String raw) {
         String text = raw.length() > 300 ? raw.substring(0, 300) : raw;
         if (text.contains("Configure Hermes") || text.toLowerCase().contains("wizard")

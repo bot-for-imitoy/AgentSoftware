@@ -7,11 +7,11 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 个人电脑工具类 (Pc Toolkit = Computer 工具) — 让 LLM 在自己电脑上工作:
+ * Personal computer toolkit class (Pc Toolkit = Computer tools) - lets the LLM work on its own computer:
  * run_command / computer_status / lan_devices / reboot.
  *
- * 每个角色有独立电脑 (默认 Podman 虚拟电脑), 电脑开机时机: 角色加入/启动时
- * 自动开机; 一天结束 (下班总结) 或离职时自动关机.
+ * Each role has its own computer (a Podman virtual computer by default); the computer turns on when the role
+ * joins/starts, and turns off automatically at the end of the day (off-duty summary) or when the role leaves.
  */
 public class Pc extends Toolkit {
 

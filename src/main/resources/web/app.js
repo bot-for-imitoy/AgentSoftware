@@ -1,8 +1,8 @@
-/* AgentCompany Web 界面 — 分组聊天 + 甲方对话 */
+/* AgentCompany Web UI - group chat + client dialogue */
 "use strict";
 
 const LEADERSHIP_KEY = "Leadership Group";
-const CLIENT_NAME = "甲方";
+const CLIENT_NAME = "Client A";
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,7 +27,7 @@ const state = {
 
 let toastTimer = null;
 
-// ── 工具函数 ───────────────────────────────
+// ── Utility functions ───────────────────────────────
 
 function avatarColor(key) {
   let h = 0;
@@ -64,7 +64,7 @@ function canInput() {
   return state.selectedKey === LEADERSHIP_KEY && state.clientTalk.active;
 }
 
-// ── 分组面板 ───────────────────────────────
+// ── Group panel ───────────────────────────────
 
 function renderGroups() {
   const ul = $("groupList");
@@ -76,17 +76,17 @@ function renderGroups() {
 
     const avatar = document.createElement("div");
     avatar.className = "group-avatar";
-    avatar.style.background = avatarColor(g.key || "未分组");
+    avatar.style.background = avatarColor(g.key || "Unassigned");
     avatar.textContent = (g.label || "?").charAt(0);
 
     const info = document.createElement("div");
     info.className = "group-info";
     const name = document.createElement("div");
     name.className = "group-name";
-    name.textContent = g.label || "未分组";
+    name.textContent = g.label || "Unassigned";
     const meta = document.createElement("div");
     meta.className = "group-meta";
-    meta.textContent = `${g.members.length} 名成员`;
+    meta.textContent = `${g.members.length} members`;
     info.append(name, meta);
 
     const badge = document.createElement("span");
@@ -130,7 +130,7 @@ function unreadCount(key) {
   return n;
 }
 
-// ── 聊天头部 ───────────────────────────────
+// ── Chat header ───────────────────────────────
 
 function currentGroup() {
   return state.groups.find((g) => g.key === state.selectedKey) || null;
@@ -139,16 +139,16 @@ function currentGroup() {
 function renderHeader() {
   const g = currentGroup();
   if (!g) {
-    $("chatTitle").textContent = "请选择左侧分组";
+    $("chatTitle").textContent = "Select a group on the left";
     $("chatMembers").textContent = "";
     return;
   }
-  $("chatTitle").textContent = g.label || "未分组";
-  const names = g.members.map((m) => m.name).join("、");
-  $("chatMembers").textContent = `${g.members.length} 名成员：${names}`;
+  $("chatTitle").textContent = g.label || "Unassigned";
+  const names = g.members.map((m) => m.name).join(", ");
+  $("chatMembers").textContent = `${g.members.length} members: ${names}`;
 }
 
-// ── 消息渲染 ───────────────────────────────
+// ── Message rendering ───────────────────────────────
 
 function groupOf(msg) {
   return msg.group || "";
@@ -173,7 +173,7 @@ function renderMessages() {
   if (list.length === 0) {
     const tip = document.createElement("div");
     tip.className = "empty-tip";
-    tip.textContent = "暂无消息 — 选择左侧分组查看该组成员之间的聊天";
+    tip.textContent = "No messages yet — select a group on the left to see that group's chat";
     listEl.appendChild(tip);
     return;
   }
@@ -206,7 +206,7 @@ function buildMessageEl(m) {
   head.className = "msg-head";
   const name = document.createElement("span");
   name.className = "msg-name";
-  name.textContent = m.fromName || "未知";
+  name.textContent = m.fromName || "Unknown";
   const time = document.createElement("span");
   time.textContent = fmtTime(m.ts);
   head.append(name, time);
@@ -246,7 +246,7 @@ function scrollToBottom(el) {
   el.scrollTop = el.scrollHeight;
 }
 
-// ── 输入框状态 ─────────────────────────────
+// ── Input state ─────────────────────────────
 
 function applyInputState() {
   const enabled = canInput();
@@ -257,18 +257,18 @@ function applyInputState() {
   $("talkBanner").classList.toggle("hidden", !enabled);
   $("inputHint").classList.toggle("enabled", enabled);
   if (enabled) {
-    const who = state.clientTalk.holderName || "成员";
-    $("talkBannerText").textContent = `${who} 正在与您（甲方）对话 — 请在下方输入您的回复`;
-    $("replyInput").placeholder = "请输入您的回复…";
-    $("inputHint").textContent = "输入框已启用";
+    const who = state.clientTalk.holderName || "member";
+    $("talkBannerText").textContent = `${who} is talking to you (Client A) — type your reply below`;
+    $("replyInput").placeholder = "Type your reply…";
+    $("inputHint").textContent = "Input enabled";
     if (!wasEnabled) $("replyInput").focus();
   } else {
-    $("replyInput").placeholder = "输入框已禁用 — 仅当「领导组」成员与您对话时启用";
-    $("inputHint").textContent = "已禁用";
+    $("replyInput").placeholder = "Input disabled — enabled only when a Leadership Group member is talking to you";
+    $("inputHint").textContent = "Disabled";
   }
 }
 
-// ── 轮询 ───────────────────────────────────
+// ── Polling ───────────────────────────────────
 
 async function pollState() {
   const { body } = await fetchJson("/api/state");
@@ -276,12 +276,12 @@ async function pollState() {
   state.day = body.day;
   state.tick = body.tick;
   state.describe = body.describe || "";
-  $("sysInfo").textContent = `第 ${body.day} 天 · Tick ${body.tick} · ${state.describe}`;
+  $("sysInfo").textContent = `Day ${body.day} · Tick ${body.tick} · ${state.describe}`;
 
   const ct = body.clientTalk || { active: false };
   state.clientTalk = ct;
 
-  // 分组花名册变化时重建侧栏
+  // Rebuild the sidebar when the group roster changes
   const groupsJson = JSON.stringify(body.groups || []);
   if (groupsJson !== JSON.stringify(state.groups)) {
     state.groups = body.groups || [];
@@ -294,10 +294,10 @@ async function pollState() {
     renderHeader();
   }
 
-  // 甲方对话激活: 若用户不在领导组, 自动切换过去并提示
+  // Client talk activated: if the user is not in the Leadership Group, switch over automatically and notify
   if (ct.active && !state.prevClientActive) {
     if (state.selectedKey !== LEADERSHIP_KEY) {
-      toast("领导组有成员正在与您对话，已自动切换到「领导组」");
+      toast("A Leadership Group member is talking to you; switched to the Leadership Group automatically");
       selectGroup(LEADERSHIP_KEY);
     }
   }
@@ -326,7 +326,7 @@ async function pollMessages() {
   updateGroupItemVisuals();
 }
 
-// ── 发送回复 ───────────────────────────────
+// ── Send reply ───────────────────────────────
 
 async function sendReply() {
   if (!canInput()) return;
@@ -349,12 +349,12 @@ async function sendReply() {
     listEl.appendChild(frag);
     if (nearBottom) scrollToBottom(listEl);
   } else {
-    toast(body.reason || "发送失败，请重试");
+    toast(body.reason || "Failed to send, please try again");
   }
-  await pollState(); // 刷新输入框状态 (回复后通常立即禁用)
+  await pollState(); // Refresh input state (usually disabled immediately after replying)
 }
 
-// ── 初始化 ─────────────────────────────────
+// ── Initialization ─────────────────────────────────
 
 function init() {
   $("sendBtn").addEventListener("click", sendReply);

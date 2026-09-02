@@ -1,15 +1,15 @@
 package com.agent.software.tools.toolkits.client;
 
 /**
- * 与甲方沟通的全局互斥锁.
+ * Global mutex lock for communicating with the client.
  *
- * talk_to_client 会阻塞等待用户输入, 同一时间只允许一位成员与甲方对话:
- * 锁被占用时, 其他成员调用 talk_to_client 会立即收到错误提示,
- * 避免多人同时抢占控制台输入.
+ * talk_to_client blocks and waits for user input; only one member at a time is allowed to talk to the client:
+ * when the lock is held, other members calling talk_to_client immediately receive an error message,
+ * avoiding multiple people competing for console input at the same time.
  *
- * 进程级默认单例由 {@link #getInstance()} 获取; 每个 {@link
- * com.agent.software.AgentSystem} 直接持有自己的锁实例, 多系统互不阻塞.
- * 构造器公开, 便于测试与多实例场景创建独立实例.
+ * The process-level default singleton is obtained via {@link #getInstance()}; each {@link
+ * com.agent.software.AgentSystem} holds its own lock instance directly, so multiple systems do not block each other.
+ * The constructor is public, making it easy to create independent instances for testing and multi-instance scenarios.
  */
 public final class ClientCommunicationLock {
 
@@ -26,10 +26,10 @@ public final class ClientCommunicationLock {
     }
 
     /**
-     * 尝试获取与甲方沟通的独占权.
+     * Try to acquire the exclusive right to communicate with the client.
      *
-     * @return null 表示获取成功; 否则返回错误描述 (当前持有者信息).
-     *         同一角色重复获取视为成功 (可重入), 不会锁死自己.
+     * @return null means acquisition succeeded; otherwise returns an error description (current holder info).
+     *         Repeated acquisition by the same role is treated as success (re-entrant) and will not lock itself out.
      */
     public synchronized String tryAcquire(String roleId, String name) {
         if (holderRoleId != null && !holderRoleId.equals(roleId)) {
@@ -41,7 +41,7 @@ public final class ClientCommunicationLock {
         return null;
     }
 
-    /** 释放锁 (仅持有者可释放). 幂等. */
+    /** Release the lock (only the holder can release it). Idempotent. */
     public synchronized void release(String roleId) {
         if (holderRoleId != null && holderRoleId.equals(roleId)) {
             holderRoleId = null;
@@ -49,12 +49,12 @@ public final class ClientCommunicationLock {
         }
     }
 
-    /** 当前是否被占用. */
+    /** Whether it is currently held. */
     public synchronized boolean isHeld() {
         return holderRoleId != null;
     }
 
-    /** 当前持有者描述 (未占用返回 null). */
+    /** Description of the current holder (returns null if not held). */
     public synchronized String holderDescription() {
         return holderRoleId == null ? null : holderName + " (" + holderRoleId + ")";
     }

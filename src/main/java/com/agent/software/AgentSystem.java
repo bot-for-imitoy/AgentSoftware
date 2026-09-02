@@ -27,50 +27,52 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 系统管理类 (AgentSystem) — 统一管理 TimeEventBus + RolePool + 事件分发
- * (Python 版 agent_system.py).
+ * System management class (AgentSystem) - centrally manages TimeEventBus + RolePool + event dispatch
+ * (Python version agent_system.py).
  *
- * <p><b>自包含设计</b>: 每套 {@code AgentSystem} 直接持有自己的一套协作对象
- * (时钟 / 配置 / 电脑注册表 / 邮箱 / MCP 与技能管理器 / 甲方对话锁 / 聊天存储)
- * 与数据根目录, 不依赖进程级全局单例. 因此一套系统可独立运行, 同一进程内也可
- * 创建多套系统互不干扰 (见 docs/agent-system-multi-instance.md).
+ * <p><b>Self-contained design</b>: Each {@code AgentSystem} directly owns its own set of collaboration objects
+ * (clock / config / computer registry / mailbox / MCP and skill managers / client communication lock / chat storage)
+ * and a data root directory, without depending on process-level global singletons. A system can therefore run
+ * independently, and multiple systems can be created in the same process without interfering with each other
+ * (see docs/agent-system-multi-instance.md).
  */
 public class AgentSystem {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentSystem.class);
 
-    public final TimeEventBus timeManager;   // 共享时间源
+    public final TimeEventBus timeManager;   // shared time source
     public final RolePool pool;
     public final EventDispatcher dispatcher;
     public final boolean autoToolkits;
     public final ConfigStore configStore;
 
-    // ── 每系统独立协作对象 (多实例互不干扰) ────────────────────
-    /** 本系统角色电脑注册表 (role_id → Computer). */
+    // ── Per-system independent collaboration objects (multiple instances do not interfere) ────────────────────
+    /** This system's role computer registry (role_id → Computer). */
     public final ComputerManager computerManager;
-    /** 本系统公司邮箱 (数据落 dataDir/mail). */
+    /** This system's company mailbox (data stored under dataDir/mail). */
     public final MailService mailService;
-    /** 本系统 MCP 工具管理器. */
+    /** This system's MCP tool manager. */
     public final MCPManager mcpManager;
-    /** 本系统技能库管理器 (数据落 dataDir/skills). */
+    /** This system's skill library manager (data stored under dataDir/skills). */
     public final SkillManager skillManager;
-    /** 本系统与甲方沟通互斥锁. */
+    /** This system's mutex lock for communicating with Client A. */
     public final ClientCommunicationLock clientLock;
-    /** 本系统聊天消息存储 + 甲方对话协调 (Web 界面数据源). */
+    /** This system's chat message storage + Client A conversation coordination (Web UI data source). */
     public final ChatStore chatStore;
 
-    /** 本系统数据根目录 (默认 ./data), 全部持久化文件都落在其下. */
+    /** This system's data root directory (default ./data); all persisted files live under it. */
     private final Path dataDir;
 
-    /** 默认数据目录 (./data) 构造, 行为与历史版本一致. */
+    /** Constructor with the default data directory (./data); behavior is consistent with historical versions. */
     public AgentSystem(List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
         this(Paths.get("data"), roles, roleIds, checkInterval, autoToolkits);
     }
 
     /**
-     * 显式数据目录构造: 每套 {@code AgentSystem} 的持久化文件 (日志/笔记/待办/
-     * 邮件/存档/技能) 全部落在各自 dataDir 下. 多套系统传入不同目录即可安全共存.
+     * Constructor with an explicit data directory: each {@code AgentSystem}'s persisted files (logs/notes/todos/
+     * mail/state/skills) all live under its own dataDir. Multiple systems can safely coexist by passing different
+     * directories.
      */
     public AgentSystem(Path dataDir, List<AgentRole> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits) {
@@ -88,9 +90,9 @@ public class AgentSystem {
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
 
-        // 时间线程的事件 → 事件分发器 (作息事件统一入口)
+        // Time thread events → event dispatcher (unified entry for schedule events)
         this.timeManager.setEventSender(this::onTimeEvent);
-        // 快进: 全部角色空闲时自动跳到下一个事件 Tick
+        // Fast-forward: automatically jump to the next event tick when all roles are idle
         this.timeManager.setIdleChecker(this::allRolesIdle);
 
         List<AgentRole> all = new ArrayList<>();
@@ -111,65 +113,65 @@ public class AgentSystem {
         this(null, null, 30.0, true);
     }
 
-    // ── 数据目录 (全部以 dataDir 为根) ────────────────────────
+    // ── Data directories (all rooted at dataDir) ────────────────────────
 
     public Path dataDir() {
         return dataDir;
     }
 
-    /** 角色活动日志目录. */
+    /** Role activity journal directory. */
     public Path journalDir() {
         return dataDir.resolve("journals");
     }
 
-    /** 角色笔记/每日总结目录. */
+    /** Role notes / daily summary directory. */
     public Path notesDir() {
         return dataDir.resolve("notes");
     }
 
-    /** 角色待办清单目录. */
+    /** Role todo list directory. */
     public Path todosDir() {
         return dataDir.resolve("todos");
     }
 
-    /** 公司邮箱数据目录. */
+    /** Company mailbox data directory. */
     public Path mailDir() {
         return dataDir.resolve("mail");
     }
 
-    /** 角色个人电脑目录 (local 模拟用). */
+    /** Role personal computer directory (for local simulation). */
     public Path computersDir() {
         return dataDir.resolve("computers");
     }
 
-    /** 企业云盘挂载目录. */
+    /** Enterprise cloud drive mount directory. */
     public Path driveDir() {
         return dataDir.resolve("drive");
     }
 
-    /** 技能库目录. */
+    /** Skill library directory. */
     public Path skillsDir() {
         return dataDir.resolve("skills");
     }
 
-    /** 全量状态存档文件. */
+    /** Full state snapshot file. */
     public Path stateFile() {
         return dataDir.resolve("state.json");
     }
 
-    // ── 角色管理 ──────────────────────────────────────────
+    // ── Role management ──────────────────────────────────────────
 
-    /** 批量注册角色: 耗时装配 (电脑创建 + MCP 服务器启动) 多线程并行. */
+    /** Register roles in batch: the time-consuming setup (computer creation + MCP server startup) runs in parallel across threads. */
     public List<AgentRole> addRoles(List<AgentRole> roles) {
-        // 先统一绑定共享时间源与本系统引用 (快, 串行) — 保证角色所有惰性依赖
-        // (电脑/邮箱/笔记/待办/日志/聊天) 都落在本系统, 而非进程级全局单例
+        // First uniformly bind the shared time source and this system reference (fast, serial) - ensuring that all of
+        // the role's lazy dependencies (computer/mailbox/notes/todos/journal/chat) live in this system, not process-level global singletons
         for (AgentRole role : roles) {
             role.bindTimeManager(timeManager);
             role.bindSystem(this);
         }
         if (autoToolkits) {
-            // 并行装配: 每角色一个虚拟线程 (Java 21+), 用信号量限制并发数,
-            // 避免 podman/npx 打满 (原固定线程池的 max_workers 语义不变)
+            // Parallel setup: one virtual thread per role (Java 21+), with a semaphore limiting concurrency,
+            // to avoid saturating podman/npx (the max_workers semantics of the original fixed thread pool are unchanged)
             int maxWorkers = Math.min(10, roles.size());
             if (maxWorkers < 1) {
                 maxWorkers = 1;
@@ -187,7 +189,7 @@ public class AgentSystem {
                     try {
                         pool.setupRole(role);
                     } catch (Exception e) {
-                        logger.error("AgentSystem: 角色 {} 装配失败 (电脑/MCP)", role.roleId, e);
+                        logger.error("AgentSystem: role {} setup failed (computer/MCP)", role.roleId, e);
                     } finally {
                         gate.release();
                     }
@@ -200,20 +202,20 @@ public class AgentSystem {
                 Thread.currentThread().interrupt();
             }
         }
-        // 按序注册 (含日志初始化)
+        // Register in order (including journal initialization)
         for (AgentRole role : roles) {
             pool.addRole(role);
-            logger.info("AgentSystem: 角色已注册 {} ({})", role.roleId, role.name);
+            logger.info("AgentSystem: role registered {} ({})", role.roleId, role.name);
         }
         return roles;
     }
 
-    /** 注册单个角色. */
+    /** Register a single role. */
     public AgentRole addRole(AgentRole role) {
         return addRoles(List.of(role)).get(0);
     }
 
-    /** 注册全部默认管理角色 (CEO/COO/HR/CFO). */
+    /** Register all default management roles (CEO/COO/HR/CFO). */
     public List<AgentRole> addDefaultRoles() {
         List<AgentRole> roles = new ArrayList<>();
         for (String rid : RoleLoader.DEFAULT_ROLES) {
@@ -230,37 +232,37 @@ public class AgentSystem {
         return pool.getStatus();
     }
 
-    // ── 事件与任务 ────────────────────────────────────────
+    // ── Events and tasks ────────────────────────────────────────
 
-    /** 时间线程作息事件的统一入口. */
+    /** Unified entry point for schedule events from the time thread. */
     public void onTimeEvent(Types.Event event) {
         if (TimeEventBus.EVENT_SHIFT_START.equals(event.eventType)) {
             for (AgentRole role : pool.allRoles()) {
-                // 上班唤醒; WAIT 角色本来就在岗等回复, 不重置
+                // Wake up at shift start; WAIT roles are already on duty waiting for replies, so do not reset them
                 if (role.state != Types.AgentState.ON_DUTY_IDLE
                         && role.state != Types.AgentState.WAIT) {
                     role.setState(Types.AgentState.ON_DUTY_IDLE);
-                    logger.info("AgentSystem: SHIFT_START → {} 上班 (ON_DUTY_IDLE)", role.roleId);
+                    logger.info("AgentSystem: SHIFT_START → {} is on duty (ON_DUTY_IDLE)", role.roleId);
                 }
-                // 上班自动开机
+                // Auto power-on at shift start
                 try {
                     Computer comp = role.computerIfCreated();
                     if (comp != null && !comp.isOn()) {
                         comp.powerOn();
-                        logger.info("AgentSystem: SHIFT_START → {} 电脑已自动开机", role.roleId);
+                        logger.info("AgentSystem: SHIFT_START → {} computer auto powered on", role.roleId);
                     }
                 } catch (Exception e) {
-                    logger.error("AgentSystem: {} 上班开机失败", role.roleId, e);
+                    logger.error("AgentSystem: {} failed to power on at shift start", role.roleId, e);
                 }
             }
-            pool.journalAll("全局通知: 上班 (SHIFT_START, 第 " + day() + " 天)");
+            pool.journalAll("Global notice: shift start (SHIFT_START, day " + day() + ")");
         } else if (TimeEventBus.EVENT_SHIFT_END.equals(event.eventType)) {
-            pool.journalAll("全局通知: 下班时间到 (SHIFT_END), 各角色总结后休息");
+            pool.journalAll("Global notice: shift end (SHIFT_END), each role summarizes and then rests");
         }
         dispatcher.trigger(event);
     }
 
-    /** 全部角色是否空闲 (供快进功能判定). 角色池为空视为不空闲. */
+    /** Whether all roles are idle (used by the fast-forward feature to decide). An empty role pool is treated as not idle. */
     public boolean allRolesIdle() {
         List<AgentRole> roles = pool.allRoles();
         if (roles.isEmpty()) {
@@ -274,33 +276,33 @@ public class AgentSystem {
         return true;
     }
 
-    /** 向事件总线投递事件, 广播给所有角色. */
+    /** Post an event to the event bus, broadcasting it to all roles. */
     public Map<String, Map<String, Object>> trigger(Types.Event event) {
         return dispatcher.trigger(event);
     }
 
-    /** 直接给指定角色分配任务. */
+    /** Directly assign a task to the specified role. */
     public void assignTask(String roleId, AgentRole.Task task) {
         pool.assignTask(roleId, task);
     }
 
-    // ── 生命周期 ──────────────────────────────────────────
+    // ── Lifecycle ──────────────────────────────────────────
 
-    /** 启动系统: 角色池线程 + 时间线程. 启动时刻 = Tick 0 / 第 1 天. */
+    /** Start the system: role pool threads + time thread. Startup moment = Tick 0 / Day 1. */
     public void start() {
         pool.start();
         timeManager.start();
-        logger.info("AgentSystem 已启动: {}", describe());
+        logger.info("AgentSystem started: {}", describe());
     }
 
-    /** 停止系统: 时间线程 + 角色池. */
+    /** Stop the system: time thread + role pool. */
     public void stop() {
         timeManager.stop();
         pool.shutdown(false);
-        logger.info("AgentSystem 已停止");
+        logger.info("AgentSystem stopped");
     }
 
-    // ── 时间查询 (转发共享 TimeEventBus) ───────────────────
+    // ── Time queries (forward to the shared TimeEventBus) ───────────────────
 
     public int tick() {
         return timeManager.currentTick();

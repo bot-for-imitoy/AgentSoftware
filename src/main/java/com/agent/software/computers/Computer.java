@@ -19,38 +19,38 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 电脑基类与实现 (Computer) — 每个角色一台个人电脑 (Python 版 computer.py).
+ * Computer base class and implementations (Computer) - one personal computer per role (Python version computer.py).
  *
- * 三种实现:
- *   - {@link LocalComputer}: 本地目录模拟 (data/computers/&lt;role_id&gt;/).
- *   - {@link PodmanComputer}: podman 容器虚拟电脑 (默认; 容器名 maf-&lt;role_id&gt;).
- *   - {@link SSHComputer}: 通过 ssh 连接远程主机执行命令.
+ * Three implementations:
+ *   - {@link LocalComputer}: local directory simulation (data/computers/&lt;role_id&gt;/).
+ *   - {@link PodmanComputer}: podman container virtual computer (default; container name maf-&lt;role_id&gt;).
+ *   - {@link SSHComputer}: executes commands on a remote host over ssh.
  */
 public abstract class Computer {
 
     private static final Logger logger = LoggerFactory.getLogger(Computer.class);
 
-    // ── 路径常量 (使用处统一引用) ──────────────────────────────
+    // ── Path constants (referenced uniformly at usage sites) ──────────────────────────────
     public static final String COMPUTERS_ROOT = "./data/computers";
     public static final String DRIVE_ROOT = "./data/drive";
 
-    // 电脑默认容器镜像: 由项目根 Containerfile 定义
+    // Default container image for computers: defined by the Containerfile at the project root
     public static final String DEFAULT_IMAGE = "maf-base:latest";
     public static final String CONTAINERFILE = "Containerfile";
 
     public final String roleId;
     protected boolean on = false;
-    protected final boolean autoMcp;              // 自动创建的电脑: 创建时自动安装 MCP 服务器
+    protected final boolean autoMcp;              // auto-created computers: automatically install the MCP server at creation time
     protected final Map<String, ToolRegistry.ToolDef> mcpTools = new LinkedHashMap<>();
-    protected MCPServer mcpServer = null;          // 本电脑独立的 MCP 服务器连接 (懒创建)
-    protected String connectError = null;          // 最近一次 MCP 连接失败原因 (诊断用)
+    protected MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
+    protected String connectError = null;          // reason for the most recent MCP connection failure (for diagnostics)
 
     protected Computer(String roleId, boolean autoMcp) {
         this.roleId = roleId;
         this.autoMcp = autoMcp;
     }
 
-    // ── MCP 会话存活检测与重连 ───────────────────────────
+    // ── MCP session liveness check and reconnect ───────────────────────────
 
     protected boolean mcpServerAlive() {
         MCPServer srv = mcpServer;
@@ -64,46 +64,46 @@ public abstract class Computer {
         }
     }
 
-    /** MCP 服务器会话失效时重建 (跨天关机后 podman stop 杀死 stdio 管道). */
+    /** Rebuild the MCP server session when it becomes invalid (podman stop after a cross-day shutdown kills the stdio pipe). */
     protected void reconnectMcpServer() {
         if (mcpServer == null || mcpServerAlive()) {
             return;
         }
-        logger.warn("电脑[{}] MCP 服务器会话已失效, 正在重建...", roleId);
+        logger.warn("Computer [{}] MCP server session invalidated, rebuilding...", roleId);
         try {
             mcpServer.close();
         } catch (Exception ignored) {
         }
         mcpServer = null;
-        mcpTools.clear();  // 旧 handler 绑定的是已死服务器
+        mcpTools.clear();  // the old handlers are bound to the dead server
         try {
             installMcpServer();
         } catch (Exception e) {
-            logger.error("电脑[{}] MCP 服务器重建失败", roleId, e);
+            logger.error("Computer [{}] MCP server rebuild failed", roleId, e);
         }
     }
 
-    // ── 抽象接口 (子类实现) ──────────────────────────────
+    // ── Abstract interface (implemented by subclasses) ──────────────────────────────
 
     public abstract String powerOn();
 
     public abstract String powerOff();
 
-    /** 运行命令 (在个人电脑上执行). 返回命令输出. */
+    /** Run a command (on the personal computer). Returns the command output. */
     public abstract String runCommand(String command, int timeout, int maxChars);
 
     public abstract String readFile(String path);
 
-    /** 写入个人电脑上的文件 (自动创建父目录). 返回路径. */
+    /** Write a file on the personal computer (auto-creates parent directories). Returns the path. */
     public abstract String writeFile(String path, String content);
 
-    /** 列出个人电脑指定目录内容 (默认工作目录). */
+    /** List the contents of a directory on the personal computer (defaults to the work directory). */
     public abstract String listDir(String path);
 
-    /** 删除个人电脑上的文件. 返回状态说明. */
+    /** Delete a file on the personal computer. Returns a status description. */
     public abstract String deleteFile(String path);
 
-    /** 统一格式化命令执行结果 (exit 码 + 输出截断). */
+    /** Uniformly format a command execution result (exit code + truncated output). */
     protected String formatResult(ProcessResult r, int maxChars) {
         String output = (r.stdout == null ? "" : r.stdout) + (r.stderr == null ? "" : r.stderr);
         output = output.strip();
@@ -120,7 +120,7 @@ public abstract class Computer {
         return s.substring(0, n);
     }
 
-    /** 进程执行结果 (stdout/stderr/returncode). */
+    /** Process execution result (stdout/stderr/returncode). */
     protected static final class ProcessResult {
         public String stdout = "";
         public String stderr = "";
@@ -133,7 +133,7 @@ public abstract class Computer {
         }
     }
 
-    /** 执行进程, 返回 (stdout+stderr, returncode). */
+    /** Execute a process, returning (stdout+stderr, returncode). */
     protected static ProcessResult runProcess(List<String> cmd, String stdinInput,
                                               int timeoutSeconds) {
         try {
@@ -143,36 +143,36 @@ public abstract class Computer {
             StringBuilder stdoutBuffer = new StringBuilder();
             StringBuilder stderrBuffer = new StringBuilder();
 
-            // 1. 异步实时读取 stdout
+            // 1. Read stdout asynchronously in real time
             Thread stdoutThread = Thread.ofVirtual().start(() -> {
                 try (var reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        System.out.println(line); // 即时控制台输出
-                        stdoutBuffer.append(line).append("\n"); // 累加日志
+                        System.out.println(line); // immediate console output
+                        stdoutBuffer.append(line).append("\n"); // accumulate into the log
                     }
                 } catch (IOException ignored) {}
             });
 
-            // 2. 异步实时读取 stderr
+            // 2. Read stderr asynchronously in real time
             Thread stderrThread = Thread.ofVirtual().start(() -> {
                 try (var reader = new BufferedReader(new InputStreamReader(p.getErrorStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        System.err.println(line); // 即时标准错误输出
+                        System.err.println(line); // immediate standard error output
                         stderrBuffer.append(line).append("\n");
                     }
                 } catch (IOException ignored) {}
             });
 
-            // 3. 写入 stdin
+            // 3. Write to stdin
             if (stdinInput != null) {
                 try (var w = p.outputWriter(StandardCharsets.UTF_8)) {
                     w.write(stdinInput);
                 }
             }
 
-            // 4. 等待子进程完成并确保读取线程结束
+            // 4. Wait for the child process to finish and ensure the reader threads terminate
             boolean done = p.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             int rc;
             if (!done) {
@@ -182,10 +182,10 @@ public abstract class Computer {
                 rc = p.exitValue();
             }
 
-            // 5. 等待读取线程结束 (有界 join). 子进程退出后管道通常会快速 EOF;
-            //    但 podman 的子进程后代 (conmon / 容器进程) 可能仍握着管道写端,
-            //    使 readLine 永久阻塞 — 无超时 join 会让 runProcess 自身卡死
-            //    (叠加 pod() 曾有的 600000s 超时 = 控制台静默近 7 天).
+            // 5. Wait for the reader threads to finish (bounded join). After the child process exits the pipe usually
+            //    EOFs quickly; but podman's descendant processes (conmon / container processes) may still hold the pipe's
+            //    write end, making readLine block forever - a join without a timeout would deadlock runProcess itself
+            //    (combined with the former 600000s timeout in pod() = console silent for nearly 7 days).
             long joinDeadline = System.currentTimeMillis() + 30_000;
             stdoutThread.join(Math.max(1, joinDeadline - System.currentTimeMillis()));
             stderrThread.join(Math.max(1, joinDeadline - System.currentTimeMillis()));
@@ -203,27 +203,27 @@ public abstract class Computer {
         return autoMcp;
     }
 
-    // ── MCP 工具安装与执行 (所有实现共用) ────────────────
+    // ── MCP tool installation and execution (shared by all implementations) ────────────────
 
-    /** 宿主机上该电脑工作目录的映射路径 (MCP 服务器授权目录). */
+    /** Mapped path of this computer's work directory on the host (the MCP server's authorized directory). */
     public String hostDir() {
         return "";
     }
 
     /**
-     * 在本电脑上安装独立的 MCP 服务器 (filesystem, 授权本电脑目录).
-     * 幂等: 已安装则直接返回. 返回已安装的工具名列表.
+     * Install an independent MCP server on this computer (filesystem, authorized for this computer's directory).
+     * Idempotent: returns immediately if already installed. Returns the list of installed tool names.
      */
     public List<String> installMcpServer() {
         if (mcpServer != null) {
             return listInstalledMcpTools();
         }
         if (!autoMcp) {
-            logger.info("电脑[{}] 非自动创建, 不自动安装 MCP 服务器", roleId);
+            logger.info("Computer [{}] not auto-created, skipping automatic MCP server installation", roleId);
             return new ArrayList<>();
         }
         if (hostDir().isEmpty()) {
-            logger.warn("电脑[{}] 无宿主机目录映射, 跳过 MCP 服务器安装 (SSH 远程电脑)", roleId);
+            logger.warn("Computer [{}] has no host directory mapping, skipping MCP server installation (SSH remote computer)", roleId);
             return new ArrayList<>();
         }
         try {
@@ -231,8 +231,8 @@ public abstract class Computer {
                     List.of(hostDir()));
             mcpServer.connect();
             if (!mcpServer.isAlive(5.0)) {
-                throw new RuntimeException("MCP 服务器连接失败: "
-                        + (mcpServer.connectError() != null ? mcpServer.connectError() : "未知"));
+                throw new RuntimeException("MCP server connection failed: "
+                        + (mcpServer.connectError() != null ? mcpServer.connectError() : "unknown"));
             }
             for (Map<String, Object> tool : mcpServer.listTools()) {
                 String tname = String.valueOf(tool.get("name"));
@@ -248,11 +248,11 @@ public abstract class Computer {
                         "mcp:" + server.packageName + " (this computer)");
                 mcpTools.put(tname, td);
             }
-            logger.info("电脑[{}] 独立 MCP 服务器已安装, {} 个工具: {}",
+            logger.info("Computer [{}] independent MCP server installed, {} tools: {}",
                     roleId, mcpTools.size(), listInstalledMcpTools());
         } catch (Exception exc) {
             connectError = String.valueOf(exc.getMessage());
-            logger.error("电脑[{}] MCP 服务器安装失败", roleId, exc);
+            logger.error("Computer [{}] MCP server installation failed", roleId, exc);
             return new ArrayList<>();
         }
         return listInstalledMcpTools();
@@ -266,12 +266,12 @@ public abstract class Computer {
         return new LinkedHashMap<>();
     }
 
-    /** 从本电脑卸载一个 MCP 工具. 返回是否卸载成功. */
+    /** Uninstall one MCP tool from this computer. Returns whether the uninstall succeeded. */
     public boolean uninstallMcpTool(String toolName) {
         return mcpTools.remove(toolName) != null;
     }
 
-    /** 列出本电脑已安装的 MCP 工具名 (排序). */
+    /** List the MCP tool names installed on this computer (sorted). */
     public List<String> listInstalledMcpTools() {
         List<String> names = new ArrayList<>(mcpTools.keySet());
         names.sort(String::compareTo);
@@ -286,7 +286,7 @@ public abstract class Computer {
         return new ArrayList<>(mcpTools.values());
     }
 
-    /** 运行 MCP 工具 (在本电脑上执行). */
+    /** Run an MCP tool (executed on this computer). */
     public String runMcpTool(String toolName, Map<String, Object> args) {
         ToolRegistry.ToolDef td = mcpTools.get(toolName);
         if (td == null) {
@@ -300,43 +300,43 @@ public abstract class Computer {
         try {
             return String.valueOf(td.handler.handle(args));
         } catch (Exception exc) {
-            logger.error("MCP 工具 {} 执行失败", toolName, exc);
+            logger.error("MCP tool {} execution failed", toolName, exc);
             return "Error: tool '" + toolName + "' execution failed - " + exc.getMessage();
         }
     }
 
-    // ── 通用 ──────────────────────────────────────────────
+    // ── General ──────────────────────────────────────────────
 
     public boolean isOn() {
         return on;
     }
 
-    /** 重启电脑 (关机后再开机). 所有实现通用. */
+    /** Reboot the computer (power off, then power on). Common to all implementations. */
     public String reboot() {
         String off = powerOff();
         String on = powerOn();
         return "Computer [" + roleId + "] has been rebooted.\n- " + off + "\n- " + on;
     }
 
-    /** 个人工作目录 (电脑上的路径). 子类可覆盖. */
+    /** Personal work directory (a path on the computer). Subclasses may override. */
     public String workdir() {
         return "/home/agent";
     }
 
-    /** 企业云盘挂载根路径. */
+    /** Enterprise cloud drive mount root path. */
     public String driveRoot() {
         return "/mnt/drive";
     }
 
-    /** 电脑状态描述 (供 LLM 查看). */
+    /** Computer status description (for the LLM to view). */
     public String describe() {
         return "Computer [" + roleId + "] (" + getClass().getSimpleName() + "): "
                 + "status=" + (on ? "powered on" : "powered off") + ", work directory=" + workdir();
     }
 
-    // ── LocalComputer (本地目录模拟) ──────────────────────────
+    // ── LocalComputer (local directory simulation) ──────────────────────────
 
-    /** 本地目录模拟电脑 (开发/降级用). */
+    /** Local directory simulation computer (for development/fallback). */
     public static final class LocalComputer extends Computer {
         public String name = "";
         public String username = "agent";
@@ -355,10 +355,10 @@ public abstract class Computer {
             try {
                 Files.createDirectories(dir);
             } catch (IOException e) {
-                throw new RuntimeException("创建本地电脑目录失败: " + dir, e);
+                throw new RuntimeException("Failed to create local computer directory: " + dir, e);
             }
             this.driveRoot = Paths.get(driveDir != null ? driveDir : DRIVE_ROOT).toAbsolutePath().toString();
-            this.on = true;  // 本地模拟默认开机
+            this.on = true;  // local simulation powers on by default
         }
 
         @Override

@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * todo_delete — 删除一条待办事项 (从清单移除).
+ * todo_delete — delete a todo item (remove it from the list).
  */
 public class TodoDelete extends Tool {
 

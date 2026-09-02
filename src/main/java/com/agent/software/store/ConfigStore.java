@@ -9,9 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * JSON 配置存储 (Python 版 config_store.py).
+ * JSON config storage (Python version config_store.py).
  *
- * 配置以 JSON 对象保存, 支持通过点号路径访问多级键, 例如
+ * Config is saved as a JSON object, supporting access to multi-level keys via dot paths, e.g.
  * {@code store.set("llm.model", "gpt-4o-mini")}.
  */
 public class ConfigStore {
@@ -28,12 +28,12 @@ public class ConfigStore {
         this(PathManager.createDefault().configFile("config.json"));
     }
 
-    /** 配置文件路径. */
+    /** Path of the config file. */
     public Path getPath() {
         return path;
     }
 
-    /** 当前配置的副本 (修改后请通过 set/update 保存). */
+    /** A copy of the current config (after modifying, save it via set/update). */
     public Map<String, Object> data() {
         return new LinkedHashMap<>(data);
     }
@@ -42,7 +42,7 @@ public class ConfigStore {
         return Files.exists(path);
     }
 
-    /** 从文件加载配置; 文件不存在时使用空配置. */
+    /** Load config from the file; use an empty config when the file does not exist. */
     @SuppressWarnings("unchecked")
     public Map<String, Object> load() {
         if (!Files.exists(path)) {
@@ -53,38 +53,38 @@ public class ConfigStore {
         try {
             text = Files.readString(path);
         } catch (IOException e) {
-            throw new RuntimeException("读取配置文件失败: " + path, e);
+            throw new RuntimeException("Failed to read config file: " + path, e);
         }
         Object loaded;
         try {
             loaded = Json.parse(text);
         } catch (IOException e) {
-            throw new IllegalArgumentException("配置文件不是有效 JSON: " + path, e);
+            throw new IllegalArgumentException("Config file is not valid JSON: " + path, e);
         }
         if (!(loaded instanceof Map)) {
-            throw new IllegalArgumentException("配置文件根节点必须是 JSON 对象: " + path);
+            throw new IllegalArgumentException("Config file root must be a JSON object: " + path);
         }
         data.clear();
         data.putAll((Map<String, Object>) loaded);
         return data();
     }
 
-    /** 将当前配置原子写入文件. */
+    /** Atomically write the current config to the file. */
     public Path save() {
         try {
             Json.atomicWrite(path, Json.stringifyPretty(data));
         } catch (IOException e) {
-            throw new RuntimeException("保存配置失败: " + path, e);
+            throw new RuntimeException("Failed to save config: " + path, e);
         }
         return path;
     }
 
-    /** 读取点号路径对应的值, 不存在时返回 default. */
+    /** Read the value at the dot path; returns default when it does not exist. */
     public Object get(String key, Object def) {
         return Json.getByPath(data, key, def);
     }
 
-    /** 创建或覆盖一个键, 并立即保存. */
+    /** Create or overwrite a key, and save immediately. */
     public Object set(String key, Object value) {
         Object copied = Json.deepCopy(value);
         setByPath(data, key, copied);
@@ -92,7 +92,7 @@ public class ConfigStore {
         return Json.deepCopy(copied);
     }
 
-    /** 批量创建或覆盖键; values 的键同样支持点号路径. */
+    /** Batch create or overwrite keys; the keys of values also support dot paths. */
     public Map<String, Object> update(Map<String, Object> values) {
         for (Map.Entry<String, Object> e : values.entrySet()) {
             setByPath(data, e.getKey(), Json.deepCopy(e.getValue()));
@@ -101,7 +101,7 @@ public class ConfigStore {
         return data();
     }
 
-    /** 删除键; 键存在且删除成功时返回 true. */
+    /** Delete a key; returns true when the key exists and is deleted successfully. */
     public boolean delete(String key) {
         String[] parts = key.split("\\.");
         Map<String, Object> current = data;
@@ -130,7 +130,7 @@ public class ConfigStore {
                 child = new LinkedHashMap<String, Object>();
                 current.put(parts[i], child);
             } else if (!(child instanceof Map)) {
-                throw new IllegalArgumentException("键路径中间节点不是对象: " + key);
+                throw new IllegalArgumentException("Intermediate node in key path is not an object: " + key);
             }
             current = (Map<String, Object>) child;
         }

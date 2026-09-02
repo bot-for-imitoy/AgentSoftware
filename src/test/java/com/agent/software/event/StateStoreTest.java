@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 统一状态存储 (StateStore) 测试 (Python 版 test_state_store.py 的 Java 对应物).
+ * Unified state store (StateStore) tests (the Java counterpart of the Python test_state_store.py).
  */
 class StateStoreTest {
 
@@ -33,25 +33,25 @@ class StateStoreTest {
         StateStore store = new StateStore(tmp.resolve("state.json").toString());
         AgentSystem s1 = make("CEO");
         AgentRole ceo = s1.getRole("CEO");
-        AgentRole.Task done = new AgentRole.Task(AgentRole.Urgency.HIGH.value, "完成登录页开发", "github",
+        AgentRole.Task done = new AgentRole.Task(AgentRole.Urgency.HIGH.value, "Completed the login page development", "github",
                 new LinkedHashMap<>());
         done.status = "done";
-        done.result = "已交付";
+        done.result = "Delivered";
         done.tokensConsumed = 456;
         ceo.appendTaskHistory(done);
-        ceo.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "待办: 写周报", "", new LinkedHashMap<>()));
-        s1.timeManager.debugSetTick(30);  // 第 1 天 Tick 30
+        ceo.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "Todo: write weekly report", "", new LinkedHashMap<>()));
+        s1.timeManager.debugSetTick(30);  // Day 1 Tick 30
         store.save(s1);
 
         AgentSystem s2 = make("CEO");
         assertEquals(1, store.restore(s2));
         AgentRole ceo2 = s2.getRole("CEO");
-        assertEquals("完成登录页开发", ceo2.taskHistory(null).get(0).description);
+        assertEquals("Completed the login page development", ceo2.taskHistory(null).get(0).description);
         assertEquals(456, ceo2.taskHistory(null).get(0).tokensConsumed);
         assertEquals(1, ceo2.queueDepth());
         assertEquals(AgentRole.Urgency.NORMAL, ceo2.peekNextUrgency());
 
-        // 时间恢复: start() 应用进度 → 第 1 天 Tick 30
+        // time restore: start() applies progress → Day 1 Tick 30
         s2.timeManager.start();
         try {
             assertEquals(1, s2.timeManager.dayNumber());
@@ -67,16 +67,16 @@ class StateStoreTest {
         AgentSystem s1 = make("HR");
         AgentRole hr = s1.getRole("HR");
         hr.setState(Types.AgentState.OFF_DUTY);
-        hr.personality = "存档覆盖的性格";
-        hr.skills = java.util.List.of("存档技能A", "存档技能B");
+        hr.personality = "Personality overridden by the archive";
+        hr.skills = java.util.List.of("Archived skill A", "Archived skill B");
         store.save(s1);
 
         AgentSystem s2 = make("HR");
         store.restore(s2);
         AgentRole hr2 = s2.getRole("HR");
         assertEquals(Types.AgentState.OFF_DUTY, hr2.state);
-        assertEquals("存档覆盖的性格", hr2.personality);
-        assertEquals(java.util.List.of("存档技能A", "存档技能B"), hr2.skills);
+        assertEquals("Personality overridden by the archive", hr2.personality);
+        assertEquals(java.util.List.of("Archived skill A", "Archived skill B"), hr2.skills);
     }
 
     @Test

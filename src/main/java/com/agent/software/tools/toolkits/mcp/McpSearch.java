@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * mcp_search — 搜索本地已有的 MCP 工具 (按名称或描述关键词).
- * 先搜索找到合适的工具, 再用 mcp_add 添加给自己.
+ * mcp_search - search MCP tools available locally (by name or description keyword).
+ * First search to find a suitable tool, then use mcp_add to add it to yourself.
  */
 public class McpSearch extends Tool {
 

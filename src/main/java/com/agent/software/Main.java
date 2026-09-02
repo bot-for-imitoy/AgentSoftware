@@ -20,16 +20,16 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 /**
- * 系统主入口 (Python 版 main.py 的 Java 对应物).
+ * Main entry point (the Java counterpart of the Python main.py).
  *
- * 启动完整的多角色 AI 团队模拟: 恢复进度 → 循环跑日 (上班 → 派任务 → 下班)
- * → 保存状态.
+ * Starts a complete multi-role AI team simulation: restore progress → loop over days
+ * (shift start → assign tasks → shift end) → save state.
  */
 public class Main {
 
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
-    // ── 终端配色 ─────────────────────────────────────────────
+    // ── Terminal colors ─────────────────────────────────────────
     private static final String BOLD = "\033[1m";
     private static final String GREEN = "\033[32m";
     private static final String YELLOW = "\033[33m";
@@ -38,7 +38,7 @@ public class Main {
     private static final String MAGENTA = "\033[35m";
     private static final String RESET = "\033[0m";
 
-    // ── 时间参数 (真实时间, 分钟/小时) ───────────────────────
+    // ── Time parameters (real time, minutes/hours) ─────────────
     private static final int TICK_MINUTES = 10;
     private static final int TICK1_MINUTES = 10;
     private static final int SHIFT_END_HOURS = 10;
@@ -46,10 +46,10 @@ public class Main {
 
     private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleLoader.DEFAULT_ROLES);
 
-    /** Web 界面 URL (启动时填充, runOneDay 提示用). */
+    /** Web UI URL (filled at startup, used for runOneDay hints). */
     static volatile String webUrl = "";
 
-    // ── 终端 UI ─────────────────────────────────────────────
+    // ── Terminal UI ─────────────────────────────────────────────
 
     static void header(String text) {
         consolePrint("\n" + BOLD + CYAN + "═".repeat(62) + RESET);
@@ -77,10 +77,10 @@ public class Main {
         System.out.println(msg);
     }
 
-    /** 轮询等待条件满足 (真实时间). 返回 true=满足, false=超时. */
+    /** Polls until the condition is satisfied (real time). Returns true = satisfied, false = timed out. */
     static boolean waitUntil(String desc, java.util.function.Supplier<Boolean> predicate,
                              long timeoutSeconds) {
-        info("等待: " + desc + " (最长 " + (timeoutSeconds / 60) + " 分钟)...");
+        info("Waiting: " + desc + " (up to " + (timeoutSeconds / 60) + " minutes)...");
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000;
         while (System.currentTimeMillis() < deadline) {
             try {
@@ -92,7 +92,7 @@ public class Main {
             }
             sleep(5000);
         }
-        warn("等待超时: " + desc);
+        warn("Wait timed out: " + desc);
         return false;
     }
 
@@ -104,46 +104,46 @@ public class Main {
         }
     }
 
-    /** 运行一天的完整流程 (真实时间, 由 TimeEventBus 自动走时). */
+    /** Runs one full day (real time; TimeEventBus advances the clock). */
     static void runOneDay(AgentSystem system, int day, boolean withClientTask) {
-        header("第 " + day + " 天");
+        header("Day " + day);
 
-        // 新的一天: 等待跨天边界 (day_number 变化 → SHIFT_START 自动触发)
+        // New day: wait for the day boundary (day_number change → SHIFT_START fires automatically)
         if (day > 1) {
             int targetDay = day;
-            waitUntil("第 " + day + " 天开始 (约 " + DAY_BOUNDARY_HOURS * (day - 1)
-                            + " 小时后, SHIFT_START 自动触发)",
+            waitUntil("Day " + day + " begins (in about " + DAY_BOUNDARY_HOURS * (day - 1)
+                            + " hours, SHIFT_START fires automatically)",
                     () -> system.day() >= targetDay,
                     DAY_BOUNDARY_HOURS * 3600L);
         }
-        ok("当前: " + system.describe());
+        ok("Current: " + system.describe());
 
-        // 第 1 天: CEO 与甲方沟通 (仅此一次)
+        // Day 1: the CEO talks to the client (only once)
         if (withClientTask) {
-            step("CEO 注册开局笔记提醒: Tick 1 (10 分钟后) 与用户沟通项目要求...");
+            step("CEO registers the opening note reminder: Tick 1 (10 minutes later) to discuss project requirements with the user...");
             AgentRole ceo = system.getRole("CEO");
-            Path note = ceo.noteStore().writeNote("第1天-收集项目需求",
-                    "与用户沟通项目要求, 收集今天要开发的项目需求", 1, day);
-            ok("笔记+提醒已注册: " + note + " (第 " + day + " 天 Tick 1 → CEO)");
-            step("等待 Tick 1 触发 (CEO 任务 → 与用户沟通)...");
+            Path note = ceo.noteStore().writeNote("Day1-collect-project-requirements",
+                    "Talk to the user about the project requirements and gather what needs to be built today", 1, day);
+            ok("Note + reminder registered: " + note + " (Day " + day + " Tick 1 → CEO)");
+            step("Waiting for Tick 1 to fire (CEO task → talk to the user)...");
             int fireTick = (day - 1) * 144 + 1;
-            waitUntil("Tick " + fireTick + " 到达 (CEO 任务触发)",
+            waitUntil("Tick " + fireTick + " reached (CEO task fired)",
                     () -> system.timeManager.currentTick() >= fireTick,
                     (TICK1_MINUTES + 5) * 60L);
-            info("请在上方 [CEO] 提示处输入项目要求 (例如: 帮我开发一个支付系统)");
+            info("Please enter the project requirements at the [CEO] prompt above (e.g. build a payment system for me)");
             if (!webUrl.isEmpty()) {
-                info("或打开 Web 界面 " + webUrl + " → 左侧选择「领导组」→ 在输入框回复 CEO (领导组与您对话时输入框自动启用)");
+                info("Or open the Web UI " + webUrl + " → select \"Leadership Group\" on the left → reply to the CEO in the input box (the input box is enabled automatically when a leadership member talks to you)");
             }
             sleep(10_000);
         } else {
-            step("今天没有甲方沟通任务, 直接进入日常工作...");
+            step("No client communication task today; moving straight to the daily routine...");
             sleep(5_000);
         }
 
-        // 白天工作事件
-        step("投递 LOW 事件 (闲聊, 应被显著性过滤, 0 Token)...");
+        // Daytime work events
+        step("Delivering a LOW event (small talk; should be filtered by salience, 0 tokens)...");
         Map<String, Object> spamPayload = new java.util.LinkedHashMap<>();
-        spamPayload.put("text", "中午吃什么?");
+        spamPayload.put("text", "What's for lunch?");
         spamPayload.put("channel", "#random");
         Types.Event spam = new Types.Event("slack", "chat", Types.Priority.LOW, spamPayload, null);
         Map<String, Map<String, Object>> results = system.trigger(spam);
@@ -151,16 +151,16 @@ public class Main {
         for (Map.Entry<String, Map<String, Object>> e : results.entrySet()) {
             acceptedMap.put(e.getKey(), (Boolean) e.getValue().get("accepted"));
         }
-        info("LOW 过滤结果: " + acceptedMap);
+        info("LOW filter result: " + acceptedMap);
 
-        // 等待下班 (Tick 60 = 10 小时后, SHIFT_END 自动触发)
-        step("等待下班... (Tick 60 = 10 小时后, SHIFT_END 自动触发)");
-        waitUntil("下班时刻到达 (SHIFT_END 触发)",
+        // Wait for shift end (Tick 60 = 10 hours later; SHIFT_END fires automatically)
+        step("Waiting for shift end... (Tick 60 = 10 hours later, SHIFT_END fires automatically)");
+        waitUntil("Shift end reached (SHIFT_END fired)",
                 () -> system.timeManager.tickOfDay() >= 60,
                 (SHIFT_END_HOURS + 1) * 3600L);
         sleep(5_000);
 
-        step("等待角色调用 summary 工具 (并发, 最长 600 秒)...");
+        step("Waiting for roles to call the summary tool (concurrent, up to 600 seconds)...");
         long deadline = System.currentTimeMillis() + 600_000;
         while (System.currentTimeMillis() < deadline) {
             boolean allOff = true;
@@ -176,8 +176,8 @@ public class Main {
             sleep(5_000);
         }
 
-        // 检查下班状态与总结
-        step("检查下班状态...");
+        // Check shift-end status and summaries
+        step("Checking shift-end status...");
         List<String> offDuty = new ArrayList<>();
         for (String rid : ROLE_IDS) {
             if (system.getRole(rid).state == Types.AgentState.OFF_DUTY) {
@@ -186,17 +186,17 @@ public class Main {
         }
         if (!offDuty.isEmpty()) {
             List<String> head = offDuty.size() > 6 ? offDuty.subList(0, 6) : offDuty;
-            ok("OFF_DUTY 角色: " + offDuty.size() + "/" + ROLE_IDS.size()
+            ok("OFF_DUTY roles: " + offDuty.size() + "/" + ROLE_IDS.size()
                     + " (" + String.join(", ", head) + (offDuty.size() > 6 ? "..." : "") + ")");
         } else {
-            warn("角色仍未全部 OFF_DUTY");
+            warn("Not all roles are OFF_DUTY yet");
         }
 
         for (String rid : ROLE_IDS) {
             AgentRole role = system.getRole(rid);
             String summary = role.noteStore().getSummary(day);
             if (summary == null) {
-                // summary 工具保存后立即关机, 直接读宿主机挂载目录
+                // The summary tool shuts the computer down right after saving; read the host-mounted dir directly
                 String hostDir = role.computerIfCreated() != null ? role.computerIfCreated().hostDir() : "";
                 if (!hostDir.isEmpty()) {
                     Path hostSummary = Paths.get(hostDir, "summaries", NoteStore.summaryFilename(day));
@@ -209,79 +209,79 @@ public class Main {
                 }
             }
             if (summary != null && !summary.isEmpty()) {
-                ok("[" + rid + "] 第" + day + "天总结已保存: "
+                ok("[" + rid + "] Day " + day + " summary saved: "
                         + (summary.length() > 50 ? summary.substring(0, 50) : summary) + "...");
             } else {
-                info("[" + rid + "] 暂无总结");
+                info("[" + rid + "] no summary yet");
             }
         }
     }
 
     public static void main(String[] args) {
-        header("作息系统演示 — 真实时间流动 (1 Tick = 10 分钟)");
+        header("Work-schedule system demo — real-time flow (1 Tick = 10 minutes)");
 
-        // 1. 开局: 默认团队 (管理层 + 工程团队)
+        // 1. Kickoff: default team (management + engineering team)
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
-        step("创建 AgentSystem, 加入 " + roleIds.size() + " 个默认角色...");
+        step("Creating AgentSystem, adding " + roleIds.size() + " default roles...");
         AgentSystem system = new AgentSystem(null, roleIds, 30.0, true);
         system.getRole("HR").addToolkit(new Hr(system.getRole("HR"), null));
-        ok("角色就绪: " + system.pool.listRoles().size() + " 人 (CEO/COO/HR + 工程团队)");
-        ok("领导组已装备 talk_to_client (与甲方实时交流, 同一时间仅一人可与甲方对话)");
-        ok("HR 已装备招聘工具 (post_job_posting / list_candidates)");
+        ok("Roles ready: " + system.pool.listRoles().size() + " people (CEO/COO/HR + engineering team)");
+        ok("Leadership group equipped with talk_to_client (real-time chat with the client; only one person can talk to the client at a time)");
+        ok("HR equipped with hiring tools (post_job_posting / list_candidates)");
 
-        // 1.5 Web 界面: 分组聊天监控 + 甲方对话 (领导组与您对话时输入框自动启用)
+        // 1.5 Web UI: group chat monitor + client dialogue (input box enabled when a leadership member talks to you)
         ChatWebServer web = null;
         try {
             web = new ChatWebServer(system);
             web.start();
             webUrl = "http://127.0.0.1:" + web.port() + "/";
-            ok("Web 界面已启动: " + webUrl);
-            ok("  ├─ 左侧: 分组选择器 (领导组/前端开发组/后端开发组/... )");
-            ok("  └─ 右侧: 聊天窗口 — 输入框默认禁用; 仅当「领导组」且有人与您(甲方)对话时才启用");
+            ok("Web UI started: " + webUrl);
+            ok("  ├─ Left: group selector (Leadership Group / Frontend Development Group / Backend Development Group / ... )");
+            ok("  └─ Right: chat window — input box disabled by default; enabled only when someone from the Leadership Group is talking to you (the client)");
         } catch (Exception e) {
-            warn("Web 界面启动失败 (不影响主流程): " + e.getMessage());
+            warn("Web UI failed to start (does not affect the main flow): " + e.getMessage());
         }
 
-        // 0. 恢复上次进度 (StateStore)
+        // 0. Restore the previous progress (StateStore)
         StateStore store = new StateStore();
         int restored = store.exists() ? store.restore(system) : 0;
         if (restored > 0) {
-            ok("已从存档恢复 " + restored + " 个角色 → " + system.describe());
+            ok("Restored " + restored + " roles from the archive → " + system.describe());
         } else {
-            ok("无存档, 从第 1 天 Tick 0 开始");
+            ok("No archive; starting from Day 1 Tick 0");
         }
 
-        // 2. 启动系统
+        // 2. Start the system
         system.start();
-        ok("系统已启动: " + system.describe());
-        ok("时间规则: 1 Tick = " + TICK_MINUTES + " 分钟; 下班 = " + SHIFT_END_HOURS
-                + " 小时后; 第 2 天 = " + DAY_BOUNDARY_HOURS + " 小时后");
-        sleep(3_000);  // 等 SHIFT_START (Tick 0) 触发
-        info("角色状态: " + states(system));
+        ok("System started: " + system.describe());
+        ok("Time rules: 1 Tick = " + TICK_MINUTES + " minutes; shift ends = " + SHIFT_END_HOURS
+                + " hours later; day 2 = " + DAY_BOUNDARY_HOURS + " hours later");
+        sleep(3_000);  // wait for SHIFT_START (Tick 0) to fire
+        info("Role states: " + states(system));
 
-        // 3. 多日循环
+        // 3. Multi-day loop
         int day = system.day();
         try {
             while (true) {
                 runOneDay(system, day, day == 1);
-                // 一天结束: 自动进入第二天
+                // Day over: automatically move to the next day
                 int nextDay = day + 1;
                 consolePrint("\n" + BOLD + GREEN + "═".repeat(62) + RESET);
-                consolePrint(BOLD + GREEN + "  🎉 第 " + day + " 天结束!" + RESET);
-                consolePrint(BOLD + GREEN + "  已自动进入第 " + nextDay + " 天: 将于约 "
-                        + (DAY_BOUNDARY_HOURS - SHIFT_END_HOURS) + " 小时后上班 "
-                        + "(SHIFT_START 自动触发)" + RESET);
+                consolePrint(BOLD + GREEN + "  🎉 Day " + day + " complete!" + RESET);
+                consolePrint(BOLD + GREEN + "  Automatically entered Day " + nextDay + ": shift starts in about "
+                        + (DAY_BOUNDARY_HOURS - SHIFT_END_HOURS) + " hours "
+                        + "(SHIFT_START fires automatically)" + RESET);
                 consolePrint(BOLD + GREEN + "═".repeat(62) + RESET + "\n");
                 day = nextDay;
             }
         } catch (Exception e) {
-            warn("\n收到中断, 正在保存进度并退出...");
+            warn("\nInterrupted; saving progress and exiting...");
         } finally {
-            // 退出自动保存
+            // Auto-save on exit
             try {
                 store.save(system);
             } catch (Exception e) {
-                logger.error("保存状态失败", e);
+                logger.error("Failed to save state", e);
             }
             system.stop();
             if (web != null) {
@@ -290,7 +290,7 @@ public class Main {
                 } catch (Exception ignored) {
                 }
             }
-            consolePrint("\n" + BOLD + GREEN + "演示结束 ✓ (运行到第 " + day + " 天, 进度已保存)" + RESET + "\n");
+            consolePrint("\n" + BOLD + GREEN + "Demo finished ✓ (ran through Day " + day + "; progress saved)" + RESET + "\n");
         }
     }
 

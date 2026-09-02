@@ -6,70 +6,72 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 聊天消息存储 + 与甲方对话协调 (Web 界面数据源).
+ * Chat message store + client dialogue coordination (data source for the Web UI).
  *
- * <p>每套 {@link com.agent.software.AgentSystem} 直接持有自己的 ChatStore 实例,
- * 记录两类消息:
+ * <p>Each {@link com.agent.software.AgentSystem} holds its own ChatStore instance,
+ * recording two kinds of messages:
  * <ul>
- *   <li>{@code talk}  — 组内角色间 talk 消息 (TalkTo 投递成功后记录);</li>
- *   <li>{@code client} — 领导组成员与甲方(用户)的对话 (talk_to_client).</li>
+ *   <li>{@code talk}  — in-group talk messages between roles (recorded after TalkTo delivers);</li>
+ *   <li>{@code client} — dialogue between leadership members and the client (user) (talk_to_client).</li>
  * </ul>
- * 消息带单调递增的 {@code seq} 序号, Web 前端按 {@code since} 增量拉取.
+ * Messages carry a monotonically increasing {@code seq}; the Web frontend pulls
+ * incrementally via {@code since}.
  *
- * <p>甲方对话协调: 领导组成员调用 talk_to_client 且 Web 界面已挂载时,
- * {@link #beginClientWait} 置为"等待甲方回复"状态 (Web 前端据此启用输入框),
- * 阻塞等待 {@link #postClientReply} 提交的回复, 超时返回 null.
- * 未挂载 Web 时保持原控制台 (System.in) 交互, 行为不变.
+ * <p>Client dialogue coordination: when a leadership member calls talk_to_client and the Web UI
+ * is attached, {@link #beginClientWait} sets the "waiting for client reply" state (the Web
+ * frontend enables the input box based on this), then blocks until a reply submitted via
+ * {@link #postClientReply} arrives; returns null on timeout. When the Web UI is not attached,
+ * the original console (System.in) interaction is kept, with unchanged behavior.
  */
 public final class ChatStore {
 
-    /** 历史消息上限 (超出丢弃最旧, 防止内存无限膨胀). */
+    /** History cap (oldest messages are dropped beyond this, to avoid unbounded memory growth). */
     public static final int MAX_HISTORY = 5000;
 
-    /** 消息类型: 组内角色间 talk. */
+    /** Message kind: in-group talk between roles. */
     public static final String KIND_TALK = "talk";
-    /** 消息类型: 与甲方(用户)对话. */
+    /** Message kind: dialogue with the client (user). */
     public static final String KIND_CLIENT = "client";
 
-    /** 甲方在聊天记录中的显示名. */
-    public static final String CLIENT_NAME = "甲方";
+    /** Display name of the client in the chat log. */
+    public static final String CLIENT_NAME = "Client A";
 
-    /** 一条聊天消息 (字段全公开, 便于序列化为 JSON Map). */
+    /** A single chat message (all fields public, for easy serialization to a JSON Map). */
     public static final class ChatMessage {
         public long seq;
         public long ts;            // epoch millis
         public String kind;        // talk / client
-        public String group;       // 所属组 (英文名), 前端按组过滤
-        public String fromRoleId;  // 发送者 role_id (甲方为空串)
-        public String fromName;    // 发送者人名
-        public String toRoleId;    // 接收者 role_id
-        public String toName;      // 接收者人名
-        public String text;        // 消息内容
-        public String urgency;     // talk 消息的紧急度 (可空)
+        public String group;       // group (English name), the frontend filters by group
+        public String fromRoleId;  // sender role_id (empty string for the client)
+        public String fromName;    // sender name
+        public String toRoleId;    // recipient role_id
+        public String toName;      // recipient name
+        public String text;        // message content
+        public String urgency;     // urgency of the talk message (nullable)
     }
 
     private final List<ChatMessage> history = new ArrayList<>();
     private long lastSeq = 0;
 
-    // ── 甲方对话协调状态 (synchronized on this) ──────────────
-    private boolean pendingClientRequest = false;   // 是否正等待甲方回复
+    // ── Client dialogue coordination state (synchronized on this) ──
+    private boolean pendingClientRequest = false;   // whether we are waiting for the client reply
     private String pendingHolderRoleId = null;
     private String pendingHolderName = null;
-    private String pendingGroup = null;             // 发起对话的成员所属组
+    private String pendingGroup = null;             // group of the member who started the dialogue
     private boolean clientRequestDone = false;
     private String pendingClientReply = null;
 
-    // ── Web 挂载心跳 (volatile, 无锁) ────────────────────────
+    // ── Web attach heartbeat (volatile, lock-free) ───────────────
     private volatile long lastAttachMillis = 0L;
-    /** 心跳 TTL: 该时长内有 Web 前端轮询过即视为已挂载. */
+    /** Heartbeat TTL: the Web frontend is considered attached if it polled within this window. */
     public static final long ATTACH_TTL_MS = 60_000L;
 
-    // ── 消息记录 ─────────────────────────────────────────────
+    // ── Message recording ────────────────────────────────────────
 
     /**
-     * 记录一条聊天消息. 线程安全.
+     * Records a chat message. Thread-safe.
      *
-     * @return 已记录的消息对象 (含分配好的 seq).
+     * @return the recorded message object (with the allocated seq).
      */
     public ChatMessage record(String kind, String group, String fromRoleId, String fromName,
                               String toRoleId, String toName, String text, String urgency) {
@@ -93,14 +95,14 @@ public final class ChatStore {
         return m;
     }
 
-    /** 当前最大 seq (前端增量拉取水位). */
+    /** Current max seq (frontend incremental pull watermark). */
     public long lastSeq() {
         synchronized (history) {
             return lastSeq;
         }
     }
 
-    /** 返回 seq &gt; sinceSeq 的全部消息 (按 seq 升序), 序列化为 JSON Map 列表. */
+    /** Returns all messages with seq &gt; sinceSeq (ascending by seq), serialized as a list of JSON Maps. */
     public List<Map<String, Object>> messagesSince(long sinceSeq) {
         synchronized (history) {
             List<Map<String, Object>> out = new ArrayList<>();
@@ -113,7 +115,7 @@ public final class ChatStore {
         }
     }
 
-    /** 消息 → JSON Map. */
+    /** Message → JSON Map. */
     public static Map<String, Object> toMap(ChatMessage m) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("seq", m.seq);
@@ -131,12 +133,12 @@ public final class ChatStore {
         return out;
     }
 
-    // ── 甲方对话协调 ─────────────────────────────────────────
+    // ── Client dialogue coordination ─────────────────────────────
 
     /**
-     * 登记"正等待甲方回复" (Web 模式 talk_to_client 调用).
+     * Registers "waiting for the client reply" (talk_to_client in Web mode).
      *
-     * @return null=成功; 否则错误描述 (已有其他成员在等待).
+     * @return null = success; otherwise an error description (another member is already waiting).
      */
     public synchronized String beginClientWait(String roleId, String name, String group) {
         if (pendingClientRequest) {
@@ -153,30 +155,31 @@ public final class ChatStore {
         return null;
     }
 
-    /** 当前是否正等待甲方回复 (Web 前端输入框启用条件之一). */
+    /** Whether we are currently waiting for the client reply (one of the conditions enabling the Web input box). */
     public synchronized boolean isClientWaitPending() {
         return pendingClientRequest;
     }
 
-    /** 等待中的成员名 (无则 null). */
+    /** Name of the waiting member (null when none). */
     public synchronized String pendingHolderName() {
         return pendingHolderName;
     }
 
-    /** 等待中的成员 role_id (无则 null). */
+    /** role_id of the waiting member (null when none). */
     public synchronized String pendingHolderRoleId() {
         return pendingHolderRoleId;
     }
 
-    /** 等待中的成员所属组 (无则 null). */
+    /** Group of the waiting member (null when none). */
     public synchronized String pendingGroup() {
         return pendingGroup;
     }
 
     /**
-     * 甲方提交回复 (Web 前端 POST /api/reply). 记录 client 消息并唤醒等待中的成员.
+     * The client submits a reply (Web frontend POST /api/reply). Records the client message and
+     * wakes the waiting member.
      *
-     * @return 已记录的消息; 当前没有等待中的甲方对话时返回 null.
+     * @return the recorded message; null when there is no pending client dialogue.
      */
     public synchronized ChatMessage postClientReply(String text) {
         if (!pendingClientRequest) {
@@ -191,10 +194,10 @@ public final class ChatStore {
     }
 
     /**
-     * 阻塞等待甲方回复 (Web 模式, 由 talk_to_client 调用).
+     * Blocks waiting for the client reply (Web mode, called by talk_to_client).
      *
-     * @param timeoutMs 最长等待毫秒数.
-     * @return 甲方回复文本; 超时或中断返回 null.
+     * @param timeoutMs maximum wait in milliseconds.
+     * @return the client reply text; null on timeout or interruption.
      */
     public synchronized String awaitClientReply(long timeoutMs) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMs;
@@ -208,7 +211,7 @@ public final class ChatStore {
         return pendingClientReply;
     }
 
-    /** 结束等待状态 (回复已收到或超时), 由 talk_to_client 调用. */
+    /** Ends the waiting state (reply received or timed out), called by talk_to_client. */
     public synchronized void endClientWait() {
         pendingClientRequest = false;
         pendingHolderRoleId = null;
@@ -219,14 +222,14 @@ public final class ChatStore {
         notifyAll();
     }
 
-    // ── Web 挂载心跳 ─────────────────────────────────────────
+    // ── Web attach heartbeat ─────────────────────────────────────
 
-    /** 标记 Web 前端挂载 (任意 API 轮询即刷新心跳). */
+    /** Marks the Web frontend as attached (any API poll refreshes the heartbeat). */
     public void markAttached() {
         lastAttachMillis = System.currentTimeMillis();
     }
 
-    /** 是否已有 Web 前端挂载 (TTL 内有过心跳). */
+    /** Whether a Web frontend is attached (a heartbeat within the TTL window). */
     public boolean isAttached() {
         return System.currentTimeMillis() - lastAttachMillis < ATTACH_TTL_MS;
     }

@@ -5,10 +5,10 @@ import com.agent.software.role.RolePool;
 import com.agent.software.tools.Toolkit;
 
 /**
- * 通信工具类 (Talk Toolkit) — 角色间消息传递与任务委托:
+ * Communication toolkit (Talk Toolkit) — message passing and task delegation between roles:
  * talk / list_roles.
  *
- * 注意: talk 仅限同组成员之间交流 (跨组请用邮件 send_email).
+ * Note: talk is only for communication between members of the same group (for cross-group communication use email send_email).
  */
 public class Talk extends Toolkit {
 

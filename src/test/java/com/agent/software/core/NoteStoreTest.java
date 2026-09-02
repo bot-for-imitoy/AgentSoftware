@@ -15,14 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * NoteStore 单元测试 (Python 版 test_note_store.py 的 Java 对应物).
+ * NoteStore unit tests (the Java counterpart of the Python test_note_store.py).
  */
 class NoteStoreTest {
 
     @TempDir
     Path tmp;
 
-    // ── 标题清洗 (High-3 注入面) ─────────────────────────
+    // ── Title sanitization (High-3 injection surface) ──────────
 
     @Test
     void testShellMetacharsStripped() {
@@ -42,18 +42,18 @@ class NoteStoreTest {
 
     @Test
     void testNormalTitleKept() {
-        assertEquals("周报-2026-08", NoteStore.sanitizeTitle("周报-2026-08"));
+        assertEquals("weekly-report-2026-08", NoteStore.sanitizeTitle("weekly-report-2026-08"));
     }
 
-    // ── 总结按天数值排序 ─────────────────────────────────
+    // ── Summaries sorted by numeric day ───────────────────────
 
     @Test
     void testNumericOrdering() {
         NoteStore store = new NoteStore(tmp.toString(), "CEO", null);
-        store.saveSummary("第九天总结", 9);
-        store.saveSummary("第十天总结", 10);
-        assertEquals("第十天总结", store.getLatestSummary(11));
-        assertEquals("第九天总结", store.getLatestSummary(10));
+        store.saveSummary("Day 9 summary", 9);
+        store.saveSummary("Day 10 summary", 10);
+        assertEquals("Day 10 summary", store.getLatestSummary(11));
+        assertEquals("Day 9 summary", store.getLatestSummary(10));
         assertNull(store.getLatestSummary(9));
     }
 
@@ -63,30 +63,30 @@ class NoteStoreTest {
         assertNull(store.getLatestSummary(null));
     }
 
-    // ── delete_note 真实删除文件 ─────────────────────────
+    // ── delete_note actually deletes the file ─────────────────
 
     @Test
     void testLocalDeleteRemovesFile() throws IOException {
         NoteStore store = new NoteStore(tmp.toString(), "CEO", null);
-        store.writeNote("备忘录", "内容", null, null);
-        Path path = tmp.resolve("CEO").resolve("notes").resolve("备忘录.md");
+        store.writeNote("Memo", "Content", null, null);
+        Path path = tmp.resolve("CEO").resolve("notes").resolve("Memo.md");
         assertTrue(Files.exists(path));
-        assertTrue(store.deleteNote("备忘录"));
+        assertTrue(store.deleteNote("Memo"));
         assertFalse(Files.exists(path));
-        assertFalse(store.deleteNote("备忘录"));
+        assertFalse(store.deleteNote("Memo"));
     }
 
-    // ── 读写列表 ─────────────────────────────────────────
+    // ── Write / read / list ───────────────────────────────────
 
     @Test
     void testWriteReadList() {
         NoteStore store = new NoteStore(tmp.toString(), "CEO", null);
-        store.writeNote("周报", "本周总结", null, null);
-        store.writeNote("计划", "下周计划", null, null);
+        store.writeNote("Weekly report", "This week's summary", null, null);
+        store.writeNote("Plan", "Next week's plan", null, null);
         List<String> titles = store.listNotes();
-        // Python sorted() 按 Unicode 码点排序: 周(0x5468) < 计(0x8BA1) → 周报在前
-        assertEquals(List.of("周报", "计划"), titles);
-        assertEquals("本周总结", store.readNote("周报"));
-        assertNull(store.readNote("不存在"));
+        // listNotes sorts by file name lexically: "Plan" < "Weekly report" → Plan first
+        assertEquals(List.of("Plan", "Weekly_report"), titles);
+        assertEquals("This week's summary", store.readNote("Weekly report"));
+        assertNull(store.readNote("nonexistent"));
     }
 }

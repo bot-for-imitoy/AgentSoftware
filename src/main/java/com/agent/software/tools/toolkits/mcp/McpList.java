@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * mcp_list — 列出本地全部可用的 MCP 工具 (名称 + 简述).
+ * mcp_list - list all MCP tools available locally (name + short description).
  */
 public class McpList extends Tool {
 

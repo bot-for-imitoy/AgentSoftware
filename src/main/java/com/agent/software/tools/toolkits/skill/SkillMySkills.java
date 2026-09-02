@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * skill_my_skills — 查看当前角色已添加的技能列表.
+ * skill_my_skills — view the list of skills already added to the current role.
  */
 public class SkillMySkills extends Tool {
 

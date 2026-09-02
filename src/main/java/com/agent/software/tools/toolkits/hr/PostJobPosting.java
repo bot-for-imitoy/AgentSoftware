@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * post_job_posting — 发布招聘启事. 输入用人需求, 发布后新员工会立即
- * 加入团队并上岗 (可收发消息、参与工作). 后台自动创建新员工的完整档案.
+ * post_job_posting - post a job posting. Enter the hiring requirement; once posted, the new employee immediately
+ * joins the team and starts work (can send/receive messages, participate in work). The backend automatically creates the new employee's full profile.
  */
 public class PostJobPosting extends Tool {
 
@@ -60,10 +60,10 @@ public class PostJobPosting extends Tool {
         try {
             newRole = factory.createRole(requirement);
         } catch (Exception exc) {
-            logger.error("招聘流程处理失败: {}", exc.getMessage());
+            logger.error("Job posting processing failed: {}", exc.getMessage());
             return "post_job_posting: Error: job posting processing failed - " + exc.getMessage();
         }
-        // 入职: 加入运行中的团队 (RolePool), 启动 worker
+        // onboarding: join the running team (RolePool), start the worker
         RolePool pool = agentRole.pool();
         String onboarding = "Joined the team";
         if (pool != null) {
@@ -71,11 +71,11 @@ public class PostJobPosting extends Tool {
                 pool.addRoleAndStart(newRole);
                 onboarding = "Joined the team and started work (can send/receive messages)";
             } catch (IllegalArgumentException exc) {
-                logger.warn("入职失败: {}", exc.getMessage());
+                logger.warn("Onboarding failed: {}", exc.getMessage());
                 onboarding = "Team registration failed: " + exc.getMessage();
             }
         } else {
-            logger.warn("RolePool 未绑定, 新员工仅注册到模板池");
+            logger.warn("RolePool not bound, the new employee is only registered in the template pool");
         }
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("role_id", newRole.roleId);

@@ -18,11 +18,11 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 技能库管理器 — 扫描 SKILL.md, 按需把技能注册为角色工具
- * (原 SkillToolkit.SkillManager, 随旧工具类删除迁入模板风格包).
+ * Skill library manager — scans SKILL.md and registers skills as role tools on demand
+ * (formerly SkillToolkit.SkillManager, moved into the template-style package when the old tool classes were removed).
  *
- * 每个技能 = 一个目录, 内含 SKILL.md (frontmatter: name/description +
- * 使用指引) 以及可选的 scripts/.
+ * Each skill = one directory containing SKILL.md (frontmatter: name/description +
+ * usage instructions) plus an optional scripts/.
  */
 public final class SkillManager {
 
@@ -30,7 +30,7 @@ public final class SkillManager {
 
     private static final Pattern TOOL_NAME_RE = Pattern.compile("[^a-z0-9_]+");
 
-    /** 一个技能包的元信息. */
+    /** Metadata of a skill package. */
     public static final class SkillInfo {
         public final String name;
         public final String description;
@@ -42,14 +42,14 @@ public final class SkillManager {
             this.path = path;
         }
 
-        /** 转成合法工具名 (小写下划线, 空格/连字符 → 下划线). */
+        /** Convert to a valid tool name (lowercase with underscores, spaces/hyphens → underscores). */
         public String toolName() {
             String n = TOOL_NAME_RE.matcher(name.toLowerCase()).replaceAll("_");
             n = n.replaceAll("^_+|_+$", "");
             return n.isEmpty() ? "skill" : n;
         }
 
-        /** 读取 SKILL.md 全文 (不存在返回空串). */
+        /** Read the full SKILL.md text (returns empty string if it does not exist). */
         public String readSkillMd() {
             Path p = path.resolve("SKILL.md");
             if (!Files.exists(p)) {
@@ -62,7 +62,7 @@ public final class SkillManager {
             }
         }
 
-        /** 列出技能目录下的相关文件 (scripts/references/assets), 相对路径排序. */
+        /** List related files under the skill directory (scripts/references/assets), sorted by relative path. */
         public List<String> listRelatedFiles() {
             List<String> files = new ArrayList<>();
             for (String sub : new String[]{"scripts", "references", "assets"}) {
@@ -94,13 +94,13 @@ public final class SkillManager {
         this(null);
     }
 
-    /** 扫描技能库全部 SKILL.md 并解析 frontmatter. 幂等. */
+    /** Scan all SKILL.md files in the skill library and parse the frontmatter. Idempotent. */
     public Map<String, SkillInfo> ensureLoaded() {
         if (loaded) {
             return skills;
         }
         if (!Files.isDirectory(skillsDir)) {
-            logger.warn("技能库目录不存在: {} (clone anbeime/skill 后复制 skills/ 过来)", skillsDir);
+            logger.warn("Skill library directory does not exist: {} (clone anbeime/skill and copy skills/ over)", skillsDir);
             loaded = true;
             return skills;
         }
@@ -120,7 +120,7 @@ public final class SkillManager {
                 if (name == null || name.isEmpty()) {
                     name = md.getParent().getFileName().toString();
                 }
-                // 同名冲突: 保留第一个, 后续加序号
+                // Name conflicts: keep the first, append a sequence number to later ones
                 String base = name;
                 int idx = 2;
                 while (skills.containsKey(name)) {
@@ -130,14 +130,14 @@ public final class SkillManager {
                 skills.put(name, new SkillInfo(name, fm[1], md.getParent()));
             }
         } catch (IOException e) {
-            logger.warn("扫描技能库失败: {}", e.getMessage());
+            logger.warn("Failed to scan the skill library: {}", e.getMessage());
         }
         loaded = true;
-        logger.info("SkillManager: 已加载 {} 个技能 (来自 {})", skills.size(), skillsDir);
+        logger.info("SkillManager: loaded {} skills (from {})", skills.size(), skillsDir);
         return skills;
     }
 
-    /** 列出技能库中全部技能. */
+    /** List all skills in the skill library. */
     public List<Map<String, String>> listAvailable() {
         ensureLoaded();
         List<Map<String, String>> out = new ArrayList<>();
@@ -152,7 +152,7 @@ public final class SkillManager {
         return out;
     }
 
-    /** 按关键词搜索技能 (匹配名称或描述). */
+    /** Search skills by keyword (matches name or description). */
     public List<Map<String, String>> searchSkills(String keyword) {
         ensureLoaded();
         String kw = (keyword == null ? "" : keyword).strip().toLowerCase();
@@ -174,7 +174,7 @@ public final class SkillManager {
         return hits;
     }
 
-    /** 为角色安装一个技能工具. */
+    /** Install a skill tool for a role. */
     public String addSkill(AgentRole role, String skillName) {
         ensureLoaded();
         SkillInfo info = skills.get(skillName);
@@ -194,11 +194,11 @@ public final class SkillManager {
                 args -> readSkillContent(infoRef),
                 "skill:" + info.name);
         mine.add(skillName);
-        logger.info("[{}] 技能工具已添加: {} (来自 {})", roleId, skillName, info.path);
+        logger.info("[{}] skill tool added: {} (from {})", roleId, skillName, info.path);
         return "Success: skill '" + skillName + "' installed to " + roleId + " (" + truncate(info.description, 60) + "...)";
     }
 
-    /** 从角色移除一个技能工具. */
+    /** Remove a skill tool from a role. */
     public String removeSkill(AgentRole role, String skillName) {
         String roleId = role.roleId;
         Set<String> mine = roleSkills.getOrDefault(roleId, new LinkedHashSet<>());
@@ -210,11 +210,11 @@ public final class SkillManager {
             role.removeSingleTool(info.toolName());
         }
         mine.remove(skillName);
-        logger.info("[{}] 技能工具已移除: {}", roleId, skillName);
+        logger.info("[{}] skill tool removed: {}", roleId, skillName);
         return "Success: skill '" + skillName + "' has been removed from " + roleId + ".";
     }
 
-    /** 列出角色已添加的技能工具. */
+    /** List the skill tools already added to a role. */
     public List<Map<String, String>> listRoleSkills(AgentRole role) {
         Set<String> mine = roleSkills.getOrDefault(role.roleId, new LinkedHashSet<>());
         List<Map<String, String>> result = new ArrayList<>();
@@ -228,7 +228,7 @@ public final class SkillManager {
         return result;
     }
 
-    /** 拼接技能完整内容: frontmatter 摘要 + SKILL.md 全文 + 相关文件清单. */
+    /** Assemble the complete skill content: frontmatter summary + full SKILL.md text + related file list. */
     private static String readSkillContent(SkillInfo info) {
         String body = info.readSkillMd();
         List<String> related = info.listRelatedFiles();
@@ -250,7 +250,7 @@ public final class SkillManager {
         return String.join("\n", parts);
     }
 
-    /** 从 SKILL.md 文本解析 frontmatter 的 name/description. */
+    /** Parse the frontmatter name/description from SKILL.md text. */
     static String[] parseFrontmatter(String text) {
         if (text == null || !text.startsWith("---")) {
             return new String[]{null, ""};

@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * skill_add — 为当前角色添加一个技能. 添加后即可在任务中调用该技能
- * (获得其完整使用指引).
+ * skill_add — add a skill for the current role. After adding, the skill can be invoked in tasks
+ * (obtaining its complete usage instructions).
  */
 public class SkillAdd extends Tool {
 

@@ -8,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * computer_status — 查看个人电脑的状态: 是否开机, 工作目录在哪里, 电脑类型.
+ * computer_status - view the status of the personal computer: whether it is on, where the working directory is, and the computer type.
  */
 public class ComputerStatus extends Tool {
 

@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * skill_search — 搜索技能库中的技能 (按名称或描述关键词).
- * 先搜索找到合适技能, 再用 skill_add 添加给自己.
+ * skill_search — search skills in the skill library (by name or description keyword).
+ * First search to find the right skill, then use skill_add to add it to yourself.
  */
 public class SkillSearch extends Tool {
 

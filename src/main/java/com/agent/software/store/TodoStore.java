@@ -15,15 +15,15 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Todo 清单存储 (TodoStore) — 角色个人待办清单 (JSON 持久化, Python 版 todo_store.py).
+ * Todo list storage (TodoStore) — per-role personal todo list (JSON persistence, Python version todo_store.py).
  *
- * 每个角色一份独立清单: data/todos/&lt;role_id&gt;.json.
+ * One independent list per role: data/todos/&lt;role_id&gt;.json.
  */
 public class TodoStore {
 
     private static final Logger logger = LoggerFactory.getLogger(TodoStore.class);
 
-    /** 合法状态 (与 Hermes todo 工具一致). */
+    /** Valid statuses (consistent with the Hermes todo tool). */
     public static final List<String> TODO_STATUSES = List.of("pending", "in_progress", "completed");
 
     public final String roleId;
@@ -35,9 +35,9 @@ public class TodoStore {
                 : Paths.get("./data/todos").resolve((this.roleId.isEmpty() ? "shared" : this.roleId) + ".json");
     }
 
-    // ── 底层读写 ──────────────────────────────────────────
+    // ── Low-level read/write ──────────────────────────────────────────
 
-    /** 读取清单 (文件不存在返回空列表). */
+    /** Read the list (returns an empty list if the file does not exist). */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> load() {
         if (!Files.exists(path)) {
@@ -56,23 +56,23 @@ public class TodoStore {
             }
             return new ArrayList<>();
         } catch (Exception e) {
-            logger.warn("TodoStore[{}] 读取失败: {}", roleId, e.getMessage());
+            logger.warn("TodoStore[{}] read failed: {}", roleId, e.getMessage());
             return new ArrayList<>();
         }
     }
 
-    /** 原子写 (tmp + rename). */
+    /** Atomic write (tmp + rename). */
     private void save(List<Map<String, Object>> items) {
         try {
             Json.atomicWrite(path, Json.stringifyPretty(items));
         } catch (IOException e) {
-            logger.warn("TodoStore[{}] 写入失败: {}", roleId, e.getMessage());
+            logger.warn("TodoStore[{}] write failed: {}", roleId, e.getMessage());
         }
     }
 
     // ── CRUD ──────────────────────────────────────────────
 
-    /** 添加待办. 返回新条目 Map (含 id/status/created_at). */
+    /** Add a todo. Returns the new item Map (containing id/status/created_at). */
     public Map<String, Object> add(String title, String detail) {
         double now = System.currentTimeMillis() / 1000.0;
         Map<String, Object> item = new LinkedHashMap<>();
@@ -85,11 +85,11 @@ public class TodoStore {
         List<Map<String, Object>> items = load();
         items.add(item);
         save(items);
-        logger.info("TodoStore[{}] 已添加待办 [{}]: {}", roleId, item.get("id"), title);
+        logger.info("TodoStore[{}] todo added [{}]: {}", roleId, item.get("id"), title);
         return item;
     }
 
-    /** 列出待办 (按创建时间排序; status 过滤可选). */
+    /** List todos (sorted by creation time; status filter optional). */
     public List<Map<String, Object>> list(String status) {
         List<Map<String, Object>> items = load();
         if (status != null) {
@@ -98,7 +98,7 @@ public class TodoStore {
         return items;
     }
 
-    /** 更新待办状态. 返回更新后的条目; id 不存在返回 null. */
+    /** Update a todo's status. Returns the updated item; returns null if the id does not exist. */
     public Map<String, Object> update(String todoId, String status) {
         if (!TODO_STATUSES.contains(status)) {
             throw new IllegalArgumentException("Invalid status '" + status + "', allowed: " + String.join(", ", TODO_STATUSES));
@@ -109,14 +109,14 @@ public class TodoStore {
                 item.put("status", status);
                 item.put("updated_at", System.currentTimeMillis() / 1000.0);
                 save(items);
-                logger.info("TodoStore[{}] 待办 [{}] → {}", roleId, todoId, status);
+                logger.info("TodoStore[{}] todo [{}] → {}", roleId, todoId, status);
                 return item;
             }
         }
         return null;
     }
 
-    /** 删除待办. 返回是否删除成功. */
+    /** Delete a todo. Returns whether deletion succeeded. */
     public boolean delete(String todoId) {
         List<Map<String, Object>> items = load();
         List<Map<String, Object>> kept = new ArrayList<>();
@@ -132,7 +132,7 @@ public class TodoStore {
             return false;
         }
         save(kept);
-        logger.info("TodoStore[{}] 待办已删除 [{}]", roleId, todoId);
+        logger.info("TodoStore[{}] todo deleted [{}]", roleId, todoId);
         return true;
     }
 }

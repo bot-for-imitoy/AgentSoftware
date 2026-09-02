@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * list_roles — 获取当前团队都有哪些成员 (姓名/职责/技能/所属分组).
- * 在向同事发消息前, 或不确定该找谁处理某件事时, 先调用此工具.
+ * list_roles — get the current team members (name/responsibilities/skills/group).
+ * Call this tool before sending messages to colleagues, or when you are not sure who to ask about something.
  */
 public class ListRoles extends Tool {
 
@@ -41,7 +41,7 @@ public class ListRoles extends Tool {
         return "list_roles: current team members:\n" + roster;
     }
 
-    /** 构建团队花名册 (固定格式, 供 talk 描述与 list_roles 工具复用). */
+    /** Build the team roster (fixed format, reused by the talk description and the list_roles tool). */
     public static String buildTeamRoster(RolePool pool) {
         List<String> rosterLines = new ArrayList<>();
         for (AgentRole r : pool.allRoles()) {

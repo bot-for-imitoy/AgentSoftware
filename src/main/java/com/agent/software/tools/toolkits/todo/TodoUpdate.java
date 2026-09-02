@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * todo_update — 更新一条待办的状态:
- * pending(未开始) → in_progress(进行中) → completed(已完成).
+ * todo_update — update the status of a todo item:
+ * pending (not started) → in_progress (in progress) → completed (completed).
  */
 public class TodoUpdate extends Tool {
 
