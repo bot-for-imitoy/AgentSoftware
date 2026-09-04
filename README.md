@@ -30,6 +30,16 @@ mvn exec:java -Dexec.mainClass=demo.com.agent.software.TalkDemo # talk collabora
 mvn exec:java -Dexec.mainClass=demo.com.agent.software.McpDemo  # MCP tools demo
 ```
 
+### LLM Provider Manager
+
+`com.agent.software.llm.provider` provides an LLM **provider manager**: the
+bundled catalog `src/main/resources/providers.default.json` lists mainstream
+provider APIs (OpenAI, Anthropic, Gemini, DeepSeek, Groq, ...) with their base
+URLs, request paths and API format (OpenAI or Anthropic); `ProviderManager`
+merges it with an optional local providers file and can fetch each provider's
+model list through its `GET /models` endpoint, normalizing both dialects into
+`ModelInfo`. See `docs/llm-provider-manager.md`.
+
 ### Web UI (Group Chat + Client A Conversation)
 
 The Java version ships with a zero-dependency web UI (`com.sun.net.httpserver`, no extra frameworks needed);

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "description": "EXAMPLE local providers file for ProviderManager - copy to providers.json under the platform config dir (e.g. ~/.config/AgentSoftware/providers.json) or point LLM_PROVIDERS_CONFIG at it. Entries use the same schema as the bundled providers.default.json resource; by provider id they override the default fields field-by-field, and new ids are appended. The api_keys map keeps secrets out of the committed default catalog.",
+  "api_keys": {
+    "openai": "sk-REPLACE-WITH-YOUR-OPENAI-KEY",
+    "deepseek": "sk-REPLACE-WITH-YOUR-DEEPSEEK-KEY"
+  },
+  "providers": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek (corporate proxy)",
+      "base_url": "https://llm-gateway.example-corp.com/v1",
+      "enabled": true
+    },
+    {
+      "id": "my-ollama",
+      "name": "My local Ollama",
+      "api_format": "openai",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "models_path": "/models",
+      "chat_completions_path": "/chat/completions",
+      "enabled": true,
+      "description": "Example of a brand-new provider added only by the local file"
+    },
+    {
+      "id": "groq",
+      "enabled": false
+    }
+  ]
+}
