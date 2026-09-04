@@ -88,22 +88,38 @@ public class OpenAICompatLLM implements LLM {
                     Map<String, String> env, Map<String, String> props) {
         this.configStore = configStore != null ? configStore : new ConfigStore();
         this.label = label != null ? label : "";
-        this.apiKey = first(apiKey, (String)this.configStore.get("llm.api_key", System.getenv("OPENAI_APIKEY")));
-        this.baseUrl = stripSlash(first(baseUrl, (String)this.configStore.get("llm.base_url", System.getenv("OPENAI_BASEURL"))));
-        this.model = first(model, (String)this.configStore.get("llm.model", System.getenv("OPENAI_MODEL")));
+        this.apiKey = resolve(apiKey, API_KEY_ENV, "llm.api_key", null, env, props);
+        this.baseUrl = stripSlash(resolve(baseUrl, BASE_URL_ENV, "llm.base_url", DEFAULT_BASE_URL, env, props));
+        this.model = resolve(model, MODEL_ENV, "llm.model", DEFAULT_MODEL, env, props);
     }
 
-    /** ConfigStore dotted path: {@code llm.&lt;field&gt;}. */
-    private static String[] storeKeys(String field) {
-        return new String[]{"llm." + field};
-    }
-
-    private static String first(String explicit, String resolved) {
-        return explicit != null ? explicit : resolved;
+    /**
+     * Layered config resolution for a single setting, high → low priority (see the class javadoc):
+     * explicit constructor argument &gt; system property {@code -D<envName>=...} &gt; environment
+     * variable {@code <envName>} &gt; ConfigStore dotted path {@code storeKey} &gt; default value.
+     *
+     * <p>When {@code props} / {@code env} are null the real system properties / environment variables
+     * are read; non-null maps (test snapshots) replace them entirely, keeping tests deterministic.
+     */
+    private String resolve(String explicit, String envName, String storeKey, String def,
+                           Map<String, String> env, Map<String, String> props) {
+        if (explicit != null) {
+            return explicit;
+        }
+        String fromProps = props != null ? props.get(envName) : System.getProperty(envName);
+        if (fromProps != null) {
+            return fromProps;
+        }
+        String fromEnv = env != null ? env.get(envName) : System.getenv(envName);
+        if (fromEnv != null) {
+            return fromEnv;
+        }
+        Object fromStore = configStore.get(storeKey, null);
+        return fromStore != null ? String.valueOf(fromStore) : def;
     }
 
     private static String stripSlash(String s) {
-        return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
+        return s != null && s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
     }
 
     // ── Debug logging (with role prefix) ──────────────────
