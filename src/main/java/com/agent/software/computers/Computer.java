@@ -42,7 +42,7 @@ public abstract class Computer {
     protected boolean on = false;
     protected final boolean autoMcp;              // auto-created computers: automatically install the MCP server at creation time
     protected final Map<String, ToolRegistry.ToolDef> mcpTools = new LinkedHashMap<>();
-    protected final MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
+    protected MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
     protected String connectError = null;          // reason for the most recent MCP connection failure (for diagnostics)
 
     protected Computer(String roleId, boolean autoMcp) {
@@ -84,6 +84,16 @@ public abstract class Computer {
         } catch (Exception e) {
             logger.error("Computer [{}] MCP server rebuild failed", roleId, e);
         }
+    }
+
+    /**
+     * Install this computer's independent MCP server and return the tool names it
+     * exposes. The base computer runs no MCP server; computers that support one
+     * (e.g. {@link PodmanComputer}) override this method.
+     */
+    public List<String> installMcpServer() {
+        logger.warn("Computer [{}] does not support an MCP server, nothing installed", roleId);
+        return new ArrayList<>();
     }
 
     // ── Abstract interface (implemented by subclasses) ──────────────────────────────
