@@ -42,7 +42,7 @@ public abstract class Computer {
     protected boolean on = false;
     protected final boolean autoMcp;              // auto-created computers: automatically install the MCP server at creation time
     protected final Map<String, ToolRegistry.ToolDef> mcpTools = new LinkedHashMap<>();
-    protected MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
+    protected final MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
     protected String connectError = null;          // reason for the most recent MCP connection failure (for diagnostics)
 
     protected Computer(String roleId, boolean autoMcp) {
@@ -66,18 +66,21 @@ public abstract class Computer {
 
     /** Rebuild the MCP server session when it becomes invalid (podman stop after a cross-day shutdown kills the stdio pipe). */
     protected void reconnectMcpServer() {
-        if (mcpServer == null || mcpServerAlive()) {
+        if (mcpServer == null){
+            logger.error("MCPServer is null");
             return;
         }
-        logger.warn("Computer [{}] MCP server session invalidated, rebuilding...", roleId);
+        if (mcpServerAlive()) {
+            return;
+        }
+        logger.warn("Reconnecting MCP Sever in computer [{}] ...", roleId);
         try {
             mcpServer.close();
         } catch (Exception ignored) {
         }
-        mcpServer = null;
         mcpTools.clear();  // the old handlers are bound to the dead server
         try {
-            installMcpServer();
+            mcpServer.connect();
         } catch (Exception e) {
             logger.error("Computer [{}] MCP server rebuild failed", roleId, e);
         }
@@ -208,54 +211,6 @@ public abstract class Computer {
     /** Mapped path of this computer's work directory on the host (the MCP server's authorized directory). */
     public String hostDir() {
         return "";
-    }
-
-    /**
-     * Install an independent MCP server on this computer (filesystem, authorized for this computer's directory).
-     * Idempotent: returns immediately if already installed. Returns the list of installed tool names.
-     */
-    public List<String> installMcpServer() {
-        if (mcpServer != null) {
-            return listInstalledMcpTools();
-        }
-        if (!autoMcp) {
-            logger.info("Computer [{}] not auto-created, skipping automatic MCP server installation", roleId);
-            return new ArrayList<>();
-        }
-        if (hostDir().isEmpty()) {
-            logger.warn("Computer [{}] has no host directory mapping, skipping MCP server installation (SSH remote computer)", roleId);
-            return new ArrayList<>();
-        }
-        try {
-            mcpServer = new MCPServer("@modelcontextprotocol/server-filesystem",
-                    List.of(hostDir()));
-            mcpServer.connect();
-            if (!mcpServer.isAlive(5.0)) {
-                throw new RuntimeException("MCP server connection failed: "
-                        + (mcpServer.connectError() != null ? mcpServer.connectError() : "unknown"));
-            }
-            for (Map<String, Object> tool : mcpServer.listTools()) {
-                String tname = String.valueOf(tool.get("name"));
-                if (tname == null || tname.isEmpty() || "null".equals(tname)) {
-                    continue;
-                }
-                MCPServer server = mcpServer;
-                ToolRegistry.ToolDef td = new ToolRegistry.ToolDef(
-                        tname,
-                        String.valueOf(tool.getOrDefault("description", "")),
-                        mapOf(tool.get("inputSchema")),
-                        args -> server.callTool(tname, args),
-                        "mcp:" + server.packageName + " (this computer)");
-                mcpTools.put(tname, td);
-            }
-            logger.info("Computer [{}] independent MCP server installed, {} tools: {}",
-                    roleId, mcpTools.size(), listInstalledMcpTools());
-        } catch (Exception exc) {
-            connectError = String.valueOf(exc.getMessage());
-            logger.error("Computer [{}] MCP server installation failed", roleId, exc);
-            return new ArrayList<>();
-        }
-        return listInstalledMcpTools();
     }
 
     @SuppressWarnings("unchecked")

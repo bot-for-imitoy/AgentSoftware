@@ -15,44 +15,6 @@ public abstract class Toolkit {
 
     protected final ArrayList<Tool> tools;
 
-    public Toolkit(){
-        this.tools = new ArrayList<>();
-    }
-
-    public Toolkit(ArrayList<Tool> tools){
-        this.tools = tools;
-    }
-
-    protected void addTool(Tool tool){
-        tools.add(tool);
-    }
-
-    public ArrayList<Tool> getTools(){
-        return tools;
-    }
-
-    /**
-     * Invokes by tool name. Returns the handler's result; returns null if the tool does not exist.
-     */
-    public String trigger(String toolName, Map<String, Object> arg){
-        for(Tool tool : tools){
-            if(tool.getToolName().equals(toolName)){
-                return tool.handler(arg);
-            }
-        }
-        return null;
-    }
-
-    /** Toolkit name (for the registry/logs). By default the class name converted to snake_case. */
-    public String getName(){
-        return snakeCase(getClass().getSimpleName());
-    }
-
-    /** Toolkit description (optional, for the registry). */
-    public String getDescription(){
-        return "Toolkit " + getName() + " (" + tools.size() + " tools)";
-    }
-
     /** CamelCase → snake_case (TaskView → task_view, McpManager → mcp_manager). */
     public static String snakeCase(String name){
         StringBuilder sb = new StringBuilder();
@@ -68,6 +30,39 @@ public abstract class Toolkit {
             }
         }
         return sb.toString().toLowerCase(Locale.ROOT);
+    }
+
+    protected void addTool(Tool tool){
+        tools.add(tool);
+    }
+
+    public Toolkit(){
+        this.tools = new ArrayList<>();
+    }
+
+    public Toolkit(ArrayList<Tool> tools){
+        this.tools = tools;
+    }
+
+    public ArrayList<Tool> getTools(){
+        return tools;
+    }
+
+    public String trigger(String toolName, Map<String, Object> arg){
+        for(Tool tool : tools){
+            if(tool.getToolName().equals(toolName)){
+                return tool.handler(arg);
+            }
+        }
+        return null;
+    }
+
+    public String getName(){
+        return snakeCase(getClass().getSimpleName());
+    }
+
+    public String getDescription(){
+        return "Toolkit " + getName() + " (" + tools.size() + " tools)";
     }
 
 }
