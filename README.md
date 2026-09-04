@@ -18,7 +18,7 @@
 # Prerequisites: JDK 25+, Maven 3.8+ (OpenAI API Key: export OPENAI_API_KEY=sk-...)
 mvn compile          # compile
 mvn test             # run all JUnit tests (135 test cases)
-mvn package          # package target/agent-company.jar
+mvn package          # package target/agent-software.jar
 ```
 
 ### Entry Points
@@ -61,9 +61,9 @@ the original console `System.in` interaction, behaving exactly as before.
 
 | Config (env var / `-D` system property) | Default | Description |
 |------|--------|------|
-| `AGENTCOMPANY_WEB_HOST` | `0.0.0.0` | Web UI listen address |
-| `AGENTCOMPANY_WEB_PORT` | `8787` | Web UI port |
-| `AGENTCOMPANY_CLIENT_REPLY_TIMEOUT` | `1200000` (20 min) | Reply timeout in ms for Client A replies in Web mode |
+| `AGENTSOFTWARE_WEB_HOST` | `0.0.0.0` | Web UI listen address |
+| `AGENTSOFTWARE_WEB_PORT` | `8787` | Web UI port |
+| `AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT` | `1200000` (20 min) | Reply timeout in ms for Client A replies in Web mode |
 
 HTTP API (same-origin, no auth, polled by the web frontend):
 
@@ -113,8 +113,8 @@ the `talk_to_client` / `talk` tools record messages automatically; see tests `Ch
 - All multithreading uses **Java 21+ virtual threads**: role workers (`RolePool`), parallel role assembly (`AgentSystem.addRoles`), and parallel computer restoration (`StateStore.restoreComputers`) all use virtual-thread executors; where rate limiting is needed (assembly/restoration), `Semaphore` preserves the original concurrency-limit semantics. Each role gets one resident virtual thread, no longer bounded by the fixed thread pool `max_workers`.
 - LLM requests use the JDK `java.net.http.HttpClient`; retry semantics (retry on 429/5xx/timeouts, fail immediately on 4xx) match the Python version.
 - The MCP client implements newline-delimited JSON-RPC 2.0 over stdio itself (no MCP SDK dependency), supporting `npx -y <package>` and custom commands (`podman exec -i` inside containers).
-- Environment-variable override of path resolution also supports system properties (`-DAGENTCOMPANY_DATA_DIR=...` etc.; the prefix is the app name
-  uppercased, `AgentCompany` → `AGENTCOMPANY`), handy for test/container injection.
+- Environment-variable override of path resolution also supports system properties (`-DAGENTSOFTWARE_DATA_DIR=...` etc.; the prefix is the app name
+  uppercased, `AgentSoftware` → `AGENTSOFTWARE`), handy for test/container injection.
 - **Unified layered LLM configuration resolution**: explicit constructor args &gt; Java args (`-D` system properties) &gt; env vars &gt;
   config file (ConfigStore, dot keys `llm.api_key` / `llm.base_url` / `llm.model`)
   &gt; defaults; key names are consistent across all sources (see the env-var table below). Providers are no longer distinguished; everything goes through
@@ -409,7 +409,7 @@ while a copy is still delivered to the internal recipient mailbox (simulating in
 ## Project Structure
 
 ```
-AgentCompany/
+AgentSoftware/
 ├── src/
 │   ├── core/
 │   │   ├── types.py           # data types such as Event, AgentState, Priority
@@ -455,7 +455,7 @@ AgentCompany/
   any OpenAI-compatible endpoint, e.g. DeepSeek / local vLLM)
 
 ```bash
-cd AgentCompany
+cd AgentSoftware
 source .venv/bin/activate
 
 # set the API Key (required; no longer hardcoded in source)

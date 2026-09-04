@@ -73,7 +73,7 @@ class ChatWebServerTest {
     void testIndexServed() throws Exception {
         HttpResponse<String> r = get("/");
         assertEquals(200, r.statusCode());
-        assertTrue(r.body().contains("AgentCompany"));
+        assertTrue(r.body().contains("AgentSoftware"));
         assertTrue(r.headers().firstValue("Content-Type").orElse("").contains("text/html"));
 
         HttpResponse<String> js = get("/app.js");

@@ -1,4 +1,4 @@
-/* AgentCompany Web UI - group chat + client dialogue */
+/* AgentSoftware Web UI - group chat + client dialogue */
 "use strict";
 
 const LEADERSHIP_KEY = "Leadership Group";

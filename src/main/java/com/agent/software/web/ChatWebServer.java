@@ -36,8 +36,8 @@ import java.util.function.Supplier;
  * </ul>
  *
  * <p>Bind address/port/client-reply timeout are configured via environment variables or system
- * properties ({@code AGENTCOMPANY_WEB_HOST} / {@code AGENTCOMPANY_WEB_PORT} /
- * {@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}), following the same convention as PathManager.
+ * properties ({@code AGENTSOFTWARE_WEB_HOST} / {@code AGENTSOFTWARE_WEB_PORT} /
+ * {@code AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT}), following the same convention as PathManager.
  */
 public final class ChatWebServer {
 
@@ -92,13 +92,13 @@ public final class ChatWebServer {
 
     /** Bind address (default 0.0.0.0). */
     public static String configuredHost() {
-        return config("AGENTCOMPANY_WEB_HOST", DEFAULT_HOST);
+        return config("AGENTSOFTWARE_WEB_HOST", DEFAULT_HOST);
     }
 
     /** Listening port (default 8787; 0 = random port, for tests). */
     public static int configuredPort() {
         try {
-            return Integer.parseInt(config("AGENTCOMPANY_WEB_PORT", String.valueOf(DEFAULT_PORT)));
+            return Integer.parseInt(config("AGENTSOFTWARE_WEB_PORT", String.valueOf(DEFAULT_PORT)));
         } catch (NumberFormatException e) {
             return DEFAULT_PORT;
         }
@@ -107,7 +107,7 @@ public final class ChatWebServer {
     /** Client reply timeout in milliseconds. */
     public static long replyTimeoutMs() {
         try {
-            return Long.parseLong(config("AGENTCOMPANY_CLIENT_REPLY_TIMEOUT",
+            return Long.parseLong(config("AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT",
                     String.valueOf(DEFAULT_REPLY_TIMEOUT_MS)));
         } catch (NumberFormatException e) {
             return DEFAULT_REPLY_TIMEOUT_MS;

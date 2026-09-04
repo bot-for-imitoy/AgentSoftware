@@ -37,15 +37,15 @@ class ToolkitsTest {
     @TempDir
     Path tmp;
 
-    /** Points the app data dir at a temp dir (PathManager prefix = AGENTCOMPANY; the default role storage paths become writable). */
+    /** Points the app data dir at a temp dir (PathManager prefix = AGENTSOFTWARE; the default role storage paths become writable). */
     @BeforeEach
     void setUp() {
-        System.setProperty("AGENTCOMPANY_DATA_DIR", tmp.resolve("data").toString());
+        System.setProperty("AGENTSOFTWARE_DATA_DIR", tmp.resolve("data").toString());
     }
 
     @AfterEach
     void tearDown() {
-        System.clearProperty("AGENTCOMPANY_DATA_DIR");
+        System.clearProperty("AGENTSOFTWARE_DATA_DIR");
     }
 
     // ── note toolkit (separate from memory) ───────────────────

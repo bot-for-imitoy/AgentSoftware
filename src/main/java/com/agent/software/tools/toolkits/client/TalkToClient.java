@@ -22,7 +22,7 @@ import java.util.Map;
  *   <li><b>Web mode</b>: when the Web UI is attached (inside the ChatStore heartbeat), the
  *       message is shown in the Web chat window, the input box is enabled automatically, and
  *       the client replies on the page → the result is returned. The wait has a timeout
- *       ({@code AGENTCOMPANY_CLIENT_REPLY_TIMEOUT}, default 20 minutes); on timeout an error is
+ *       ({@code AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT}, default 20 minutes); on timeout an error is
  *       returned so the agent never blocks forever.</li>
  *   <li><b>Console mode</b>: when no Web UI is attached, the original behavior is kept, blocking
  *       on System.in.</li>

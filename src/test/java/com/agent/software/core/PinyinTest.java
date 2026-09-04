@@ -61,8 +61,8 @@ class PinyinTest {
     @Test
     void testSystemPromptMentionsCloudDrive() {
         AgentRole.JOURNAL_DIR = tmp;
-        String oldProp = System.getProperty("AGENTCOMPANY_DATA_DIR");
-        System.setProperty("AGENTCOMPANY_DATA_DIR", tmp.resolve("data").toString());
+        String oldProp = System.getProperty("AGENTSOFTWARE_DATA_DIR");
+        System.setProperty("AGENTSOFTWARE_DATA_DIR", tmp.resolve("data").toString());
         try {
             RolePool pool = new RolePool();
             AgentRole r = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").computerKind("local").build();
@@ -78,9 +78,9 @@ class PinyinTest {
             assertTrue(prompt.contains("merge"));
         } finally {
             if (oldProp == null) {
-                System.clearProperty("AGENTCOMPANY_DATA_DIR");
+                System.clearProperty("AGENTSOFTWARE_DATA_DIR");
             } else {
-                System.setProperty("AGENTCOMPANY_DATA_DIR", oldProp);
+                System.setProperty("AGENTSOFTWARE_DATA_DIR", oldProp);
             }
         }
     }
@@ -88,8 +88,8 @@ class PinyinTest {
     @Test
     void testReleaseManagerPromptMentionsProjectDir() {
         AgentRole.JOURNAL_DIR = tmp;
-        String oldProp = System.getProperty("AGENTCOMPANY_DATA_DIR");
-        System.setProperty("AGENTCOMPANY_DATA_DIR", tmp.resolve("data").toString());
+        String oldProp = System.getProperty("AGENTSOFTWARE_DATA_DIR");
+        System.setProperty("AGENTSOFTWARE_DATA_DIR", tmp.resolve("data").toString());
         try {
             RolePool pool = new RolePool();
             AgentRole r = RoleLoader.getTemplate("release_manager");
@@ -101,9 +101,9 @@ class PinyinTest {
             assertTrue(prompt.contains("git repository"));
         } finally {
             if (oldProp == null) {
-                System.clearProperty("AGENTCOMPANY_DATA_DIR");
+                System.clearProperty("AGENTSOFTWARE_DATA_DIR");
             } else {
-                System.setProperty("AGENTCOMPANY_DATA_DIR", oldProp);
+                System.setProperty("AGENTSOFTWARE_DATA_DIR", oldProp);
             }
         }
     }

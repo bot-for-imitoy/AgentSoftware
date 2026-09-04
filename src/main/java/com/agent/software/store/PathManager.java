@@ -25,7 +25,7 @@ public class PathManager {
     }
 
     /**
-     * @param appName   application name (subdirectory under the platform directory, e.g. "AgentCompany").
+     * @param appName   application name (subdirectory under the platform directory, e.g. "AgentSoftware").
      * @param envPrefix environment variable override prefix (null = appName uppercased).
      * @param env       environment variable snapshot (for test injection; null = System.getenv()).
      * @param platform  platform name (for test injection; null = current OS name).
@@ -39,7 +39,7 @@ public class PathManager {
     }
 
     public static PathManager createDefault() {
-        return new PathManager("AgentCompany");
+        return new PathManager("AgentSoftware");
     }
 
     private boolean isWindows() {

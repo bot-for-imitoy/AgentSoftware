@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.maf</groupId>
-  <artifactId>agent-company</artifactId>
+  <artifactId>agent-software</artifactId>
   <version>1.0.0</version>
   <packaging>jar</packaging>
 
@@ -57,7 +57,7 @@
   </dependencies>
 
   <build>
-    <finalName>agent-company</finalName>
+    <finalName>agent-software</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

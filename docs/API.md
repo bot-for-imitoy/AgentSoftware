@@ -621,7 +621,7 @@ system.get_role("coo").add_toolkit(toolkits.get("memory_ops"))
 
 ### Running the complete demo
 ```bash
-cd AgentCompany && source .venv/bin/activate
+cd AgentSoftware && source .venv/bin/activate
 OPENAI_API_KEY=sk-xxx python -m src.main        # multi-day loop demo
 OPENAI_API_KEY=sk-xxx python -m src.role_demo   # role concurrency demo
 OPENAI_API_KEY=sk-xxx python -m src.talk_demo   # role communication demo
@@ -636,7 +636,7 @@ The Java version ships a zero-dependency built-in Web UI (`com.sun.net.httpserve
 | Class | Description |
 |---|---|
 | `web/ChatStore` | Chat message store (talk / client message types, monotonic seq) + Client A conversation coordination (beginClientWait / awaitClientReply / postClientReply); each `AgentSystem` owns one (`AgentSystem.chatStore`) |
-| `web/ChatWebServer` | HTTP server: static assets `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; port `AGENTCOMPANY_WEB_PORT` (default 8787) |
+| `web/ChatWebServer` | HTTP server: static assets `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; port `AGENTSOFTWARE_WEB_PORT` (default 8787) |
 | `demo/WebDemo` | Lightweight demo: minimal team + preset messages + one Client A conversation |
 
 Message sources: when the `talk` tool delivers successfully, the in-group message is
@@ -644,5 +644,5 @@ recorded; `talk_to_client` records the conversation between the Leadership Group
 Client A. Input-box enabling conditions (Web frontend): the "Leadership Group" is
 selected and `clientTalk.active` is true (a member is waiting for Client A's reply).
 When the Web UI is mounted, `talk_to_client` replies through the web page (timeout
-`AGENTCOMPANY_CLIENT_REPLY_TIMEOUT`, default 20 minutes); otherwise it falls back to
+`AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT`, default 20 minutes); otherwise it falls back to
 the console `System.in`.

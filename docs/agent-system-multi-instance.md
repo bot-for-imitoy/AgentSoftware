@@ -33,7 +33,7 @@
 | Location | Path | Problem |
 |---|---|---|
 | `role/AgentRole.java:50` | `data/journals/` | two systems with the same `role_id` write the same journal file |
-| `store/NoteStore.java:41` | `PathManager` user directory `~/.local/share/AgentCompany/notes` | ① inconsistent with the rest of the project's `./data/*` layout (.gitignore explicitly lists `data/notes/`); ② two systems with the same `role_id` share the notes directory |
+| `store/NoteStore.java:41` | `PathManager` user directory `~/.local/share/AgentSoftware/notes` | ① inconsistent with the rest of the project's `./data/*` layout (.gitignore explicitly lists `data/notes/`); ② two systems with the same `role_id` share the notes directory |
 | `store/TodoStore.java:35` | `./data/todos/<role_id>.json` | two systems with the same `role_id` share the same to-dos |
 | `services/MailService.java:39` | `data/mail/mailboxes.json` | one mail archive shared globally |
 | `store/StateStore.java:41` | `./data/state.json` | the two systems' save/restore overwrite each other (the later save overwrites the earlier one) |
@@ -56,11 +56,11 @@
 
 ### P5. Defects found along the way (unrelated to multi-instance; fixed together)
 
-- `NoteStore`'s default directory goes through `PathManager` (user home directory `~/.local/share/AgentCompany/notes`),
+- `NoteStore`'s default directory goes through `PathManager` (user home directory `~/.local/share/AgentSoftware/notes`),
   which contradicts the project's `./data/*` layout and the `data/notes/` convention in `.gitignore`; in a read-only home directory
   environment, tests fail outright (6 test cases failed for this reason in this repo's sandbox).
 - The environment variable prefix `AGENTSCHEDULER_DATA_DIR` used by tests and the README is inconsistent with the prefix that `PathManager`
-  actually derives (`appName="AgentCompany"` → `AGENTCOMPANY_DATA_DIR`),
+  actually derives (`appName="AgentSoftware"` → `AGENTSOFTWARE_DATA_DIR`),
   so the data-directory property set in tests never takes effect.
 
 ---
@@ -132,7 +132,7 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
   **Multi-instance deployment constraint**: if two AgentSystems on the same host use podman computers with the same `role_id`,
   the container names will conflict; multi-instance scenarios should use `local` computers (with per-system
   `base_dir`/`drive_dir`) or non-overlapping role sets.
-- **`ConfigStore` default config path**: process-level configuration such as LLM (`~/.config/AgentCompany/config.json`)
+- **`ConfigStore` default config path**: process-level configuration such as LLM (`~/.config/AgentSoftware/config.json`)
   stays shared (environment variables take precedence; the config is read-only in nature); all data-class state is isolated per system.
 
 ### 3.4 Compatibility
