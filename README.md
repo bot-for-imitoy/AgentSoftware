@@ -17,7 +17,7 @@
 ```bash
 # Prerequisites: JDK 25+, Maven 3.8+ (OpenAI API Key: export OPENAI_API_KEY=sk-...)
 mvn compile          # compile
-mvn test             # run all JUnit tests (135 test cases)
+mvn test             # run all JUnit tests (145 test cases)
 mvn package          # package target/agent-software.jar
 ```
 
