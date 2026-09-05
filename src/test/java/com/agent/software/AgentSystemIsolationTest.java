@@ -3,6 +3,7 @@ package com.agent.software;
 import com.agent.software.computers.Computer;
 import com.agent.software.computers.ComputerManager;
 import com.agent.software.event.TimeEventBus;
+import com.agent.software.io.StdInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
@@ -40,7 +41,7 @@ class AgentSystemIsolationTest {
 
     /** Creates an AgentSystem whose data dir is dir (same role set; autoToolkits=false avoids podman/LLM). */
     private AgentSystem make(Path dir) {
-        return new AgentSystem(dir, null, List.of("CEO", "CTO"), 30.0, false);
+        return new AgentSystem(dir, null, List.of("CEO", "CTO"), 30.0, false, new StdInput());
     }
 
     // ── 1. The two systems' collaboration objects and roles are fully independent ─
@@ -61,6 +62,7 @@ class AgentSystemIsolationTest {
         assertNotSame(a.skillManager, b.skillManager);
         assertNotSame(a.clientLock, b.clientLock);
         assertNotSame(a.chatStore, b.chatStore);
+        assertNotSame(a.input, b.input);
 
         // roles with the same role_id are independent objects within their own systems
         assertNotSame(a.getRole("CEO"), b.getRole("CEO"));

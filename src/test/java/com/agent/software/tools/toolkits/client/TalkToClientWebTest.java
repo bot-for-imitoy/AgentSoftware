@@ -1,6 +1,7 @@
 package com.agent.software.tools.toolkits.client;
 
 import com.agent.software.AgentSystem;
+import com.agent.software.io.WebInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Tool;
@@ -16,8 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * talk_to_client Web mode integration test: a leader calls → input enabled state (waiting for the client reply)
- * → the client submits a reply on the page → the leader gets it, and the chat log is complete.
+ * talk_to_client Web-mode integration test: an AgentSystem configured with a WebInput (bound to its
+ * chat store) → a leader calls → input enabled state (waiting for the client reply) → the client
+ * submits a reply on the page → the leader gets it, and the chat log is complete.
  */
 class TalkToClientWebTest {
 
@@ -38,7 +40,8 @@ class TalkToClientWebTest {
 
     @Test
     void testWebModeRoundtrip() throws Exception {
-        AgentSystem system = new AgentSystem(List.of(RoleLoader.getTemplate("CEO")), null, 30.0, false);
+        // WebInput: the client reply is read from the Web page input box (bound by AgentSystem to its store)
+        AgentSystem system = new AgentSystem(List.of(RoleLoader.getTemplate("CEO")), null, 30.0, false, new WebInput());
         AgentRole ceo = system.getRole("CEO");
         ChatStore store = system.chatStore;
         store.markAttached();   // simulate an attached Web frontend

@@ -54,6 +54,16 @@ public final class ClientCommunicationLock {
         return holderRoleId != null;
     }
 
+    /** role_id of the current holder (null when the lock is free). */
+    public synchronized String holderRoleId() {
+        return holderRoleId;
+    }
+
+    /** Display name of the current holder (null when the lock is free). */
+    public synchronized String holderName() {
+        return holderName;
+    }
+
     /** Description of the current holder (returns null if not held). */
     public synchronized String holderDescription() {
         return holderRoleId == null ? null : holderName + " (" + holderRoleId + ")";

@@ -1,6 +1,7 @@
 package com.agent.software.demo;
 
 import com.agent.software.AgentSystem;
+import com.agent.software.io.WebInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Tool;
@@ -29,12 +30,13 @@ import java.util.concurrent.atomic.AtomicReference;
 public class WebDemo {
 
     public static void main(String[] args) throws Exception {
-        // 1. Minimal team (autoToolkits=false: no computer/MCP toolkits, lightweight)
+        // 1. Minimal team (autoToolkits=false: no computer/MCP toolkits, lightweight).
+        //    Input = WebInput: the client replies in the Web page input box (talk_to_client waits for it).
         AgentSystem system = new AgentSystem(List.of(
                 RoleLoader.getTemplate("CEO"),
                 RoleLoader.getTemplate("COO"),
                 RoleLoader.getTemplate("frontend_lead"),
-                RoleLoader.getTemplate("frontend_dev_1")), null, 30.0, false);
+                RoleLoader.getTemplate("frontend_dev_1")), null, 30.0, false, new WebInput());
 
         AgentRole ceo = system.getRole("CEO");
         AgentRole coo = system.getRole("COO");

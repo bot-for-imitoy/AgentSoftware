@@ -635,14 +635,17 @@ The Java version ships a zero-dependency built-in Web UI (`com.sun.net.httpserve
 
 | Class | Description |
 |---|---|
+| `io/Input` | Abstract client-input channel: `read(target)` blocks until the client submits one piece of input; `target` distinguishes the input box on the Web page (e.g. the conversation group); each `AgentSystem` holds one instance (`AgentSystem.input`) |
+| `io/StdInput` | Console input channel: reads a line from `System.in` (target ignored — a single stream needs no distinction) |
+| `io/WebInput` | Web-page input channel: registers the pending wait on the ChatStore (input box auto-enabled) and waits for the reply typed on the page; errors when no browser is attached or on reply timeout (`AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT`, default 20 min) |
 | `web/ChatStore` | Chat message store (talk / client message types, monotonic seq) + Client A conversation coordination (beginClientWait / awaitClientReply / postClientReply); each `AgentSystem` owns one (`AgentSystem.chatStore`) |
 | `web/ChatWebServer` | HTTP server: static assets `/web/*` + `GET /api/state` / `GET /api/messages?since=N` / `POST /api/reply` / `POST /api/attach`; port `AGENTSOFTWARE_WEB_PORT` (default 8787) |
-| `demo/WebDemo` | Lightweight demo: minimal team + preset messages + one Client A conversation |
+| `demo/WebDemo` | Lightweight demo: minimal team (WebInput) + preset messages + one Client A conversation |
 
 Message sources: when the `talk` tool delivers successfully, the in-group message is
 recorded; `talk_to_client` records the conversation between the Leadership Group and
-Client A. Input-box enabling conditions (Web frontend): the "Leadership Group" is
-selected and `clientTalk.active` is true (a member is waiting for Client A's reply).
-When the Web UI is mounted, `talk_to_client` replies through the web page (timeout
-`AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT`, default 20 minutes); otherwise it falls back to
-the console `System.in`.
+Client A. The client reply is read through the system's `Input` channel: `StdInput`
+(console `System.in`) for console runs, `WebInput` for Web runs — the input box in the
+"Leadership Group" chat is enabled while `clientTalk.active` is true (a member is
+waiting for Client A's reply), and the reply typed on the page is delivered to the
+waiting member (timeout `AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT`, default 20 minutes).

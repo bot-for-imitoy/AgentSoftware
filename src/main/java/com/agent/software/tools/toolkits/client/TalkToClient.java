@@ -1,14 +1,12 @@
 package com.agent.software.tools.toolkits.client;
 
+import com.agent.software.io.Input;
+import com.agent.software.io.StdInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.Toolkits;
 import com.agent.software.web.ChatStore;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -17,18 +15,22 @@ import java.util.Map;
  * and requests text input from the user; the entered content is returned as the result.
  * Used for: gathering requirements, confirming plans, reporting progress, raising questions.
  *
- * <p>Two input channels:
+ * <p><b>Input channel</b>: the reply is read through the {@link Input} instance the role's
+ * {@link com.agent.software.AgentSystem} holds ({@code AgentSystem.input}), so this tool no longer
+ * reads {@code System.in} itself nor branches on Web attach state — each concrete Input decides how it
+ * obtains the input:
  * <ul>
- *   <li><b>Web mode</b>: when the Web UI is attached (inside the ChatStore heartbeat), the
- *       message is shown in the Web chat window, the input box is enabled automatically, and
- *       the client replies on the page → the result is returned. The wait has a timeout
- *       ({@code AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT}, default 20 minutes); on timeout an error is
- *       returned so the agent never blocks forever.</li>
- *   <li><b>Console mode</b>: when no Web UI is attached, the original behavior is kept, blocking
- *       on System.in.</li>
+ *   <li>{@link StdInput} — console mode: blocks on {@code System.in}, the original behavior;</li>
+ *   <li>{@link com.agent.software.io.WebInput} — Web mode: the message is recorded in the chat store
+ *       (shown in the Web chat window), the input box is enabled automatically, and the client's reply
+ *       typed on the page is returned; if no browser is attached it returns an error instead of
+ *       blocking forever. The wait has a timeout ({@code AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT},
+ *       default 20 minutes).</li>
  * </ul>
+ * The {@code target} passed to {@link Input#read(String)} is the conversation group (e.g. "Leadership
+ * Group"), which distinguishes the input box on the Web page; the console stream needs no distinction.
  *
- * Mutex: only one member may talk to the client at a time. If the lock is taken, an error is
+ * <p>Mutex: only one member may talk to the client at a time. If the lock is taken, an error is
  * returned immediately without blocking, avoiding multiple people grabbing the input at once.
  */
 public class TalkToClient extends Tool {
@@ -73,54 +75,38 @@ public class TalkToClient extends Tool {
         try {
             Object omsg = args.get("message");
             String question = omsg instanceof String s ? s.strip() : "";
+            String group = agentRole != null && agentRole.group != null
+                    && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
+            // Record the question to the chat store (shown in the Web UI; console mode keeps the log too)
             ChatStore store = chatStore();
-            // Record the message to the chat store (shown in the Web UI; also logged in console mode)
             if (store != null) {
-                String group = agentRole != null && agentRole.group != null
-                        && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
                 store.record(ChatStore.KIND_CLIENT, group, roleId, name, "", ChatStore.CLIENT_NAME,
                         question.isEmpty() ? "(sent a message, please reply)" : question, null);
             }
-            // Web mode: a Web UI is attached → wait for the client to reply on the page
-            if (store != null && store.isAttached()) {
-                return handlerWeb(store, roleId, name, question);
+            // The system's Input decides how the reply is read (console vs Web page).
+            Input input = inputOf();
+            // Console channels need the question announced on stdout (the Web page shows it via the store).
+            if (!input.isWebPage()) {
+                announceConsole(name, question);
             }
-            // Console mode (original behavior): block on System.in
-            return handlerConsole(name, question);
+            // target = the conversation group: the input-box marker for the Web page (console ignores it)
+            String reply = input.read(group);
+            return formatReply(reply);
         } finally {
             lock.release(roleId);
         }
     }
 
-    /** Web mode: register the wait → block until the client replies on the page (with timeout). */
-    private String handlerWeb(ChatStore store, String roleId, String name, String question) {
-        String group = agentRole != null && agentRole.group != null
-                && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
-        String beginErr = store.beginClientWait(roleId, name, group);
-        if (beginErr != null) {
-            return "talk_to_client: Error: " + beginErr + ", try again later.";
+    /** The Input of the owning AgentSystem; standalone roles fall back to console (StdInput). */
+    private Input inputOf() {
+        if (agentRole != null && agentRole.system() != null && agentRole.system().input != null) {
+            return agentRole.system().input;
         }
-        try {
-            long timeoutMs = com.agent.software.web.ChatWebServer.replyTimeoutMs();
-            String reply;
-            try {
-                reply = store.awaitClientReply(timeoutMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return "talk_to_client: Error: interrupted while waiting for the client reply.";
-            }
-            if (reply == null) {
-                return "talk_to_client: Error: the client did not reply within "
-                        + (timeoutMs / 1000) + "s (web interface). Please contact the client again later.";
-            }
-            return "talk_to_client: client reply: " + reply;
-        } finally {
-            store.endClientWait();
-        }
+        return new StdInput();
     }
 
-    /** Console mode: the original System.in interaction. */
-    private String handlerConsole(String name, String question) {
+    /** Console announcement of the question + reply prompt (kept from the historical console interaction). */
+    private void announceConsole(String name, String question) {
         if (!question.isEmpty()) {
             System.out.println("\n  " + BOLD + "[" + name + "] " + question + RESET);
         } else {
@@ -128,17 +114,18 @@ public class TalkToClient extends Tool {
         }
         System.out.print("  [Client A] Please enter your reply: ");
         System.out.flush();
-        String reply;
-        try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-            reply = reader.readLine();
-        } catch (IOException e) {
+    }
+
+    /** Normalizes the raw read result into the tool result text. */
+    private String formatReply(String raw) {
+        if (raw == null) {
             return "talk_to_client: Error: cannot get user input (non-interactive environment).";
         }
-        if (reply == null) {
-            return "talk_to_client: Error: cannot get user input (non-interactive environment).";
+        // Channel errors (e.g. Web UI not attached / reply timeout) pass through unchanged
+        if (Input.isError(raw)) {
+            return raw;
         }
-        reply = reply.strip();
+        String reply = raw.strip();
         if (reply.isEmpty()) {
             return "talk_to_client: the client did not enter anything (empty reply).";
         }

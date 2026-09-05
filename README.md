@@ -65,9 +65,15 @@ Open the URL printed to the console (default `http://127.0.0.1:8787/`):
   When enabled, a prompt bar appears at the top; press Enter or click "Send" to reply to that member.
 - Messages refresh in real time via polling (`/api/state` every 2s, `/api/messages` every 1.5s).
 
-**Input channel for talking to Client A**: `talk_to_client` prefers the Web (messages show in the Leadership Group chat window,
-input box auto-enabled, default reply timeout 20 minutes); if no browser is open (no Web heartbeat), it falls back to
-the original console `System.in` interaction, behaving exactly as before.
+**Input channel for talking to Client A**: the reply is read through the `Input` instance held by the
+`AgentSystem` (`AgentSystem.input`), decided when the system is created:
+- `StdInput` (console): `talk_to_client` shows the question at the prompt and reads a line from `System.in`;
+- `WebInput` (Web page): the question is recorded in the Leadership Group chat window, the input box is
+  enabled automatically, and the reply typed on the page is returned (default timeout 20 minutes). When no
+  browser is attached it returns an error instead of blocking forever.
+
+The `target` passed to `Input.read(target)` is the conversation group — the marker distinguishing the
+input box on the Web page; the console stream needs no such distinction.
 
 | Config (env var / `-D` system property) | Default | Description |
 |------|--------|------|

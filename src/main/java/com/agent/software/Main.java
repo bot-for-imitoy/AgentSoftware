@@ -133,7 +133,8 @@ public class Main {
                     (TICK1_MINUTES + 5) * 60L);
             info("Please enter the project requirements at the [CEO] prompt above (e.g. build a payment system for me)");
             if (!webUrl.isEmpty()) {
-                info("Or open the Web UI " + webUrl + " → select \"Leadership Group\" on the left → reply to the CEO in the input box (the input box is enabled automatically when a leadership member talks to you)");
+                info("The Web UI " + webUrl + " mirrors the conversation in real time; this run reads your reply from the console prompt above (StdInput). "
+                        + "Use demo/WebDemo for a Web-page input run (WebInput).");
             }
             sleep(10_000);
         } else {
@@ -230,7 +231,7 @@ public class Main {
         ok("Leadership group equipped with talk_to_client (real-time chat with the client; only one person can talk to the client at a time)");
         ok("HR equipped with hiring tools (post_job_posting / list_candidates)");
 
-        // 1.5 Web UI: group chat monitor + client dialogue (input box enabled when a leadership member talks to you)
+        // 1.5 Web UI: group chat monitor (this run uses the console StdInput channel; Web-page input is demoed by WebDemo)
         ChatWebServer web = null;
         try {
             web = new ChatWebServer(system);
@@ -238,7 +239,7 @@ public class Main {
             webUrl = "http://127.0.0.1:" + web.port() + "/";
             ok("Web UI started: " + webUrl);
             ok("  ├─ Left: group selector (Leadership Group / Frontend Development Group / Backend Development Group / ... )");
-            ok("  └─ Right: chat window — input box disabled by default; enabled only when someone from the Leadership Group is talking to you (the client)");
+            ok("  └─ Right: chat window — live monitor of the group chats and the Client A conversation (this run's input channel is the console prompt; WebInput-based runs enable the page input box)");
         } catch (Exception e) {
             warn("Web UI failed to start (does not affect the main flow): " + e.getMessage());
         }

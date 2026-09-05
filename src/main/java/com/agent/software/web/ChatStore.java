@@ -17,11 +17,12 @@ import java.util.Map;
  * Messages carry a monotonically increasing {@code seq}; the Web frontend pulls
  * incrementally via {@code since}.
  *
- * <p>Client dialogue coordination: when a leadership member calls talk_to_client and the Web UI
- * is attached, {@link #beginClientWait} sets the "waiting for client reply" state (the Web
- * frontend enables the input box based on this), then blocks until a reply submitted via
- * {@link #postClientReply} arrives; returns null on timeout. When the Web UI is not attached,
- * the original console (System.in) interaction is kept, with unchanged behavior.
+ * <p>Client dialogue coordination: the Web-page input channel
+ * ({@link com.agent.software.io.WebInput}, used by talk_to_client on Web-configured systems) calls
+ * {@link #beginClientWait} to set the "waiting for client reply" state (the Web frontend enables
+ * the input box based on this), then blocks on {@link #awaitClientReply} until a reply submitted via
+ * {@link #postClientReply} arrives (returns null on timeout). Console-based systems
+ * ({@link com.agent.software.io.StdInput}) read {@code System.in} directly and never touch this state.
  */
 public final class ChatStore {
 
@@ -136,7 +137,7 @@ public final class ChatStore {
     // ── Client dialogue coordination ─────────────────────────────
 
     /**
-     * Registers "waiting for the client reply" (talk_to_client in Web mode).
+     * Registers "waiting for the client reply" (Web mode: called by {@code WebInput.read}).
      *
      * @return null = success; otherwise an error description (another member is already waiting).
      */
@@ -194,7 +195,7 @@ public final class ChatStore {
     }
 
     /**
-     * Blocks waiting for the client reply (Web mode, called by talk_to_client).
+     * Blocks waiting for the client reply (Web mode, called by {@code WebInput.read}).
      *
      * @param timeoutMs maximum wait in milliseconds.
      * @return the client reply text; null on timeout or interruption.
@@ -211,7 +212,7 @@ public final class ChatStore {
         return pendingClientReply;
     }
 
-    /** Ends the waiting state (reply received or timed out), called by talk_to_client. */
+    /** Ends the waiting state (reply received or timed out), called by {@code WebInput.read}. */
     public synchronized void endClientWait() {
         pendingClientRequest = false;
         pendingHolderRoleId = null;

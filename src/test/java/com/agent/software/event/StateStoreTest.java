@@ -4,6 +4,7 @@ import com.agent.software.AgentSystem;
 import com.agent.software.computers.Computer;
 import com.agent.software.computers.ComputerManager;
 import com.agent.software.core.Types;
+import com.agent.software.io.StdInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.store.StateStore;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class StateStoreTest {
 
     private AgentSystem make(String rid) {
         AgentRole.JOURNAL_DIR = tmp.resolve("journals");
-        return new AgentSystem(null, java.util.List.of(rid), 30.0, false);
+        return new AgentSystem(null, java.util.List.of(rid), 30.0, false, new StdInput());
     }
 
     @Test

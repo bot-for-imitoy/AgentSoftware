@@ -7,6 +7,7 @@ import com.agent.software.event.EventDispatcher;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.io.Input;
 import com.agent.software.io.StdInput;
+import com.agent.software.io.WebInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
@@ -62,6 +63,10 @@ public class AgentSystem {
     /** This system's chat message storage + Client A conversation coordination (Web UI data source). */
     public final ChatStore chatStore;
 
+    /**
+     * This system's client-input channel (console {@link StdInput} or Web-page {@link WebInput}),
+     * used by talk_to_client to read the client's reply.
+     */
     public final Input input;
 
     /** This system's data root directory (default ./data); all persisted files live under it. */
@@ -96,6 +101,11 @@ public class AgentSystem {
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
         this.input = input;
+        // Web input reads from this system's chat store and identifies the waiting member through this
+        // system's client-communication lock (bound here because both are created inside this constructor)
+        if (input instanceof WebInput webInput) {
+            webInput.bind(this.chatStore, this.clientLock);
+        }
 
         // Time thread events → event dispatcher (unified entry for schedule events)
         this.timeManager.setEventSender(this::onTimeEvent);
