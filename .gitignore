@@ -48,3 +48,4 @@ __pycache__/
 
 # ── Local Maven repo (writable replacement when ~/.m2 is read-only in sandbox) ──
 .m2w/
+.m2local/

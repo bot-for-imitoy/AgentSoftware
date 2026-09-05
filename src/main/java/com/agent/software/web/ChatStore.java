@@ -9,10 +9,14 @@ import java.util.Map;
  * Chat message store + client dialogue coordination (data source for the Web UI).
  *
  * <p>Each {@link com.agent.software.AgentSystem} holds its own ChatStore instance,
- * recording two kinds of messages:
+ * recording the following message kinds (the Web frontend renders each kind differently):
  * <ul>
  *   <li>{@code talk}  — in-group talk messages between roles (recorded after TalkTo delivers);</li>
- *   <li>{@code client} — dialogue between leadership members and the client (user) (talk_to_client).</li>
+ *   <li>{@code client} — dialogue between leadership members and the client (user) (talk_to_client);</li>
+ *   <li>{@code reason} — a role's chain of thought (LLM {@code reasoning_content}, recorded per tool-loop round);</li>
+ *   <li>{@code note} — assistant narration produced in the middle of a tool-calling round (content accompanying tool calls);</li>
+ *   <li>{@code tool} — one tool invocation: the tool name, parsed arguments and the tool result (structured in {@code extra});</li>
+ *   <li>{@code answer} — the task's final output (the final LLM reply / task result).</li>
  * </ul>
  * Messages carry a monotonically increasing {@code seq}; the Web frontend pulls
  * incrementally via {@code since}.
@@ -33,6 +37,14 @@ public final class ChatStore {
     public static final String KIND_TALK = "talk";
     /** Message kind: dialogue with the client (user). */
     public static final String KIND_CLIENT = "client";
+    /** Message kind: chain of thought (LLM reasoning_content). */
+    public static final String KIND_REASON = "reason";
+    /** Message kind: assistant narration inside a tool-calling round (content accompanying tool calls). */
+    public static final String KIND_NOTE = "note";
+    /** Message kind: a single tool invocation (tool name / arguments / result in {@code extra}). */
+    public static final String KIND_TOOL = "tool";
+    /** Message kind: the task's final output (final LLM reply / task result). */
+    public static final String KIND_ANSWER = "answer";
 
     /** Display name of the client in the chat log. */
     public static final String CLIENT_NAME = "Client A";
@@ -41,14 +53,16 @@ public final class ChatStore {
     public static final class ChatMessage {
         public long seq;
         public long ts;            // epoch millis
-        public String kind;        // talk / client
+        public String kind;        // talk / client / reason / note / tool / answer
         public String group;       // group (English name), the frontend filters by group
         public String fromRoleId;  // sender role_id (empty string for the client)
         public String fromName;    // sender name
         public String toRoleId;    // recipient role_id
         public String toName;      // recipient name
-        public String text;        // message content
+        public String text;        // message content (for tool messages: empty; structured fields live in extra)
         public String urgency;     // urgency of the talk message (nullable)
+        /** Optional structured payload (tool/args/result/round/status/tokens…); serialized as a JSON object. */
+        public Map<String, Object> extra = new LinkedHashMap<>();
     }
 
     private final List<ChatMessage> history = new ArrayList<>();
@@ -76,6 +90,18 @@ public final class ChatStore {
      */
     public ChatMessage record(String kind, String group, String fromRoleId, String fromName,
                               String toRoleId, String toName, String text, String urgency) {
+        return record(kind, group, fromRoleId, fromName, toRoleId, toName, text, urgency, null);
+    }
+
+    /**
+     * Records a chat message with an optional structured payload (tool name / arguments / result,
+     * task id, round number, status, token usage…). Thread-safe.
+     *
+     * @return the recorded message object (with the allocated seq).
+     */
+    public ChatMessage record(String kind, String group, String fromRoleId, String fromName,
+                              String toRoleId, String toName, String text, String urgency,
+                              Map<String, Object> extra) {
         ChatMessage m = new ChatMessage();
         m.ts = System.currentTimeMillis();
         m.kind = kind;
@@ -86,6 +112,9 @@ public final class ChatStore {
         m.toName = toName == null ? "" : toName;
         m.text = text == null ? "" : text;
         m.urgency = urgency;
+        if (extra != null && !extra.isEmpty()) {
+            m.extra.putAll(extra);
+        }
         synchronized (history) {
             m.seq = ++lastSeq;
             history.add(m);
@@ -130,6 +159,9 @@ public final class ChatStore {
         out.put("text", m.text);
         if (m.urgency != null && !m.urgency.isEmpty()) {
             out.put("urgency", m.urgency);
+        }
+        if (m.extra != null && !m.extra.isEmpty()) {
+            out.put("extra", new LinkedHashMap<>(m.extra));
         }
         return out;
     }

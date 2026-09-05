@@ -627,6 +627,93 @@ public class AgentRole {
         }
     }
 
+    // ── Web trace recording (chain of thought / tool calls / final output) ──
+
+    /** Max length of a chain-of-thought / note snippet kept in the Web trace feed. */
+    public static final int TRACE_REASON_MAX = 4000;
+    /** Max length of a tool's argument JSON kept in the Web trace feed. */
+    public static final int TRACE_ARGS_MAX = 2000;
+    /** Max length of a tool result kept in the Web trace feed. */
+    public static final int TRACE_RESULT_MAX = 4000;
+    /** Max length of a final-output message kept in the Web trace feed. */
+    public static final int TRACE_ANSWER_MAX = 8000;
+
+    /**
+     * Record one entry into the Web trace feed (the system's {@link ChatStore}, when this role is
+     * bound to an AgentSystem). Structured metadata (task id, tool round, arguments, result…)
+     * rides in the message's {@code extra} field. Standalone roles (no system / no ChatStore)
+     * simply skip recording, mirroring {@link #journal}.
+     */
+    public void recordTrace(String kind, String text, Map<String, Object> extra) {
+        ChatStore store = system != null ? system.chatStore : null;
+        if (store == null) {
+            return;
+        }
+        if (text == null || text.isEmpty()) {
+            text = "";
+        }
+        store.record(kind, group == null ? "" : group, roleId, name, "", "", text, null, extra);
+    }
+
+    /** Record a chain-of-thought entry (LLM {@code reasoning_content}). */
+    public void recordReasoning(String reasoning, String taskId, Integer round) {
+        if (reasoning == null || reasoning.isBlank()) {
+            return;
+        }
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("round", round);
+        if (taskId != null && !taskId.isEmpty()) {
+            extra.put("taskId", taskId);
+        }
+        recordTrace(ChatStore.KIND_REASON, truncate(reasoning.trim(), TRACE_REASON_MAX), extra);
+    }
+
+    /** Record assistant narration produced in the middle of a tool-calling round (content accompanying tool calls). */
+    public void recordNote(String content, String taskId, Integer round) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("round", round);
+        if (taskId != null && !taskId.isEmpty()) {
+            extra.put("taskId", taskId);
+        }
+        recordTrace(ChatStore.KIND_NOTE, truncate(content.trim(), TRACE_REASON_MAX), extra);
+    }
+
+    /** Record one tool invocation: tool name + arguments (pretty JSON) + result. */
+    public void recordToolCall(String toolName, String argsJson, String result,
+                               String taskId, Integer round) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("tool", toolName == null ? "" : toolName);
+        extra.put("args", argsJson == null ? "" : truncate(argsJson, TRACE_ARGS_MAX));
+        extra.put("result", result == null ? "" : truncate(result, TRACE_RESULT_MAX));
+        extra.put("round", round);
+        if (taskId != null && !taskId.isEmpty()) {
+            extra.put("taskId", taskId);
+        }
+        // text is intentionally empty for tool messages; the structured fields drive the UI card
+        recordTrace(ChatStore.KIND_TOOL, "", extra);
+    }
+
+    /** Record a task's final output (final LLM reply / result). {@code status} is done / failed. */
+    public void recordAnswer(String text, String taskId, String status, Integer tokens) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        Map<String, Object> extra = new LinkedHashMap<>();
+        if (status != null && !status.isEmpty()) {
+            extra.put("status", status);
+        }
+        if (tokens != null) {
+            extra.put("tokens", tokens);
+        }
+        if (taskId != null && !taskId.isEmpty()) {
+            extra.put("taskId", taskId);
+        }
+        recordTrace(ChatStore.KIND_ANSWER, truncate(text.trim(), TRACE_ANSWER_MAX), extra);
+    }
+
     // ── Time manager (work schedule) ───────────────────────
 
     /**
@@ -885,23 +972,30 @@ public class AgentRole {
                         + MAX_TOOL_TOTAL_TOKENS + ", task failed");
             }*/
             List<Map<String, Object>> toolCalls = response.toolCalls;
+            // Web trace: record the chain of thought of this round (reasoning_content), if the backend produced one
+            recordReasoning(response.reasoning, task.taskId, roundNo);
+            String roundContent = response.content == null ? "" : response.content;
             if (toolCalls.isEmpty()) {
                 // LLM call failed (API timeout/exception): must not be treated as a success
-                if (response.content.startsWith(LLM.LLM_ERROR_MARKERS)) {
+                if (roundContent.startsWith(LLM.LLM_ERROR_MARKERS)) {
                     throw new ToolLoopError("LLM call failed (round " + roundNo + "): "
-                            + truncate(response.content, 120));
+                            + truncate(roundContent, 120));
                 }
+                // Web trace: the round contains no tool calls → content is the model's plain reply;
+                // the task-level final output is recorded by RolePool.roleLoop after the task completes
                 logger.debug("[{}] tool loop: final answer received in round {} (no tool calls), task done", roleId, roundNo);
-                return Map.entry(response.content, totalTokens);
+                return Map.entry(roundContent, totalTokens);
             }
+            // Web trace: narration the model emits while it is still about to call tools
+            recordNote(roundContent, task.taskId, roundNo);
             // Append this round's LLM reply (including native tool_calls) to the conversation history
             Map<String, Object> assistantMsg = new LinkedHashMap<>();
             assistantMsg.put("role", "assistant");
-            assistantMsg.put("content", response.content.isEmpty() ? null : response.content);
+            assistantMsg.put("content", roundContent.isEmpty() ? null : roundContent);
             assistantMsg.put("tool_calls", toolCalls);
             messages.add(assistantMsg);
             logger.debug("[{}] tool loop: appended LLM output message ({} chars, {} native tool calls)",
-                    roleId, response.content.length(), toolCalls.size());
+                    roleId, roundContent.length(), toolCalls.size());
 
             // Execute this round's tool calls sequentially
             for (Map<String, Object> call : toolCalls) {
@@ -911,13 +1005,14 @@ public class AgentRole {
                 String toolName = Json.str(fn, "name", "");
                 String callId = Json.str(call, "id", "");
                 Map<String, Object> toolArgs;
+                String toolArgsRaw = Json.str(fn, "arguments", "{}");
                 try {
-                    Object raw = Json.parse(Json.str(fn, "arguments", "{}"));
+                    Object raw = Json.parse(toolArgsRaw);
                     toolArgs = raw instanceof Map ? (Map<String, Object>) raw : new LinkedHashMap<>();
                 } catch (Exception e) {
                     toolArgs = new LinkedHashMap<>();
                     logger.warn("[{}] arguments of tool {} are not valid JSON: {}",
-                            roleId, toolName, fn.get("arguments"));
+                            roleId, toolName, toolArgsRaw);
                 }
                 String toolResult;
                 if (tools == null) {
@@ -930,6 +1025,8 @@ public class AgentRole {
                         Json.stringify(toolArgs), truncate(toolResult, 80));
                 journal("Called tool " + toolName + "(" + truncate(Json.stringify(toolArgs), 80)
                         + ") → " + truncate(toolResult == null ? "" : toolResult, 100));
+                // Web trace: record the tool invocation together with its arguments and result
+                recordToolCall(toolName, Json.stringifyPretty(toolArgs), toolResult, task.taskId, roundNo);
                 // Native protocol: tool results are fed back as role:"tool" messages, linked by tool_call_id
                 messages.add(msgWithToolCallId(toolName, callId, toolResult));
             }

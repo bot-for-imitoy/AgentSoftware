@@ -65,12 +65,30 @@ public class WebDemo {
         System.out.println("  Select \"Leadership Group\" on the left to see the conversation between the CEO and you (the input box is enabled automatically);");
         System.out.println("  Select \"Frontend Development Group\" to see intra-team messages. Press Ctrl+C to exit.\n");
 
-        // 4. Simulate intra-team messages (talk)
+        // 4. Simulate live agent activity (chain of thought / tool calls / final outputs).
+        //    The Web UI renders these in the "All Activity" feed and under each member's group.
+        ceo.recordReasoning("Client A mentioned an \"employee expense reimbursement approval system\". "
+                + "Before confirming scope I should check whether the frontend team has spare capacity this sprint.", null, 1);
+        coo.recordReasoning("The CEO is about to share the new requirement with me. "
+                + "I should prepare the milestone plan and flag the mobile submission path as a risk.", null, 1);
+        ceo.recordToolCall("talk", "{\n  \"target\": \"Chen Zong\",\n  \"message\": \"Client A requests an expense reimbursement approval system (mobile submission + manager approval)\",\n  \"urgency\": \"HIGH\"\n}",
+                "talk: message sent to Chen Zong, urgency=HIGH, recipient queue now has 1 tasks.", null, 1);
+        ceo.recordNote("Now waiting for COO's confirmation before writing the requirement doc.", null, 2);
+        ceo.recordToolCall("write_note", "{\n  \"title\": \"Day1-collect-project-requirements\",\n  \"content\": \"Expense reimbursement approval system: mobile submission, manager approval, receipt OCR\",\n  \"notify_day\": 1,\n  \"notify_tick\": 1\n}",
+                "Note written + reminder registered (Day 1 Tick 1 → CEO)", null, 2);
+        fLead.recordToolCall("run_command", "{\n  \"command\": \"ls /mnt/drive/Public\"\n}",
+                "requirements.md   logo.png   mobile.md", null, 1);
+        fDev.recordAnswer("Login page component refactor is done, please review.\n"
+                + "The mobile adaptation has been submitted; attachment is in the cloud drive Public/mobile.md.", null, "done", 312);
+        coo.recordAnswer("Understood. I will confirm the scope with the frontend team and sync a milestone plan "
+                + "to the project board before the end of the day.", null, "done", 268);
+
+        // 5. Simulate intra-team messages (talk)
         talkFDev.handler(Map.of("target", "Chen Siyuan", "message", "The login page component refactor is done, please review.", "urgency", "NORMAL"));
         talkFDev.handler(Map.of("target", "Chen Siyuan", "message", "The mobile adaptation has been submitted; the attachment is in the cloud drive Public/mobile.md.", "urgency", "HIGH"));
         talkCeo.handler(Map.of("target", "Chen Zong", "message", "I received a new requirement from Client A; I will confirm the scope first and sync it to you later.", "urgency", "NORMAL"));
 
-        // 5. Simulate a Client A conversation: CEO calls talk_to_client (Web mode); Client A replies "on the web page" 3 seconds later
+        // 6. Simulate a Client A conversation: CEO calls talk_to_client (Web mode); Client A replies "on the web page" 3 seconds later
         ChatStore store = system.chatStore;
         store.markAttached();
         AtomicReference<String> result = new AtomicReference<>();
@@ -86,7 +104,7 @@ public class WebDemo {
         ceoThread.join(10_000);
         System.out.println("  CEO received the reply from Client A: " + result.get());
 
-        // 6. Keep running until Ctrl+C
+        // 7. Keep running until Ctrl+C
         CountDownLatch keepAlive = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             web.stop();

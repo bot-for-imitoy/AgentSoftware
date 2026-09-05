@@ -334,3 +334,155 @@ html, body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #ccd0d6; border-radius: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── All Activity pseudo channel ──────────── */
+.all-item .group-avatar { font-size: 16px; }
+.all-item.active .group-name::before { content: "●"; color: #764ba2; margin-right: 6px; font-size: 10px; }
+
+/* ── Trace messages: thinking / tool calls / final output ── */
+.msg.trace { align-items: flex-start; padding: 8px 0; }
+.msg.trace .msg-body { max-width: 100%; min-width: 0; }
+
+.group-chip {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-size: 11px;
+  color: #6b7280;
+  background: #eef1f5;
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.kind-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #3b4a5c;
+  background: #e9eef5;
+  border: 1px solid #d4dde8;
+  border-radius: 10px;
+  padding: 0 8px;
+  line-height: 18px;
+  vertical-align: middle;
+}
+
+/* thinking / note panels */
+.trace-box {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #3d4a5c;
+  background: #f7f9fc;
+  border: 1px solid #e2e8f2;
+  border-left: 3px solid #8aa0b8;
+  border-radius: 8px;
+  padding: 9px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.msg.kind-note .kind-chip { color: #64748b; background: #f1f5f9; border-color: #e2e8f0; }
+.note-box {
+  color: #5b6675;
+  background: #fbfcfe;
+  border-left-color: #b9c4d0;
+  border-style: solid;
+}
+
+/* tool invocation card */
+.tool-card {
+  border: 1px solid #e0e6ef;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+}
+.msg.kind-tool .kind-chip { color: #0f5b8a; background: #eaf4fb; border-color: #cfe5f4; }
+.tool-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: #f2f6fb;
+  border-bottom: 1px solid #e0e6ef;
+}
+.tool-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: #0f4c81;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-args-hint,
+.tool-res-title {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #8794a6;
+}
+.tool-args-hint { margin-left: auto; flex-shrink: 0; }
+.tool-res-title { padding: 8px 12px 0; }
+.tool-args,
+.tool-result {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+.tool-args {
+  padding: 8px 12px;
+  color: #334155;
+  background: #fbfcfe;
+  max-height: 180px;
+}
+.tool-result {
+  padding: 4px 12px 10px;
+  color: #14532d;
+  background: #f6fbf7;
+  max-height: 240px;
+}
+.tool-result.error-text { color: #b91c1c; background: #fef6f6; }
+
+/* final output */
+.answer-box {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #16301f;
+  background: #f2faf4;
+  border: 1px solid #cfe7d8;
+  border-left: 4px solid #2ea44f;
+  border-radius: 10px;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.msg.kind-answer .kind-chip { color: #176b3a; background: #e6f6ec; border-color: #cde9d7; }
+.msg.kind-answer.failed .kind-chip { color: #b91c1c; background: #fdecec; border-color: #f5c9c9; }
+.msg.kind-answer.failed .answer-box {
+  color: #7a1f1f;
+  background: #fff5f5;
+  border-color: #f3cdcd;
+  border-left-color: var(--danger);
+}
+.answer-meta {
+  margin-top: 4px;
+  padding-left: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+}

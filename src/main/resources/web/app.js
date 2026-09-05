@@ -1,8 +1,11 @@
-/* AgentSoftware Web UI - group chat + client dialogue */
+/* AgentSoftware Web UI - group chat + live agent activity (thinking / tool calls / final output) */
 "use strict";
 
 const LEADERSHIP_KEY = "Leadership Group";
+const ALL_KEY = "*";                 // pseudo channel: every message across all groups, in seq order
+const ALL_LABEL = "All Activity";    // display label of the pseudo channel
 const CLIENT_NAME = "Client A";
+const MAX_RENDER = 400;              // max message rows kept in the DOM per channel
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,10 +16,11 @@ const AVATAR_COLORS = [
 
 const state = {
   groups: [],
-  selectedKey: LEADERSHIP_KEY,
+  selectedKey: ALL_KEY,
   lastSeq: 0,
   renderedSeqs: new Set(),
   messagesByGroup: new Map(), // groupKey -> [{...msg}]
+  messagesAll: [],            // every message, ascending by seq (All Activity feed)
   clientTalk: { active: false, holderName: null, holderRoleId: null },
   prevClientActive: false,
   inputEnabled: false,
@@ -64,11 +68,50 @@ function canInput() {
   return state.selectedKey === LEADERSHIP_KEY && state.clientTalk.active;
 }
 
-// ── Group panel ───────────────────────────────
+function extraOf(m) {
+  return m.extra && typeof m.extra === "object" ? m.extra : {};
+}
+
+// ── Group panel (All Activity pseudo channel on top) ───────
+
+function allUnread() {
+  if (state.selectedKey === ALL_KEY) return 0;
+  let n = 0;
+  for (const m of state.messagesAll) {
+    if (m.seq && !state.renderedSeqs.has(m.seq)) n++;
+  }
+  return n;
+}
 
 function renderGroups() {
   const ul = $("groupList");
   ul.innerHTML = "";
+
+  // Pseudo channel: all live activity (thinking / tools / answers / chats of every group)
+  const allLi = document.createElement("li");
+  allLi.className = "group-item all-item" + (ALL_KEY === state.selectedKey ? " active" : "");
+  allLi.dataset.key = ALL_KEY;
+  const allAvatar = document.createElement("div");
+  allAvatar.className = "group-avatar";
+  allAvatar.style.background = "linear-gradient(135deg,#667eea,#764ba2)";
+  allAvatar.textContent = "◉";
+  const allInfo = document.createElement("div");
+  allInfo.className = "group-info";
+  const allName = document.createElement("div");
+  allName.className = "group-name";
+  allName.textContent = ALL_LABEL;
+  const allMeta = document.createElement("div");
+  allMeta.className = "group-meta";
+  allMeta.textContent = "live feed: thinking · tool calls · output";
+  allInfo.append(allName, allMeta);
+  const allBadge = document.createElement("span");
+  allBadge.className = "unread-badge";
+  allBadge.textContent = "0";
+  allLi.append(allAvatar, allInfo, allBadge);
+  allLi.addEventListener("click", () => selectGroup(ALL_KEY));
+  ul.appendChild(allLi);
+
+  // Real groups from the roster
   for (const g of state.groups) {
     const li = document.createElement("li");
     li.className = "group-item" + (g.key === state.selectedKey ? " active" : "");
@@ -123,6 +166,7 @@ function selectGroup(key) {
 }
 
 function unreadCount(key) {
+  if (key === ALL_KEY) return allUnread();
   if (key === state.selectedKey) return 0;
   const list = state.messagesByGroup.get(key) || [];
   let n = 0;
@@ -133,6 +177,9 @@ function unreadCount(key) {
 // ── Chat header ───────────────────────────────
 
 function currentGroup() {
+  if (state.selectedKey === ALL_KEY) {
+    return { key: ALL_KEY, label: ALL_LABEL, members: [] };
+  }
   return state.groups.find((g) => g.key === state.selectedKey) || null;
 }
 
@@ -144,44 +191,68 @@ function renderHeader() {
     return;
   }
   $("chatTitle").textContent = g.label || "Unassigned";
-  const names = g.members.map((m) => m.name).join(", ");
-  $("chatMembers").textContent = `${g.members.length} members: ${names}`;
+  if (state.selectedKey === ALL_KEY) {
+    $("chatMembers").textContent =
+      "Live activity of every role across all groups — chain of thought (🧠), tool calls (🛠) and final outputs";
+  } else {
+    const names = g.members.map((m) => m.name).join(", ");
+    $("chatMembers").textContent = `${g.members.length} members: ${names}`;
+  }
 }
 
-// ── Message rendering ───────────────────────────────
+// ── Message storage & rendering ───────────────────────────────
 
 function groupOf(msg) {
   return msg.group || "";
 }
 
 function pushMessage(msg) {
+  // per-group list
   const key = groupOf(msg);
   if (!state.messagesByGroup.has(key)) state.messagesByGroup.set(key, []);
   const list = state.messagesByGroup.get(key);
   if (msg.seq) {
     const seen = list.some((m) => m.seq === msg.seq);
-    if (seen) return;
+    if (!seen) {
+      list.push(msg);
+      list.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    }
   }
-  list.push(msg);
-  list.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  // global All Activity feed
+  if (msg.seq) {
+    const seen = state.messagesAll.some((m) => m.seq === msg.seq);
+    if (!seen) {
+      state.messagesAll.push(msg);
+      state.messagesAll.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    }
+  }
+}
+
+function messagesFor(key) {
+  if (key === ALL_KEY) return state.messagesAll;
+  return state.messagesByGroup.get(key) || [];
 }
 
 function renderMessages() {
   const listEl = $("messageList");
   listEl.innerHTML = "";
-  const list = state.messagesByGroup.get(state.selectedKey) || [];
+  let list = messagesFor(state.selectedKey);
+  if (list.length > MAX_RENDER) list = list.slice(list.length - MAX_RENDER);
   if (list.length === 0) {
     const tip = document.createElement("div");
     tip.className = "empty-tip";
-    tip.textContent = "No messages yet — select a group on the left to see that group's chat";
+    tip.textContent = state.selectedKey === ALL_KEY
+      ? "No activity yet — role thoughts, tool calls and outputs will appear here in real time"
+      : "No messages yet — select a group on the left to see that group's chat";
     listEl.appendChild(tip);
     return;
   }
   const nearBottom = isNearBottom(listEl);
   const frag = document.createDocumentFragment();
+  const showGroup = state.selectedKey === ALL_KEY;
   for (const m of list) {
     if (m.seq) state.renderedSeqs.add(m.seq);
-    frag.appendChild(buildMessageEl(m));
+    frag.appendChild(buildMessageEl(m, showGroup));
   }
   listEl.appendChild(frag);
   if (nearBottom || !autoScrolledOnce) scrollToBottom(listEl);
@@ -189,8 +260,157 @@ function renderMessages() {
 
 let autoScrolledOnce = false;
 
-function buildMessageEl(m) {
-  const isClient = m.fromName === CLIENT_NAME || m.kind === "client" && m.fromRoleId === "";
+function appendNewMessages(list) {
+  const listEl = $("messageList");
+  const nearBottom = isNearBottom(listEl);
+  const frag = document.createDocumentFragment();
+  const showGroup = state.selectedKey === ALL_KEY;
+  for (const m of list) {
+    if (m.seq) state.renderedSeqs.add(m.seq);
+    frag.appendChild(buildMessageEl(m, showGroup));
+  }
+  listEl.appendChild(frag);
+  // keep the DOM bounded (drop the oldest rows beyond MAX_RENDER)
+  while (listEl.children.length > MAX_RENDER) {
+    listEl.removeChild(listEl.firstChild);
+  }
+  if (nearBottom) scrollToBottom(listEl);
+}
+
+// ── Message element builders (kind-aware) ─────────────────────
+
+function headRow(m, showGroup, chipText) {
+  const head = document.createElement("div");
+  head.className = "msg-head";
+  const name = document.createElement("span");
+  name.className = "msg-name";
+  name.textContent = m.fromName || "Unknown";
+  head.appendChild(name);
+  if (showGroup && m.group) {
+    const g = document.createElement("span");
+    g.className = "group-chip";
+    g.textContent = m.group;
+    g.title = m.group;
+    head.appendChild(g);
+  }
+  if (chipText) {
+    const chip = document.createElement("span");
+    chip.className = "kind-chip";
+    chip.textContent = chipText;
+    head.appendChild(chip);
+  }
+  const time = document.createElement("span");
+  time.textContent = fmtTime(m.ts);
+  head.appendChild(time);
+  return head;
+}
+
+function rowShell(m, cls) {
+  const div = document.createElement("div");
+  div.className = "msg trace " + cls;
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.style.background = avatarColor(m.fromRoleId || m.fromName || "?");
+  avatar.textContent = avatarChar(m.fromName);
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  div.append(avatar, body);
+  return { div, body };
+}
+
+/** Chain of thought (reasoning_content) / mid-round narration. */
+function buildThinkEl(m, showGroup, kind) {
+  const label = kind === "note" ? "note · narration" : "thinking · chain of thought";
+  const { div, body } = rowShell(m, "kind-" + kind);
+  const head = headRow(m, showGroup, (kind === "note" ? "✎ " : "🧠 ") + label);
+  const box = document.createElement("div");
+  box.className = kind === "note" ? "trace-box think-box note-box" : "trace-box think-box";
+  box.textContent = m.text;
+  if (m.extra && m.extra.round != null) box.dataset.round = String(m.extra.round);
+  body.append(head, box);
+  return div;
+}
+
+/** One tool invocation: name + arguments + result. */
+function buildToolEl(m, showGroup) {
+  const ex = extraOf(m);
+  const { div, body } = rowShell(m, "kind-tool");
+  const head = headRow(m, showGroup, "🛠 tool call");
+  const card = document.createElement("div");
+  card.className = "trace-card tool-card";
+
+  const title = document.createElement("div");
+  title.className = "tool-title";
+  const fn = document.createElement("span");
+  fn.className = "tool-name";
+  fn.textContent = ex.tool || m.text || "tool";
+  const argsHint = document.createElement("span");
+  argsHint.className = "tool-args-hint";
+  argsHint.textContent = "arguments";
+  title.append(fn, argsHint);
+  card.appendChild(title);
+
+  const argsPre = document.createElement("pre");
+  argsPre.className = "tool-args";
+  argsPre.textContent = prettyJson(ex.args);
+  card.appendChild(argsPre);
+
+  if (ex.result !== undefined && ex.result !== null && ex.result !== "") {
+    const resTitle = document.createElement("div");
+    resTitle.className = "tool-res-title";
+    resTitle.textContent = "result";
+    const resPre = document.createElement("pre");
+    resPre.className = "tool-result";
+    resPre.textContent = String(ex.result);
+    if (/^(error|tool error|fail)/i.test(String(ex.result).trim())) {
+      resPre.classList.add("error-text");
+    }
+    card.append(resTitle, resPre);
+  }
+  body.append(head, card);
+  return div;
+}
+
+/** Final output (task result): normal bubble-like card, prominent. */
+function buildAnswerEl(m, showGroup) {
+  const ex = extraOf(m);
+  const failed = ex.status === "failed" || String(m.text || "").startsWith("[ERROR]");
+  const { div, body } = rowShell(m, "kind-answer" + (failed ? " failed" : ""));
+  const head = headRow(m, showGroup,
+    failed ? "✗ final output · failed" : "✔ final output");
+  const box = document.createElement("div");
+  box.className = "trace-box answer-box";
+  box.textContent = m.text;
+  if (ex.status) box.dataset.status = String(ex.status);
+  body.append(head, box);
+  if (ex.tokens != null) {
+    const meta = document.createElement("div");
+    meta.className = "answer-meta";
+    meta.textContent = (ex.taskId ? "task " + ex.taskId : "") + (ex.tokens ? " · " + ex.tokens + " tokens" : "");
+    body.appendChild(meta);
+  }
+  return div;
+}
+
+function prettyJson(v) {
+  if (v === undefined || v === null || v === "") return "{}";
+  const s = String(v);
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
+}
+
+function buildMessageEl(m, showGroup) {
+  // trace kinds: reason / note / tool / answer
+  if (m.kind === "reason") return buildThinkEl(m, showGroup, "reason");
+  if (m.kind === "note") return buildThinkEl(m, showGroup, "note");
+  if (m.kind === "tool") return buildToolEl(m, showGroup);
+  if (m.kind === "answer") return buildAnswerEl(m, showGroup);
+
+  // chat kinds: talk / client (regular bubbles)
+  const isClient = m.fromName === CLIENT_NAME || (m.kind === "client" && m.fromRoleId === "");
   const div = document.createElement("div");
   div.className = "msg" + (isClient ? " from-client" : "");
 
@@ -202,14 +422,7 @@ function buildMessageEl(m) {
   const body = document.createElement("div");
   body.className = "msg-body";
 
-  const head = document.createElement("div");
-  head.className = "msg-head";
-  const name = document.createElement("span");
-  name.className = "msg-name";
-  name.textContent = m.fromName || "Unknown";
-  const time = document.createElement("span");
-  time.textContent = fmtTime(m.ts);
-  head.append(name, time);
+  const head = headRow(m, showGroup, null);
 
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
@@ -224,18 +437,6 @@ function buildMessageEl(m) {
   body.append(head, bubble);
   div.append(avatar, body);
   return div;
-}
-
-function appendNewMessages(list) {
-  const listEl = $("messageList");
-  const nearBottom = isNearBottom(listEl);
-  const frag = document.createDocumentFragment();
-  for (const m of list) {
-    if (m.seq) state.renderedSeqs.add(m.seq);
-    frag.appendChild(buildMessageEl(m));
-  }
-  listEl.appendChild(frag);
-  if (nearBottom) scrollToBottom(listEl);
 }
 
 function isNearBottom(el) {
@@ -285,8 +486,8 @@ async function pollState() {
   const groupsJson = JSON.stringify(body.groups || []);
   if (groupsJson !== JSON.stringify(state.groups)) {
     state.groups = body.groups || [];
-    if (!state.groups.some((g) => g.key === state.selectedKey)) {
-      state.selectedKey = state.groups.length ? state.groups[0].key : null;
+    if (state.selectedKey !== ALL_KEY && !state.groups.some((g) => g.key === state.selectedKey)) {
+      state.selectedKey = state.groups.length ? state.groups[0].key : ALL_KEY;
       state.renderedSeqs.clear();
       renderMessages();
     }
@@ -320,7 +521,7 @@ async function pollMessages() {
     if (m.seq && list.some((x) => x.seq === m.seq)) continue;
     if (state.renderedSeqs.has(m.seq)) continue;
     pushMessage(m);
-    if (key === state.selectedKey) newOnes.push(m);
+    if (state.selectedKey === ALL_KEY || key === state.selectedKey) newOnes.push(m);
   }
   if (newOnes.length > 0) appendNewMessages(newOnes);
   updateGroupItemVisuals();
@@ -343,11 +544,13 @@ async function sendReply() {
     input.value = "";
     const listEl = $("messageList");
     const nearBottom = isNearBottom(listEl);
-    const frag = document.createDocumentFragment();
-    if (body.message.seq) state.renderedSeqs.add(body.message.seq);
-    frag.appendChild(buildMessageEl(body.message));
-    listEl.appendChild(frag);
-    if (nearBottom) scrollToBottom(listEl);
+    if (state.selectedKey === ALL_KEY || groupOf(body.message) === state.selectedKey) {
+      const frag = document.createDocumentFragment();
+      if (body.message.seq) state.renderedSeqs.add(body.message.seq);
+      frag.appendChild(buildMessageEl(body.message, state.selectedKey === ALL_KEY));
+      listEl.appendChild(frag);
+      if (nearBottom) scrollToBottom(listEl);
+    }
   } else {
     toast(body.reason || "Failed to send, please try again");
   }
@@ -365,9 +568,8 @@ function init() {
     }
   });
   pollState().then(() => {
-    if (!state.groups.length) return;
-    if (!state.groups.some((g) => g.key === state.selectedKey)) {
-      state.selectedKey = state.groups[0].key;
+    if (!state.groups.length && state.selectedKey === ALL_KEY) {
+      // roster may be empty; All Activity still works
     }
     renderMessages();
     renderHeader();

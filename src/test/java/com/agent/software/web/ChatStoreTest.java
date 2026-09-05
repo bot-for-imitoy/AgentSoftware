@@ -2,6 +2,7 @@ package com.agent.software.web;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +40,54 @@ class ChatStoreTest {
         List<Map<String, Object>> inc = store.messagesSince(2);
         assertEquals(1, inc.size());
         assertEquals(3L, inc.get(0).get("seq"));
+    }
+
+    /** Trace messages (reason/tool/answer) carry a structured extra payload through the API. */
+    @Test
+    void testTraceKindsWithExtraMetadata() {
+        ChatStore store = new ChatStore();
+
+        ChatStore.ChatMessage reason = store.record(ChatStore.KIND_REASON, "Leadership Group",
+                "CEO", "Lin Zong", "", "", "let me think about the scope…", null,
+                new LinkedHashMap<>(Map.of("round", 1)));
+        assertEquals(ChatStore.KIND_REASON, reason.kind);
+        assertTrue(reason.text.contains("think"));
+
+        Map<String, Object> toolExtra = new LinkedHashMap<>();
+        toolExtra.put("tool", "run_command");
+        toolExtra.put("args", "{\"command\":\"ls /mnt/drive/Public\"}");
+        toolExtra.put("result", "requirements.md");
+        toolExtra.put("round", 1);
+        ChatStore.ChatMessage tool = store.record(ChatStore.KIND_TOOL, "Leadership Group",
+                "CEO", "Lin Zong", "", "", "", null, toolExtra);
+        assertEquals(ChatStore.KIND_TOOL, tool.kind);
+        assertTrue(tool.text.isEmpty());
+        assertEquals("run_command", tool.extra.get("tool"));
+
+        ChatStore.ChatMessage answer = store.record(ChatStore.KIND_ANSWER, "Leadership Group",
+                "CEO", "Lin Zong", "", "", "Scope confirmed: expense reimbursement approval system", null,
+                new LinkedHashMap<>(Map.of("status", "done", "tokens", 42)));
+        assertEquals("done", answer.extra.get("status"));
+
+        List<Map<String, Object>> all = store.messagesSince(0);
+        assertEquals(3, all.size());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> toolMap = (Map<String, Object>) all.get(1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> toolExtraPulled = (Map<String, Object>) toolMap.get("extra");
+        assertEquals(ChatStore.KIND_TOOL, toolMap.get("kind"));
+        assertEquals("run_command", toolExtraPulled.get("tool"));
+        assertEquals("requirements.md", toolExtraPulled.get("result"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> answerMap = (Map<String, Object>) all.get(2);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> answerExtra = (Map<String, Object>) answerMap.get("extra");
+        assertEquals("done", answerExtra.get("status"));
+        assertEquals(42, ((Number) answerExtra.get("tokens")).intValue());
+        // chat-style fields are still absent for trace messages (empty to fields)
+        assertEquals("", answerMap.get("toName"));
     }
 
     // ── Client dialogue coordination ─────────────────────────

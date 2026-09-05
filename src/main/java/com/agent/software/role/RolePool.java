@@ -292,6 +292,7 @@ public class RolePool {
                 int tokens;
                 if (role.tools() != null && role.tools().toolCount() > 0) {
                     // Tool-calling loop: LLM can invoke MCP tools
+                    // (chain-of-thought and per-tool-call events are recorded inside executeWithTools)
                     Map.Entry<String, Integer> r = role.executeWithTools(task);
                     resultText = r.getKey();
                     tokens = r.getValue();
@@ -300,6 +301,12 @@ public class RolePool {
                     LLM.ChatResponse resp = llm.chat(role.buildSystemPrompt(), task.description, 0.7, 512);
                     resultText = resp.text;
                     tokens = resp.tokens;
+                    // Web trace: record the model's chain of thought (skip when it equals the visible reply,
+                    // which happens when an empty content fell back to reasoning_content)
+                    if (resp.reasoning != null && !resp.reasoning.isEmpty()
+                            && !resp.reasoning.equals(resultText)) {
+                        role.recordReasoning(resp.reasoning, task.taskId, null);
+                    }
                     if (resultText.startsWith(LLM.LLM_ERROR_MARKERS)) {
                         throw new AgentRole.ToolLoopError("LLM call failed: " + truncate(resultText, 120));
                     }
@@ -311,12 +318,16 @@ public class RolePool {
                         truncate(resultText, 80));
                 role.journal("Task completed (" + tokens + " tokens): " + truncate(resultText, 150));
                 role.appendTaskHistory(task);
+                // Web trace: the task's final output
+                role.recordAnswer(resultText, task.taskId, AgentRole.STATUS_DONE, tokens);
             } catch (Exception exc) {
                 task.result = "[ERROR] " + exc;
                 task.status = AgentRole.STATUS_FAILED;
                 logger.error("[{}] Task {} failed: {}", role.roleId, task.taskId, exc.toString());
                 role.journal("Task failed: " + exc);
                 role.appendTaskHistory(task);
+                // Web trace: the task's failed final output
+                role.recordAnswer(task.result, task.taskId, AgentRole.STATUS_FAILED, task.tokensConsumed);
             }
             role.setCurrentTask(null);
 

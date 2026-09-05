@@ -16,26 +16,43 @@ public interface LLM {
     /** Error text marker when an LLM call fails (this package produces these prefixes, and consumer roles use them to mark tasks as failed). */
     String LLM_ERROR_MARKERS = "[API error:";
 
-    /** Chat response: text + token count. */
+    /** Chat response: text + reasoning (chain of thought) + token count. */
     final class ChatResponse {
         public final String text;
+        public final String reasoning;   // reasoning_content (chain of thought), "" when the backend does not provide it
         public final int tokens;
 
         public ChatResponse(String text, int tokens) {
+            this(text, "", tokens);
+        }
+
+        public ChatResponse(String text, String reasoning, int tokens) {
             this.text = text;
+            this.reasoning = reasoning != null ? reasoning : "";
             this.tokens = tokens;
         }
     }
 
-    /** Native function calling response: content + raw tool_calls + usage. */
+    /**
+     * Native function calling response: content + reasoning (chain of thought) +
+     * raw tool_calls + usage.
+     */
     final class ToolsResponse {
         public final String content;
+        public final String reasoning;   // reasoning_content (chain of thought), "" when absent
         public final List<Map<String, Object>> toolCalls;
         public final Map<String, Object> usage;
 
         public ToolsResponse(String content, List<Map<String, Object>> toolCalls,
                              Map<String, Object> usage) {
+            this(content, "", toolCalls, usage);
+        }
+
+        public ToolsResponse(String content, String reasoning,
+                             List<Map<String, Object>> toolCalls,
+                             Map<String, Object> usage) {
             this.content = content;
+            this.reasoning = reasoning != null ? reasoning : "";
             this.toolCalls = toolCalls != null ? toolCalls : List.of();
             this.usage = usage;
         }

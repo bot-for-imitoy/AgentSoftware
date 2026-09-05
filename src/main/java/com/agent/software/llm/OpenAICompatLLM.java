@@ -147,9 +147,10 @@ public class OpenAICompatLLM implements LLM {
         int mt = maxTokens != null ? maxTokens : 512;
         Object[] result = callApi(messages, temperature, mt);
         String text = (String) result[0];
+        String reasoning = (String) result[2];
         Map<String, Object> usage = (Map<String, Object>) result[1];
         int tokens = usage != null ? intOf(usage.get("total_tokens")) : 0;
-        return new LLM.ChatResponse(text, tokens);
+        return new LLM.ChatResponse(text, reasoning, tokens);
     }
 
     @Override
@@ -168,9 +169,10 @@ public class OpenAICompatLLM implements LLM {
         int mt = maxTokens != null ? maxTokens : 256;
         Object[] result = callApi(messages, temperature, mt);
         String text = (String) result[0];
+        String reasoning = (String) result[2];
         Map<String, Object> usage = (Map<String, Object>) result[1];
         int tokens = usage != null ? intOf(usage.get("total_tokens")) : 0;
-        return new LLM.ChatResponse(text, tokens);
+        return new LLM.ChatResponse(text, reasoning, tokens);
     }
 
     @Override
@@ -216,7 +218,7 @@ public class OpenAICompatLLM implements LLM {
                     usage.getOrDefault("completion_tokens", "?"),
                     usage.getOrDefault("total_tokens", "?"));
         }
-        return new LLM.ToolsResponse(content, rawCalls, usage.isEmpty() ? null : usage);
+        return new LLM.ToolsResponse(content, reasoning, rawCalls, usage.isEmpty() ? null : usage);
     }
 
     // ── Internal ───────────────────────────────────────────
@@ -346,7 +348,7 @@ public class OpenAICompatLLM implements LLM {
         return Json.parseObject(body);
     }
 
-    /** Core API call. Returns (contentText, usageMap). */
+    /** Core API call. Returns (contentText, usageMap, reasoningText). */
     protected Object[] callApi(List<Map<String, Object>> messages, double temperature, int maxTokens) {
         URI url = URI.create(baseUrl + "/v1/chat/completions");
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -358,7 +360,7 @@ public class OpenAICompatLLM implements LLM {
 
         Map<String, Object> data = postWithRetry(url, payload);
         if (data == null) {
-            return new Object[]{"[API error: " + retryError + "]", null};
+            return new Object[]{"[API error: " + retryError + "]", null, ""};
         }
         Map<String, Object> message = choiceMessage(data);
         String content = strOf(message.get("content"));
@@ -384,6 +386,6 @@ public class OpenAICompatLLM implements LLM {
         if (content.isEmpty()) {
             logger.warn("{} returned empty content.", apiName);
         }
-        return new Object[]{content, usage.isEmpty() ? null : usage};
+        return new Object[]{content, usage.isEmpty() ? null : usage, reasoning};
     }
 }

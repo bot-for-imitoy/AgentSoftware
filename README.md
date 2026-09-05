@@ -17,7 +17,7 @@
 ```bash
 # Prerequisites: JDK 25+, Maven 3.8+ (OpenAI API Key: export OPENAI_API_KEY=sk-...)
 mvn compile          # compile
-mvn test             # run all JUnit tests (145 test cases)
+mvn test             # run all JUnit tests (157 test cases)
 mvn package          # package target/agent-software.jar
 ```
 
@@ -55,10 +55,18 @@ mvn exec:java -Dexec.mainClass=com.agent.software.demo.WebDemo
 
 Open the URL printed to the console (default `http://127.0.0.1:8787/`):
 
-- **Left** — group selector (Leadership Group / Frontend Development Group / Backend Development Group / …),
-  each group shows its member count; an unread badge appears when there are new messages.
-- **Right** — QQ-style chat window: avatars + nicknames + message bubbles, showing only `talk` messages
-  between members of the **currently selected group**; the Leadership Group also shows conversations with **Client A (you)** (client messages appear as right-aligned blue bubbles).
+- **Left** — channel selector. The top **All Activity** channel is a live feed of *every* role across all
+  groups (chain of thought, tool calls and final outputs, plus group chats and Client A conversations).
+  Below it, each group (Leadership Group / Frontend Development Group / Backend Development Group / …)
+  shows its member count; an unread badge appears when there are new messages.
+- **Right** — chat window. Each message is rendered according to its kind:
+  - 💬 `talk` / `client` — QQ-style bubbles (avatar + nickname + message; Client A messages are right-aligned blue);
+  - 🧠 `reason` — a role's **chain of thought** (the LLM's `reasoning_content`, recorded per tool-loop round),
+    shown as a collapsed-height monospace panel;
+  - ✎ `note` — short assistant narration emitted while it is still calling tools;
+  - 🛠 `tool` — a **tool call card**: the tool name, its arguments (pretty-printed JSON) and the tool's output;
+  - ✔/✗ `answer` — the task's **final output** (result text, token usage; red styling when the task failed).
+  The Leadership Group also shows conversations with **Client A (you)** (client messages appear as right-aligned blue bubbles).
 - **Input box disabled by default** — enabled only when both conditions are met:
   1. The currently selected group is the **Leadership Group**;
   2. A Leadership Group member is calling `talk_to_client` to talk to you (waiting for your reply).
@@ -90,10 +98,16 @@ HTTP API (same-origin, no auth, polled by the web frontend):
 | `POST /api/reply` `{"text":"…"}` | Client A submits a reply (succeeds only when someone in the Leadership Group is waiting, otherwise 409) |
 | `POST /api/attach` | Web attach heartbeat |
 
+Message payload kinds (`GET /api/messages`): `talk`, `client`, `reason`, `note`, `tool`, `answer`.
+Trace messages (`reason` / `tool` / `answer`) carry structured metadata in the `extra` field —
+for `tool`: `{tool, args, result, round, taskId}`; for `answer`: `{status: done|failed, tokens, taskId}`.
+
 Implementation: `web/ChatStore.java` (message storage + Client A conversation coordination, one instance per AgentSystem) +
 `web/ChatWebServer.java` (HTTP server + static assets in `src/main/resources/web/`);
-the `talk_to_client` / `talk` tools record messages automatically; see tests `ChatStoreTest` /
-`ChatWebServerTest` / `TalkToClientWebTest`.
+the `talk_to_client` / `talk` tools record messages automatically; role workers record the trace feed in
+`AgentRole.executeWithTools` / `RolePool.roleLoop` (LLM `reasoning_content` is surfaced through
+`LLM.ToolsResponse.reasoning` / `LLM.ChatResponse.reasoning`). See tests `ChatStoreTest` /
+`ChatWebServerTest` / `TalkToClientWebTest` / `AgentRoleTraceTest`.
 
 ### Python → Java Module Mapping
 

@@ -177,6 +177,69 @@ class LLMRetryTest {
         assertEquals(5, r.totalTokens());
     }
 
+    /** reasoning_content (chain of thought) must be carried out of chatWithTools. */
+    @Test
+    void testChatWithToolsCarriesReasoning() throws IOException {
+        FakeServer s = new FakeServer(200);
+        servers.add(s);
+        s.server.removeContext("/v1/chat/completions");
+        s.server.createContext("/v1/chat/completions", ex -> {
+            s.calls.incrementAndGet();
+            String body = "{\"choices\":[{\"message\":{\"content\":\"final\","
+                    + "\"reasoning_content\":\"deep thought\"}}],\"usage\":{\"total_tokens\":7}}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        LLM.ToolsResponse r = client(s).chatWithTools(
+                List.of(Map.of("role", "user", "content", "hi")), List.of(), 0.7, null);
+        assertEquals("deep thought", r.reasoning);
+        assertEquals("final", r.content);
+        assertEquals(7, r.totalTokens());
+    }
+
+    /** Empty content falls back to reasoning_content, but reasoning is still surfaced separately. */
+    @Test
+    void testReasoningFallbackKeepsReasoningField() throws IOException {
+        FakeServer s = new FakeServer(200);
+        servers.add(s);
+        s.server.removeContext("/v1/chat/completions");
+        s.server.createContext("/v1/chat/completions", ex -> {
+            s.calls.incrementAndGet();
+            String body = "{\"choices\":[{\"message\":{\"content\":\"\","
+                    + "\"reasoning_content\":\"thinking out loud\"}}],\"usage\":{\"total_tokens\":9}}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        LLM.ToolsResponse r = client(s).chatWithTools(
+                List.of(Map.of("role", "user", "content", "hi")), List.of(), 0.7, null);
+        assertEquals("thinking out loud", r.content);   // backward-compatible fallback
+        assertEquals("thinking out loud", r.reasoning); // reasoning is still exposed to the trace layer
+    }
+
+    /** Plain chat also carries reasoning_content (used by the no-tools role path). */
+    @Test
+    void testChatCarriesReasoning() throws IOException {
+        FakeServer s = new FakeServer(200);
+        servers.add(s);
+        s.server.removeContext("/v1/chat/completions");
+        s.server.createContext("/v1/chat/completions", ex -> {
+            s.calls.incrementAndGet();
+            String body = "{\"choices\":[{\"message\":{\"content\":\"answer\","
+                    + "\"reasoning_content\":\"cot\"}}],\"usage\":{\"total_tokens\":4}}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        LLM.ChatResponse r = client(s).chat("s", "u", 0.7, 8);
+        assertEquals("answer", r.text);
+        assertEquals("cot", r.reasoning);
+    }
+
     // ── Config precedence (Java args > env vars > ConfigStore) ────
 
     /** Without system properties/env vars, config falls back to ConfigStore (llm.*). */
