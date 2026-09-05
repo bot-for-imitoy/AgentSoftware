@@ -1,5 +1,6 @@
 package com.agent.software;
 
+import com.agent.software.io.StdInput;
 import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
@@ -223,7 +224,7 @@ public class Main {
         // 1. Kickoff: default team (management + engineering team)
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
         step("Creating AgentSystem, adding " + roleIds.size() + " default roles...");
-        AgentSystem system = new AgentSystem(null, roleIds, 30.0, true);
+        AgentSystem system = new AgentSystem(null, roleIds, 30.0, true, new StdInput());
         system.getRole("HR").addToolkit(new Hr(system.getRole("HR"), null));
         ok("Roles ready: " + system.pool.listRoles().size() + " people (CEO/COO/HR + engineering team)");
         ok("Leadership group equipped with talk_to_client (real-time chat with the client; only one person can talk to the client at a time)");

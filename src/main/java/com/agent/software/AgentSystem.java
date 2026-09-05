@@ -5,6 +5,8 @@ import com.agent.software.computers.ComputerManager;
 import com.agent.software.core.Types;
 import com.agent.software.event.EventDispatcher;
 import com.agent.software.event.TimeEventBus;
+import com.agent.software.io.Input;
+import com.agent.software.io.StdInput;
 import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
@@ -60,13 +62,16 @@ public class AgentSystem {
     /** This system's chat message storage + Client A conversation coordination (Web UI data source). */
     public final ChatStore chatStore;
 
+    public final Input input;
+
     /** This system's data root directory (default ./data); all persisted files live under it. */
     private final Path dataDir;
 
     /** Constructor with the default data directory (./data); behavior is consistent with historical versions. */
     public AgentSystem(List<AgentRole> roles, List<String> roleIds,
-                       double checkInterval, boolean autoToolkits) {
-        this(Paths.get("data"), roles, roleIds, checkInterval, autoToolkits);
+                       double checkInterval, boolean autoToolkits,
+                       Input input) {
+        this(Paths.get("data"), roles, roleIds, checkInterval, autoToolkits, input);
     }
 
     /**
@@ -75,7 +80,8 @@ public class AgentSystem {
      * directories.
      */
     public AgentSystem(Path dataDir, List<AgentRole> roles, List<String> roleIds,
-                       double checkInterval, boolean autoToolkits) {
+                       double checkInterval, boolean autoToolkits,
+                       Input input) {
         this.dataDir = dataDir != null ? dataDir : Paths.get("data");
         this.timeManager = new TimeEventBus();
         this.timeManager.checkInterval = checkInterval;
@@ -89,6 +95,7 @@ public class AgentSystem {
         this.pool = new RolePool(null, null, timeManager, autoToolkits, this);
         this.dispatcher = new EventDispatcher(pool);
         this.autoToolkits = autoToolkits;
+        this.input = input;
 
         // Time thread events → event dispatcher (unified entry for schedule events)
         this.timeManager.setEventSender(this::onTimeEvent);
@@ -110,7 +117,7 @@ public class AgentSystem {
     }
 
     public AgentSystem() {
-        this(null, null, 30.0, true);
+        this(null, null, 30.0, true, new StdInput());
     }
 
     // ── Data directories (all rooted at dataDir) ────────────────────────
