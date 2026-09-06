@@ -19,9 +19,11 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -38,6 +40,28 @@ public class MailService {
     public static final String DEFAULT_MAIL_SUFFIX = "company.com";
     public static final String DEFAULT_MAIL_DIR = "data/mail";
     public static final String MAILBOX_FILE = "mailboxes.json";
+
+    /**
+     * Post-delivery notification listener (optional). Invoked after a successful {@link #send}, once per
+     * delivered recipient mailbox (To and CC, deduplicated by the lowercased mailbox address), with the
+     * message placed in that mailbox.
+     *
+     * <p>{@code AgentSystem} uses this to turn "mail landed in an employee's inbox" into a targeted
+     * NEW_MAIL event that guides the receiving role to call {@code read_mail}; a standalone MailService
+     * without a listener keeps the historical silent-delivery behavior. Listener failures are logged and
+     * never fail the send itself.
+     */
+    @FunctionalInterface
+    public interface MailDeliveryListener {
+        void mailDelivered(MailMessage message, String recipientMailbox);
+    }
+
+    private volatile MailDeliveryListener deliveryListener = null;
+
+    /** Set the post-delivery notification listener (normally wired by AgentSystem; may be null). */
+    public void setDeliveryListener(MailDeliveryListener listener) {
+        this.deliveryListener = listener;
+    }
 
     // ── MailConfig ─────────────────────────────────────────────
 
@@ -251,17 +275,35 @@ public class MailService {
             }
             msg.viaSmtp = true;
         }
+        List<String> delivered = new ArrayList<>(toList);
+        delivered.addAll(ccList);
         // Virtual delivery (SMTP mode also delivers an internal copy, for roles to read in the simulated intranet)
         synchronized (lock) {
             load();
-            List<String> all = new ArrayList<>(toList);
-            all.addAll(ccList);
-            for (String addr : all) {
+            for (String addr : delivered) {
                 String key = addr.toLowerCase();
                 mailboxes.computeIfAbsent(key, k -> new ArrayList<>())
                         .add(MailMessage.fromDict(msg.toDict()));  // Independent copy per mailbox
             }
             save();
+        }
+        // Post-delivery notification: once the mail is safely in the recipient mailboxes, inform the listener
+        // (AgentSystem turns it into a targeted "new mail" event guiding the recipient to call read_mail).
+        // One call per delivered mailbox; a failing listener never fails the send.
+        MailDeliveryListener listener = deliveryListener;
+        if (listener != null) {
+            Set<String> seen = new LinkedHashSet<>();
+            for (String addr : delivered) {
+                String key = addr.toLowerCase();
+                if (!seen.add(key)) {
+                    continue;
+                }
+                try {
+                    listener.mailDelivered(msg, key);
+                } catch (Exception e) {
+                    logger.warn("Mail delivery listener failed for mailbox {}: {}", key, e.getMessage());
+                }
+            }
         }
         String recipientsDesc = String.join(", ", toList);
         String way = msg.viaSmtp ? "sent via real SMTP" : "virtual mailbox delivery";

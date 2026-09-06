@@ -434,6 +434,13 @@ e.g. Guo Xiaodong → `guoxiaodong@company.com`; an explicit `email` field on a 
 (recoverable after restart; gitignored). **Real sending auto-activates once SMTP is configured**: real mail is sent via smtplib
 while a copy is still delivered to the internal recipient mailbox (simulating intranet reading).
 
+**New-mail notification (in-system roles)**: inside an `AgentSystem`, a successful delivery to an employee mailbox
+immediately dispatches a targeted `email/NEW_MAIL` event to that role (see `AgentSystem.EVENT_NEW_MAIL`), so its next
+task reads like *"You have a new email from X … — call read_mail to view it"*. The notification follows the event
+dispatcher's discipline: an on-duty recipient gets the task queued; an off-duty / wrapping-up / synchronously-waiting
+role is **not** disturbed (the delivery still happens, the skip is journaled). External addresses, To/CC of the sender's
+own mailbox, and standalone `MailService` instances without an `AgentSystem` are not notified.
+
 ---
 
 ## Project Structure

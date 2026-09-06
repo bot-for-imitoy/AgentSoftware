@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -99,6 +100,9 @@ public class AgentSystem {
         this.chatStore = new ChatStore();
         this.pool = new RolePool(null, null, timeManager, autoToolkits, this);
         this.dispatcher = new EventDispatcher(pool);
+        // New-mail notification: mailbox delivery in this system is turned into a targeted NEW_MAIL event
+        // for the receiving role, guiding it to call read_mail (wired here, after dispatcher creation)
+        this.mailService.setDeliveryListener(this::notifyNewMail);
         this.autoToolkits = autoToolkits;
         this.input = input;
         // Web input reads from this system's chat store and identifies the waiting member through this
@@ -296,6 +300,58 @@ public class AgentSystem {
     /** Post an event to the event bus, broadcasting it to all roles. */
     public Map<String, Map<String, Object>> trigger(Types.Event event) {
         return dispatcher.trigger(event);
+    }
+
+    // ── Mail delivery → "new mail" notification ─────────────────────────
+
+    /** Event type of the targeted per-recipient notification sent when a mail lands in an employee's inbox. */
+    public static final String EVENT_NEW_MAIL = "NEW_MAIL";
+
+    /**
+     * {@link MailService.MailDeliveryListener} registered on this system's MailService: after a mail is
+     * delivered to a mailbox that belongs to one of this system's roles, dispatch a targeted
+     * {@value #EVENT_NEW_MAIL} event (source "email", NORMAL priority) to that role so its next task guides
+     * it to view the mail via read_mail.
+     *
+     * <p>Delivering through the {@link EventDispatcher} keeps the system's notification discipline: a role
+     * that is on duty accepts the event and gets a queued task; a role that is off duty / wrapping up /
+     * synchronously waiting is not disturbed (skipped with a journal record) and reads the mail when it
+     * checks its inbox later. External addresses and the sender's own mailbox are not notified.
+     */
+    private void notifyNewMail(MailService.MailMessage message, String recipientMailbox) {
+        if (message == null || recipientMailbox == null || recipientMailbox.isEmpty()) {
+            return;
+        }
+        if (recipientMailbox.equalsIgnoreCase(message.senderEmail)) {
+            return;  // sending to yourself needs no notification
+        }
+        AgentRole recipient = findRoleByMailbox(recipientMailbox);
+        if (recipient == null) {
+            return;  // not an internal employee mailbox (e.g. an external recipient)
+        }
+        String senderDesc = (message.senderName == null || message.senderName.isEmpty())
+                ? message.senderEmail
+                : message.senderName + " <" + message.senderEmail + ">";
+        String subject = message.subject == null ? "" : message.subject;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", "You have a new email from " + senderDesc
+                + " (subject: \"" + subject + "\"). Please call read_mail to view it in your inbox.");
+        payload.put("sender_email", message.senderEmail);
+        payload.put("sender_name", message.senderName);
+        payload.put("subject", subject);
+        payload.put("message_id", message.messageId);
+        dispatcher.trigger(new Types.Event("email", EVENT_NEW_MAIL,
+                Types.Priority.NORMAL, payload, recipient.roleId));
+    }
+
+    /** Find the role whose company mailbox equals the given address, or null when it is not an employee mailbox. */
+    private AgentRole findRoleByMailbox(String mailbox) {
+        for (AgentRole role : pool.allRoles()) {
+            if (mailService.emailFor(role).equalsIgnoreCase(mailbox)) {
+                return role;
+            }
+        }
+        return null;
     }
 
     /** Directly assign a task to the specified role. */
