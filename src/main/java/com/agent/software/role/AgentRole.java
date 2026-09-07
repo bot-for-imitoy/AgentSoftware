@@ -1,6 +1,8 @@
 package com.agent.software.role;
 
 import com.agent.software.AgentSystem;
+import com.agent.software.conversation.Conversation;
+import com.agent.software.conversation.ConversationManager;
 import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.toolkits.talk.Talk;
 import com.agent.software.computers.Computer;
@@ -550,6 +552,22 @@ public class AgentRole {
         return system != null ? system.chatStore : null;
     }
 
+    /**
+     * This role's dialogue with the LLM API (role ↔ API conversation management).
+     *
+     * <p>One {@link Conversation} per role, registered in the per-system
+     * {@link ConversationManager} when the role belongs to an AgentSystem (multiple systems stay
+     * isolated); standalone roles fall back to the process-level default manager. The conversation
+     * carries committed task exchanges across tasks of the same work day, auto-compacts long
+     * contexts, is closed at shift end by the summary tool and survives restarts through the
+     * StateStore archive.
+     */
+    public Conversation conversation() {
+        String key = ConversationManager.keyFor(roleId, name);
+        ConversationManager manager = system != null ? system.conversationManager : ConversationManager.getDefault();
+        return manager.forRole(key);
+    }
+
     // ── Personal computer (per-role) ───────────────────────
 
     /** Get this role's personal computer (lazily created; automatically created and powered on when the role is added). */
@@ -953,9 +971,13 @@ public class AgentRole {
         if (tools != null) {
             openaiTools = tools.toOpenaiTools();
         }
-        List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(msg("system", system));
-        messages.add(msg("user", task.description));
+        // Role ↔ LLM conversation management: a new task continues the role's committed day dialogue.
+        // The request is [system prompt + committed conversation history + this task]; when the task
+        // finishes, its exchange is committed back so the next task can build on it.
+        Conversation conversation = conversation();
+        int convDay = timeManager().dayNumber();
+        List<Map<String, Object>> messages = conversation.prepareMessages(system, task.description, convDay);
+        List<String> toolRecaps = new ArrayList<>();   // compact tool-activity recap for the conversation
 
         int totalTokens = 0;
         int roundNo = 0;
@@ -984,6 +1006,11 @@ public class AgentRole {
                 // Web trace: the round contains no tool calls → content is the model's plain reply;
                 // the task-level final output is recorded by RolePool.roleLoop after the task completes
                 logger.debug("[{}] tool loop: final answer received in round {} (no tool calls), task done", roleId, roundNo);
+                // Commit the completed exchange to the day dialogue (enriched with a compact recap of
+                // the tool activity, so the model recalls what it actually did in later tasks). Skipped
+                // when the conversation was closed mid-task (e.g. the shift-end summary tool ran).
+                conversation.appendTaskExchange(convDay, task.description,
+                        enrichWithToolRecaps(roundContent, toolRecaps), llm);
                 return Map.entry(roundContent, totalTokens);
             }
             // Web trace: narration the model emits while it is still about to call tools
@@ -1027,6 +1054,8 @@ public class AgentRole {
                         + ") → " + truncate(toolResult == null ? "" : toolResult, 100));
                 // Web trace: record the tool invocation together with its arguments and result
                 recordToolCall(toolName, Json.stringifyPretty(toolArgs), toolResult, task.taskId, roundNo);
+                // Conversation management: keep a bounded recap of the tool outcome (name/args/result)
+                collectToolRecap(toolRecaps, toolName, toolArgsRaw, toolResult);
                 // Native protocol: tool results are fed back as role:"tool" messages, linked by tool_call_id
                 messages.add(msgWithToolCallId(toolName, callId, toolResult));
             }
@@ -1048,6 +1077,31 @@ public class AgentRole {
         m.put("tool_call_id", callId);
         m.put("content", content);
         return m;
+    }
+
+    /**
+     * Collect one bounded line about a tool outcome into the task's recap for the conversation.
+     * At most {@link Conversation#TOOL_RECAP_LIMIT} lines are kept; beyond that a single trailing
+     * marker records that the task used more tools (so the recap can never blow up the context).
+     */
+    private static void collectToolRecap(List<String> recaps, String toolName, String argsRaw, String result) {
+        if (recaps.size() < Conversation.TOOL_RECAP_LIMIT) {
+            recaps.add(toolName + "(" + truncate(argsRaw == null ? "" : argsRaw,
+                    Conversation.TOOL_RECAP_ARGS_MAX) + ") → "
+                    + truncate(result == null ? "" : result, Conversation.TOOL_RECAP_RESULT_MAX));
+        } else if (!recaps.contains("…")) {
+            recaps.add("… and more tool calls during this task");
+        }
+    }
+
+    /** The assistant text committed to the conversation: final answer + a compact tool-activity recap. */
+    private static String enrichWithToolRecaps(String answer, List<String> recaps) {
+        if (recaps == null || recaps.isEmpty()) {
+            return answer == null ? "" : answer;
+        }
+        String body = (answer == null || answer.isEmpty()) ? "" : answer;
+        String recap = "[During this task I used tools: " + String.join("; ", recaps) + "]";
+        return body.isEmpty() ? recap : body + "\n\n" + recap;
     }
 
     // ── Internal accessors (used by RolePool) ────────────────

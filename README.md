@@ -13,7 +13,7 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 (0-token filtering), and per-role computers give every agent an isolated filesystem.
 
 > Status: actively developed. The engine, role system, toolkits, Web UI and persistence are in
-> place and covered by **163 JUnit tests**; the simulation flow itself keeps being refined.
+> place and covered by **181 JUnit tests**; the simulation flow itself keeps being refined.
 
 ---
 
@@ -74,6 +74,8 @@ AgentSoftware/
 │   │   ├── Main.java                # main entry: full multi-day team simulation
 │   │   ├── core/                    # Types (Event / AgentState / Priority), MCPServer (stdio JSON-RPC)
 │   │   ├── event/                   # EventBus, TimeEventBus (time × event), EventDispatcher
+│   │   ├── conversation/            # Conversation/ConversationManager — role ↔ LLM API dialogue state
+│   │   │                            #   (per-day continuity, auto-compaction, shift-close, persistence)
 │   │   ├── role/                    # AgentRole, RolePool, RoleLoader (JSON templates), RoleFactory, ToolRegistry
 │   │   ├── computers/               # Computer, ComputerManager, PodmanComputer, SSHComputer (kind: podman|local|ssh)
 │   │   ├── io/                      # Input / StdInput (console) / WebInput (Web page) — client replies
@@ -93,7 +95,7 @@ AgentSoftware/
 │       ├── providers.local.example.json
 │       ├── mcp_group_rules.json     # MCP servers + tool groups (file_ops, git_ops, github_ops)
 │       └── web/                     # static assets of the Web UI (index.html/app.js/style.css)
-├── src/test/java/                   # JUnit 5 tests (163 tests / 23 classes)
+├── src/test/java/                   # JUnit 5 tests (181 tests / 26 classes)
 └── data/                            # runtime data (gitignored)
     ├── computers/<role_id>/         # one host folder per role computer (mounted at /home/agent)
     ├── journals/                    # per-role activity journals
@@ -118,7 +120,7 @@ AgentSoftware/
 
 ```bash
 mvn compile     # compile
-mvn test        # run all JUnit tests (163 tests, 23 test classes)
+mvn test        # run all JUnit tests (181 tests, 26 test classes)
 mvn package     # produce target/agent-software.jar
 ```
 
@@ -407,6 +409,39 @@ Client A coordination) + `web/ChatWebServer.java`; tests in `ChatStoreTest` /
   MCP stdio client implemented in `core/MCPServer.java`) is auto-installed at role setup.
 - **Skills**: `SkillManager` + the `skill` toolkit manage SKILL.md entries in the shared skill
   library.
+
+### 13. Role ↔ LLM API conversation management
+
+Each role now runs a managed **dialogue with its LLM API** (`conversation/Conversation.java` +
+`conversation/ConversationManager.java`), sitting exactly between `AgentRole` and `OpenAICompatLLM`:
+
+- **Cross-task continuity.** Previously every task started from an empty message list (system
+  prompt + the task description), so a role could not remember within a day what it had just
+  discussed or done with the model. Now `executeWithTools` prepares each request as
+  *system prompt + committed conversation history + new task*, and when a task completes its
+  exchange (user task + final answer, enriched with a bounded recap of the tool calls the role
+  made) is committed back to the day dialogue — the next task builds on it.
+- **Automatic context compaction.** Each conversation has a character budget
+  (`Conversation.DEFAULT_MAX_HISTORY_CHARS`, 24 000 by default; the budget is a per-conversation
+  constructor argument). When the committed history crosses it, the whole history is summarized
+  into one compact message via `LLM.summarize` (one extra API call per budget crossing); if the
+  summary call fails (or no LLM is at hand), the oldest messages are dropped/truncated instead —
+  the context always shrinks, never grows without bound.
+- **Shift lifecycle.** Conversations are keyed by work day. When a role writes its end-of-day
+  summary and goes `OFF_DUTY`, the `summary` tool calls `Conversation.closeDay()`: the day
+  dialogue is cleared (its recap is already persisted in the day's summary file) and the trailing
+  "summary saved" exchange is not appended. A new shift start — or a same-day EMERGENCY task
+  after off-duty — reopens the conversation with a clean, context-flushed slate; the next day's
+  cold start still comes from `[Yesterday's Summary]` in the system prompt.
+- **Persistence & isolation.** Open day dialogues are archived with the rest of the role state by
+  `StateStore` (`conversation` field per role, restored on the next start), so an interrupted run
+  resumes mid-dialogue. Each `AgentSystem` owns its own `ConversationManager`, so multiple systems
+  in one process keep their role dialogues fully isolated.
+
+One `Conversation` exists per role (keyed by `role_id`), accessed through `AgentRole.conversation()`;
+tool results are recapped at most `TOOL_RECAP_LIMIT` per task and `TOOL_RECAP_RESULT_MAX` chars
+each. Tests: `conversation/ConversationTest`, `conversation/ConversationEndToEndTest`,
+`conversation/ConversationStateStoreTest`.
 
 ---
 
