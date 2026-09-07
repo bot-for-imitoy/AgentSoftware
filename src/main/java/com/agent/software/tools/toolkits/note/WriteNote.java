@@ -25,7 +25,7 @@ public class WriteNote extends Tool {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("name", "The name of this note.");
         schema.put("content", "The content of your note.");
-        schema.put("reminder_tick", "(Optional, default to no reminder. ) Reminder Tick. 0~60.");
+        schema.put("reminder_tick", "(Optional, default to no reminder. ) Reminder Tick, within the shift 0~60 (0 = 08:00, 60 = 18:00; e.g. 36 = 14:00).");
         schema.put("reminder_day", "(Optional, needs reminder_tick, default to today if any reminder. ) Reminder day.");
         return schema;
     }

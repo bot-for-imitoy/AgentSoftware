@@ -203,6 +203,9 @@ public final class ChatWebServer {
         resp.put("day", system.day());
         resp.put("tick", system.tick());
         resp.put("tickOfDay", system.timeManager.tickOfDay());
+        resp.put("date", system.timeManager.currentDateString());
+        resp.put("time", system.timeManager.currentTime());
+        resp.put("datetime", system.timeManager.currentDateTime());
         resp.put("describe", system.describe());
 
         Map<String, Object> web = new LinkedHashMap<>();

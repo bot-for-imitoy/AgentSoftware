@@ -6,6 +6,7 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.StateStore;
+import com.agent.software.event.TimeEventBus;
 import com.agent.software.core.Types;
 import com.agent.software.web.ChatWebServer;
 import org.slf4j.Logger;
@@ -23,8 +24,9 @@ import java.util.TreeSet;
 /**
  * Main entry point (the Java counterpart of the Python main.py).
  *
- * Starts a complete multi-role AI team simulation: restore progress → loop over days
- * (shift start → assign tasks → shift end) → save state.
+ * Starts a complete multi-role AI team simulation on a simulated calendar clock: every work day
+ * starts at 08:00 of a real calendar date (day 1 = the day the run starts) and ends at 18:00;
+ * after the end-of-day summaries the clock rolls over to the next day at 08:00 and loops.
  */
 public class Main {
 
@@ -39,11 +41,9 @@ public class Main {
     private static final String MAGENTA = "\033[35m";
     private static final String RESET = "\033[0m";
 
-    // ── Time parameters (real time, minutes/hours) ─────────────
-    private static final int TICK_MINUTES = 10;
-    private static final int TICK1_MINUTES = 10;
-    private static final int SHIFT_END_HOURS = 10;
-    private static final int DAY_BOUNDARY_HOURS = 24;
+    // Time semantics (see TimeEventBus): 1 Tick = 10 simulated minutes; shift 08:00 (tick 0) → 18:00 (tick 60).
+    private static final int SHIFT_END_TICK = TimeEventBus.SHIFT_END_TICK;
+    private static final int TICKS_PER_DAY = TimeEventBus.TICKS_PER_DAY;
 
     private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleLoader.DEFAULT_ROLES);
 
@@ -105,32 +105,32 @@ public class Main {
         }
     }
 
-    /** Runs one full day (real time; TimeEventBus advances the clock). */
+    /** Runs one full work day (the simulated clock advances inside TimeEventBus). */
     static void runOneDay(AgentSystem system, int day, boolean withClientTask) {
-        header("Day " + day);
+        header("Day " + day + " — " + system.timeManager.currentDateString());
 
-        // New day: wait for the day boundary (day_number change → SHIFT_START fires automatically)
+        // New day: wait for the day boundary (next day's 08:00 → SHIFT_START fires automatically after the wrap-up)
         if (day > 1) {
             int targetDay = day;
-            waitUntil("Day " + day + " begins (in about " + DAY_BOUNDARY_HOURS * (day - 1)
-                            + " hours, SHIFT_START fires automatically)",
+            waitUntil("Day " + day + " begins (" + system.timeManager.currentDateString()
+                            + " 08:00, SHIFT_START fires automatically after the previous day's wrap-up)",
                     () -> system.day() >= targetDay,
-                    DAY_BOUNDARY_HOURS * 3600L);
+                    24 * 3600L);
         }
         ok("Current: " + system.describe());
 
         // Day 1: the CEO talks to the client (only once)
         if (withClientTask) {
-            step("CEO registers the opening note reminder: Tick 1 (10 minutes later) to discuss project requirements with the user...");
+            step("CEO registers the opening note reminder: Tick 1 (08:10) to discuss project requirements with the user...");
             AgentRole ceo = system.getRole("CEO");
             Path note = ceo.noteStore().writeNote("Day1-collect-project-requirements",
                     "Talk to the user about the project requirements and gather what needs to be built today", 1, day);
-            ok("Note + reminder registered: " + note + " (Day " + day + " Tick 1 → CEO)");
+            ok("Note + reminder registered: " + note + " (Day " + day + " Tick 1 = 08:10 → CEO)");
             step("Waiting for Tick 1 to fire (CEO task → talk to the user)...");
-            int fireTick = (day - 1) * 144 + 1;
+            int fireTick = (day - 1) * TICKS_PER_DAY + 1;
             waitUntil("Tick " + fireTick + " reached (CEO task fired)",
                     () -> system.timeManager.currentTick() >= fireTick,
-                    (TICK1_MINUTES + 5) * 60L);
+                    15 * 60L);
             info("Please enter the project requirements at the [CEO] prompt above (e.g. build a payment system for me)");
             if (!webUrl.isEmpty()) {
                 info("The Web UI " + webUrl + " mirrors the conversation in real time; this run reads your reply from the console prompt above (StdInput). "
@@ -155,11 +155,13 @@ public class Main {
         }
         info("LOW filter result: " + acceptedMap);
 
-        // Wait for shift end (Tick 60 = 10 hours later; SHIFT_END fires automatically)
-        step("Waiting for shift end... (Tick 60 = 10 hours later, SHIFT_END fires automatically)");
+        // Wait for shift end (18:00; SHIFT_END fires automatically — the clock may advance while
+        // roles work, and fast-forwards once the whole team is idle)
+        step("Waiting for shift end... (" + system.timeManager.shiftEndTime()
+                + " shift end, SHIFT_END fires automatically)");
         waitUntil("Shift end reached (SHIFT_END fired)",
-                () -> system.timeManager.tickOfDay() >= 60,
-                (SHIFT_END_HOURS + 1) * 3600L);
+                () -> system.timeManager.tickOfDay() >= SHIFT_END_TICK,
+                11 * 3600L);
         sleep(5_000);
 
         step("Waiting for roles to call the summary tool (concurrent, up to 600 seconds)...");
@@ -220,7 +222,7 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        header("Work-schedule system demo — real-time flow (1 Tick = 10 minutes)");
+        header("Agent software company demo — simulated calendar clock (1 Tick = 10 minutes; shift 08:00 → 18:00)");
 
         // 1. Kickoff: default team (management + engineering team)
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
@@ -250,15 +252,18 @@ public class Main {
         if (restored > 0) {
             ok("Restored " + restored + " roles from the archive → " + system.describe());
         } else {
-            ok("No archive; starting from Day 1 Tick 0");
+            ok("No archive; starting fresh on Day 1 at " + system.timeManager.currentDateTime()
+                    + " (day 1 = today, shift starts at 08:00)");
         }
 
         // 2. Start the system
         system.start();
         ok("System started: " + system.describe());
-        ok("Time rules: 1 Tick = " + TICK_MINUTES + " minutes; shift ends = " + SHIFT_END_HOURS
-                + " hours later; day 2 = " + DAY_BOUNDARY_HOURS + " hours later");
-        sleep(3_000);  // wait for SHIFT_START (Tick 0) to fire
+        ok("Time rules: 1 Tick = " + TimeEventBus.MINUTES_PER_TICK + " simulated minutes; the clock advances while the team works"
+                + " (default 1 simulated minute per real second, " + system.timeManager.simMinutesPerRealSecond + "×) and fast-forwards when"
+                + " everyone is idle; shift " + system.timeManager.shiftStartTime() + " → " + system.timeManager.shiftEndTime()
+                + "; after the daily wrap-up the sim rolls over to the next day at 08:00");
+        sleep(3_000);  // wait for SHIFT_START (08:00) to fire
         info("Role states: " + states(system));
 
         // 3. Multi-day loop
@@ -270,9 +275,8 @@ public class Main {
                 int nextDay = day + 1;
                 consolePrint("\n" + BOLD + GREEN + "═".repeat(62) + RESET);
                 consolePrint(BOLD + GREEN + "  🎉 Day " + day + " complete!" + RESET);
-                consolePrint(BOLD + GREEN + "  Automatically entered Day " + nextDay + ": shift starts in about "
-                        + (DAY_BOUNDARY_HOURS - SHIFT_END_HOURS) + " hours "
-                        + "(SHIFT_START fires automatically)" + RESET);
+                consolePrint(BOLD + GREEN + "  Automatically entering Day " + nextDay + " (" + system.timeManager.currentDateString()
+                        + "): after all roles finished their summaries the clock rolled to the next 08:00 shift start" + RESET);
                 consolePrint(BOLD + GREEN + "═".repeat(62) + RESET + "\n");
                 day = nextDay;
             }

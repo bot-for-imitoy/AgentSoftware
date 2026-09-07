@@ -116,8 +116,23 @@ public class AgentSystem {
 
         // Time thread events → event dispatcher (unified entry for schedule events)
         this.timeManager.setEventSender(this::onTimeEvent);
-        // Fast-forward: automatically jump to the next event tick when all roles are idle
+        // Clock control: busy flow while anyone works, fast-forward when everyone is idle,
+        // and an explicit gate that only rolls to the next day's 08:00 after the whole team
+        // has finished its daily wrap-up (all roles OFF_DUTY).
         this.timeManager.setIdleChecker(this::allRolesIdle);
+        this.timeManager.setBusyChecker(() -> !allRolesIdle());
+        this.timeManager.setRolloverReadyChecker(this::dayRolloverReady);
+        this.timeManager.setRolloverForceHook(this::forceWrapUp);
+        // Busy-clock speed is tunable per run (simulated minutes per real second of team work)
+        double simRate = TimeEventBus.DEFAULT_SIM_MINUTES_PER_REAL_SECOND;
+        try {
+            simRate = Double.parseDouble(System.getProperty(
+                    "agentsoftware.simMinutesPerRealSecond",
+                    System.getenv().getOrDefault("AGENTSOFTWARE_SIM_MINUTES_PER_REAL_SECOND",
+                            String.valueOf(TimeEventBus.DEFAULT_SIM_MINUTES_PER_REAL_SECOND))));
+        } catch (NumberFormatException ignored) {
+        }
+        this.timeManager.simMinutesPerRealSecond = simRate;
 
         List<AgentRole> all = new ArrayList<>();
         if (roles != null) {
@@ -279,25 +294,89 @@ public class AgentSystem {
                     logger.error("AgentSystem: {} failed to power on at shift start", role.roleId, e);
                 }
             }
-            pool.journalAll("Global notice: shift start (SHIFT_START, day " + day() + ")");
+            pool.journalAll("Global notice: shift start (SHIFT_START) at " + timeManager.currentDateTime());
         } else if (TimeEventBus.EVENT_SHIFT_END.equals(event.eventType)) {
-            pool.journalAll("Global notice: shift end (SHIFT_END), each role summarizes and then rests");
+            pool.journalAll("Global notice: shift end (SHIFT_END) at " + timeManager.currentDateTime()
+                    + ", each role summarizes and then rests");
+            // Shift-end unstick: roles synchronously waiting for a talk reply would otherwise block
+            // forever on their current task (their counterpart is going off duty) and never reach the
+            // queued summary task — wake them so the daily wrap-up can complete.
+            for (AgentRole role : pool.allRoles()) {
+                if (role.isWaiting()) {
+                    role.abortWait("[System: the shift ended at " + timeManager.shiftEndTime()
+                            + " and the colleague you were waiting for has gone off duty. "
+                            + "Treat this as their reply for now, finish up your current task, "
+                            + "then call the summary tool to wrap up today's work.]");
+                }
+            }
         }
         dispatcher.trigger(event);
     }
 
-    /** Whether all roles are idle (used by the fast-forward feature to decide). An empty role pool is treated as not idle. */
+    /**
+     * Whether all roles are idle for the clock (used by fast-forward and the busy clock). Before the
+     * shift ends, any busy role or any queued task counts as activity. Once the shift has ended
+     * (18:00) the daily wrap-up is the only remaining activity: tasks still queued by then are
+     * intentionally held (off-duty roles do not start new ordinary work) and must NOT block the
+     * rollover — only roles that are still busy (running their summary / an emergency) keep the
+     * clock waiting. An empty role pool is treated as not idle.
+     */
     public boolean allRolesIdle() {
         List<AgentRole> roles = pool.allRoles();
         if (roles.isEmpty()) {
             return false;
         }
+        boolean afterShiftEnd = timeManager.tickOfDay() >= timeManager.shiftEndTick;
         for (AgentRole r : roles) {
-            if (r.isBusy() || r.queueDepth() > 0) {
+            if (r.isBusy()) {
+                return false;
+            }
+            if (!afterShiftEnd && r.queueDepth() > 0) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Day-rollover gate (queried by the time thread): the clock may jump to the next day's 08:00
+     * shift start only once every role has finished its daily wrap-up and is OFF_DUTY. Held leftover
+     * tasks in off-duty queues are fine — they run on the next shift.
+     */
+    public boolean dayRolloverReady() {
+        List<AgentRole> roles = pool.allRoles();
+        if (roles.isEmpty()) {
+            return false;
+        }
+        for (AgentRole r : roles) {
+            if (r.state != Types.AgentState.OFF_DUTY) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Wrap-up force hook (invoked by the time thread when the shift ended but the team did not
+     * finish wrapping up within the grace period). Roles still synchronously waiting for a talk
+     * reply are woken first (their counterpart has gone off duty and will not answer until the
+     * next shift), then every idle non-OFF_DUTY role is marked OFF_DUTY so the day loop can roll
+     * over instead of deadlocking (e.g. a role whose summary task failed).
+     */
+    public void forceWrapUp() {
+        logger.warn("AgentSystem: wrap-up grace exceeded — forcing remaining roles OFF_DUTY");
+        for (AgentRole r : pool.allRoles()) {
+            if (r.isWaiting()) {
+                r.abortWait("[System: the daily wrap-up deadline passed — treat this as the reply for now, "
+                        + "finish up and rest; leftover work resumes at the next 08:00 shift.]");
+            }
+        }
+        for (AgentRole r : pool.allRoles()) {
+            if (r.state != Types.AgentState.OFF_DUTY && !r.isBusy()) {
+                r.setState(Types.AgentState.OFF_DUTY);
+                r.journal("Forced OFF_DUTY by the time manager (daily wrap-up grace exceeded, summary missing)");
+            }
+        }
     }
 
     /** Post an event to the event bus, broadcasting it to all roles. */

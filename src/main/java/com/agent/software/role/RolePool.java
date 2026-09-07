@@ -1,6 +1,7 @@
 package com.agent.software.role;
 
 import com.agent.software.AgentSystem;
+import com.agent.software.core.Types;
 import com.agent.software.event.TimeEventBus;
 import com.agent.software.llm.LLM;
 import com.agent.software.llm.OpenAICompatLLM;
@@ -261,6 +262,22 @@ public class RolePool {
     public void roleLoop(AgentRole role) {
         logger.info("[{}] Worker loop started", role.roleId);
         while (role.isRunning() && !shutdownFlag.get()) {
+            // Off-duty hold after shift end (18:00): a role that wrote its daily summary is OFF_DUTY;
+            // ordinary tasks still queued (leftovers of the finished shift) are held until the next
+            // day's shift start and only CRITICAL tasks (EMERGENCY events) may wake it immediately.
+            // Before shift end an OFF_DUTY role keeps working its queue (legacy behavior).
+            boolean afterShiftEnd = role.timeManager() != null
+                    && role.timeManager().tickOfDay() >= role.timeManager().shiftEndTick;
+            AgentRole.Urgency nextU = role.peekNextUrgency();
+            if (role.state == Types.AgentState.OFF_DUTY && afterShiftEnd
+                    && nextU != null && nextU != AgentRole.Urgency.CRITICAL) {
+                try {
+                    Thread.sleep(100);  // hold the queue; SHIFT_START of the next day turns the role on duty again
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
             AgentRole.Task task = role.popTask();
             if (task == null) {
                 try {

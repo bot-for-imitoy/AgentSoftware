@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * get_time — view the current schedule time (current tick count and schedule state).
- * Time rules: 1 tick = 10 minutes, system start = tick 0, off work at tick 60 each day.
+ * get_time — view the current simulated schedule time (calendar date, clock and work-rest status).
+ * Time rules: 1 tick = 10 minutes, each day starts at 08:00 (tick 0) and ends at 18:00 (tick 60).
  */
 public class GetTime extends Tool {
 

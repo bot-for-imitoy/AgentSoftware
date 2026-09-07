@@ -408,7 +408,10 @@ public class AgentRole {
         if (!skills.isEmpty()) {
             parts.add("Skills: " + String.join(", ", skills) + ".");
         }
-        parts.add("Today is day " + timeManager().dayNumber() + ".");
+        parts.add("Today is " + timeManager().currentDateString()
+                + " (day " + timeManager().dayNumber() + "), company shift "
+                + timeManager().shiftStartTime() + "–" + timeManager().shiftEndTime()
+                + " (1 tick = 10 minutes).");
         parts.add("If you currently have no task, you may directly rest. "
                 + "Also note: do not send messages to others when you should not be disturbing them; "
                 + "only send when necessary. So when you have no task, do not ask others anything, "
@@ -848,6 +851,31 @@ public class AgentRole {
         try {
             replyBox = content;
             replyCond.signalAll();
+        } finally {
+            replyCondLock.unlock();
+        }
+    }
+
+    /** Whether this role is currently synchronously waiting for a talk reply. */
+    public boolean isWaiting() {
+        return state == Types.AgentState.WAIT && waitingReplyFrom != null;
+    }
+
+    /**
+     * Abort a synchronous talk wait from outside (e.g. the shift ended and the expected counterpart
+     * went off duty): wake the blocked worker thread with the given synthetic message so it can
+     * finish its current task, then process the queued shift-end summary. No-op when the role is
+     * not waiting (or a real reply has already been delivered).
+     */
+    public void abortWait(String message) {
+        replyCondLock.lock();
+        try {
+            if (state == Types.AgentState.WAIT && replyBox == null) {
+                replyBox = message != null ? message : "";
+                journal("WAIT aborted by the system (" + truncate(message, 80) + ")");
+                logger.info("[{}] WAIT aborted by the system, waking the worker", roleId);
+                replyCond.signalAll();
+            }
         } finally {
             replyCondLock.unlock();
         }
