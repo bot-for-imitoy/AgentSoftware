@@ -6,7 +6,6 @@ import com.agent.software.role.AgentRole;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.StateStore;
-import com.agent.software.event.TimeEventBus;
 import com.agent.software.core.Types;
 import com.agent.software.web.ChatWebServer;
 import org.slf4j.Logger;
@@ -25,8 +24,9 @@ import java.util.TreeSet;
  * Main entry point (the Java counterpart of the Python main.py).
  *
  * Starts a complete multi-role AI team simulation on a simulated calendar clock: every work day
- * starts at 08:00 of a real calendar date (day 1 = the day the run starts) and ends at 18:00;
- * after the end-of-day summaries the clock rolls over to the next day at 08:00 and loops.
+ * starts at 08:00:00 of a real calendar date (day 1 = the day the run starts) and the shift ends
+ * at 18:00:00 (1 Tick = 1 simulated second by default); after the end-of-day summaries the clock
+ * rolls over to the next day at 08:00:00 and loops.
  */
 public class Main {
 
@@ -41,9 +41,10 @@ public class Main {
     private static final String MAGENTA = "\033[35m";
     private static final String RESET = "\033[0m";
 
-    // Time semantics (see TimeEventBus): 1 Tick = 10 simulated minutes; shift 08:00 (tick 0) → 18:00 (tick 60).
-    private static final int SHIFT_END_TICK = TimeEventBus.SHIFT_END_TICK;
-    private static final int TICKS_PER_DAY = TimeEventBus.TICKS_PER_DAY;
+    // Time semantics (see TimeEventBus): 1 Tick = 1 simulated second (configurable); the shift runs
+    // 08:00:00 (tick 0) → 18:00:00 (tick 36000) and each calendar day cycle is 86400 ticks.
+    /** Day 1 kick-off: the CEO asks the user for the project requirements 60 ticks (≈08:01:00) after shift start. */
+    private static final int CEO_KICKOFF_TICK = 60;
 
     private static final SortedSet<String> ROLE_IDS = new TreeSet<>(RoleLoader.DEFAULT_ROLES);
 
@@ -113,7 +114,7 @@ public class Main {
         if (day > 1) {
             int targetDay = day;
             waitUntil("Day " + day + " begins (" + system.timeManager.currentDateString()
-                            + " 08:00, SHIFT_START fires automatically after the previous day's wrap-up)",
+                            + " 08:00:00, SHIFT_START fires automatically after the previous day's wrap-up)",
                     () -> system.day() >= targetDay,
                     24 * 3600L);
         }
@@ -121,13 +122,13 @@ public class Main {
 
         // Day 1: the CEO talks to the client (only once)
         if (withClientTask) {
-            step("CEO registers the opening note reminder: Tick 1 (08:10) to discuss project requirements with the user...");
+            step("CEO registers the opening note reminder: Tick " + CEO_KICKOFF_TICK + " (≈08:01:00) to discuss project requirements with the user...");
             AgentRole ceo = system.getRole("CEO");
             Path note = ceo.noteStore().writeNote("Day1-collect-project-requirements",
-                    "Talk to the user about the project requirements and gather what needs to be built today", 1, day);
-            ok("Note + reminder registered: " + note + " (Day " + day + " Tick 1 = 08:10 → CEO)");
-            step("Waiting for Tick 1 to fire (CEO task → talk to the user)...");
-            int fireTick = (day - 1) * TICKS_PER_DAY + 1;
+                    "Talk to the user about the project requirements and gather what needs to be built today", CEO_KICKOFF_TICK, day);
+            ok("Note + reminder registered: " + note + " (Day " + day + " Tick " + CEO_KICKOFF_TICK + " = ≈08:01:00 → CEO)");
+            step("Waiting for Tick " + CEO_KICKOFF_TICK + " to fire (CEO task → talk to the user)...");
+            int fireTick = (day - 1) * system.timeManager.ticksPerDay + CEO_KICKOFF_TICK;
             waitUntil("Tick " + fireTick + " reached (CEO task fired)",
                     () -> system.timeManager.currentTick() >= fireTick,
                     15 * 60L);
@@ -155,12 +156,12 @@ public class Main {
         }
         info("LOW filter result: " + acceptedMap);
 
-        // Wait for shift end (18:00; SHIFT_END fires automatically — the clock may advance while
+        // Wait for shift end (18:00:00; SHIFT_END fires automatically — the clock may advance while
         // roles work, and fast-forwards once the whole team is idle)
         step("Waiting for shift end... (" + system.timeManager.shiftEndTime()
                 + " shift end, SHIFT_END fires automatically)");
         waitUntil("Shift end reached (SHIFT_END fired)",
-                () -> system.timeManager.tickOfDay() >= SHIFT_END_TICK,
+                () -> system.timeManager.tickOfDay() >= system.timeManager.shiftEndTick,
                 11 * 3600L);
         sleep(5_000);
 
@@ -222,7 +223,7 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        header("Agent software company demo — simulated calendar clock (1 Tick = 10 minutes; shift 08:00 → 18:00)");
+        header("Agent software company demo — simulated calendar clock (1 Tick = 1 simulated second; shift 08:00:00 → 18:00:00)");
 
         // 1. Kickoff: default team (management + engineering team)
         List<String> roleIds = new ArrayList<>(ROLE_IDS);
@@ -253,17 +254,19 @@ public class Main {
             ok("Restored " + restored + " roles from the archive → " + system.describe());
         } else {
             ok("No archive; starting fresh on Day 1 at " + system.timeManager.currentDateTime()
-                    + " (day 1 = today, shift starts at 08:00)");
+                    + " (day 1 = today, shift starts at 08:00:00)");
         }
 
         // 2. Start the system
         system.start();
         ok("System started: " + system.describe());
-        ok("Time rules: 1 Tick = " + TimeEventBus.MINUTES_PER_TICK + " simulated minutes; the clock advances while the team works"
-                + " (default 1 simulated minute per real second, " + system.timeManager.simMinutesPerRealSecond + "×) and fast-forwards when"
-                + " everyone is idle; shift " + system.timeManager.shiftStartTime() + " → " + system.timeManager.shiftEndTime()
-                + "; after the daily wrap-up the sim rolls over to the next day at 08:00");
-        sleep(3_000);  // wait for SHIFT_START (08:00) to fire
+        ok("Time rules: 1 Tick = " + system.timeManager.secondsPerTick + " simulated second(s) (configurable via AGENTSOFTWARE_SECONDS_PER_TICK);"
+                + " the clock advances while the team works at " + system.timeManager.simSecondsPerRealSecond
+                + " simulated second(s) per real second and fast-forwards when everyone is idle; shift "
+                + system.timeManager.shiftStartTime() + " → " + system.timeManager.shiftEndTime()
+                + " (shift end tick " + system.timeManager.shiftEndTick + ", day cycle " + system.timeManager.ticksPerDay
+                + " ticks); after the daily wrap-up the sim rolls over to the next day at 08:00:00");
+        sleep(3_000);  // wait for SHIFT_START (08:00:00) to fire
         info("Role states: " + states(system));
 
         // 3. Multi-day loop

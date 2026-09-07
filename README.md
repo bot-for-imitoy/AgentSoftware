@@ -13,7 +13,7 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 (0-token filtering), and per-role computers give every agent an isolated filesystem.
 
 > Status: actively developed. The engine, role system, toolkits, Web UI and persistence are in
-> place and covered by **193 JUnit tests**; the simulation flow itself keeps being refined.
+> place and covered by **196 JUnit tests**; the simulation flow itself keeps being refined.
 
 ---
 
@@ -37,12 +37,13 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 
 - **Shift-driven on a simulated calendar clock, not loop-driven.** A shared `TimeEventBus`
   provides the clock and the event bus at the same time. The simulation runs on a **calendar
-  clock**: each work day starts at **08:00 of a real calendar date** (day 1 = the day the run
-  starts, `SHIFT_START`) and ends at **18:00** (`SHIFT_END`). The clock **advances while roles
-  are busy** (a compressed "busy clock", default 1 simulated minute per real second of team
-  work), **fast-forwards to the next event Tick** once the whole team has been idle for a while,
-  and after the end-of-day summaries **rolls over to the next day at 08:00** and loops — nobody
-  waits in real time.
+  clock** with **second-level ticks**: by default **1 Tick = 1 simulated second** (configurable),
+  each work day starts at **08:00:00 of a real calendar date** (day 1 = the day the run starts,
+  `SHIFT_START`) and the shift ends at **18:00:00** (`SHIFT_END`, tick 36000 by default). The
+  clock **advances while roles are busy** (by default in real time — 1 simulated second per real
+  second of team work), **fast-forwards to the next event Tick** once the whole team has been idle
+  for a while, and after the end-of-day summaries **rolls over to the next day at 08:00:00** and
+  loops — nobody waits in real time.
 - **0-token event filtering.** Every event passes a per-role 3-layer filter (state mask →
   keyword salience → wake) before it ever costs a token. Irrelevant events are dropped for free,
   which is what keeps a large team affordable.
@@ -99,7 +100,7 @@ AgentSoftware/
 │       ├── providers.local.example.json
 │       ├── mcp_group_rules.json     # MCP servers + tool groups (file_ops, git_ops, github_ops)
 │       └── web/                     # static assets of the Web UI (index.html/app.js/style.css)
-├── src/test/java/                   # JUnit 5 tests (193 tests / 27 classes)
+├── src/test/java/                   # JUnit 5 tests (196 tests / 27 classes)
 └── data/                            # runtime data (gitignored)
     ├── computers/<role_id>/         # one host folder per role computer (mounted at /home/agent)
     ├── journals/                    # per-role activity journals
@@ -124,7 +125,7 @@ AgentSoftware/
 
 ```bash
 mvn compile     # compile
-mvn test        # run all JUnit tests (193 tests, 27 test classes)
+mvn test        # run all JUnit tests (196 tests, 27 test classes)
 mvn package     # produce target/agent-software.jar
 ```
 
@@ -158,9 +159,9 @@ What a `Main` run looks like:
 1. The system is assembled from the **47 default roles** (JSON templates) and progress is
    restored from `data/state.json` if it exists; otherwise it starts fresh on Day 1.
 2. The **Web UI** starts at `http://127.0.0.1:8787/` (printed at startup).
-3. On Day 1, Tick 1, the **CEO asks you for the project requirements** at the console prompt
-   (with `WebDemo`, you type the reply on the Web page instead). Enter something like
-   *"build a payment system for me"*.
+3. Shortly after the 08:00:00 shift start (Tick 60 ≈ 08:01:00), the **CEO asks you for the
+   project requirements** at the console prompt (with `WebDemo`, you type the reply on the Web
+   page instead). Enter something like *"build a payment system for me"*.
 4. Events unfold automatically: shift start, task assignment, tool calls, group chats,
    shift-end summaries. Interrupt with **Ctrl+C** — state is saved automatically and resumed
    on the next run.
@@ -170,41 +171,49 @@ What a `Main` run looks like:
 ## How a "Day" Works
 
 The clock is a **simulated calendar clock** living in `event/TimeEventBus.java`. Day 1 is the
-calendar date the run starts on (08:00); every simulated day after that is the next calendar
-date. Key constants:
+calendar date the run starts on (08:00:00); every simulated day after that is the next calendar
+date. Key constants (default geometry = **1 Tick = 1 simulated second**):
 
-| Constant | Value | Meaning |
+| Constant | Default | Meaning |
 |---|---|---|
-| `MINUTES_PER_TICK` | 10 | one Tick = 10 simulated minutes |
-| `TICKS_PER_DAY` | 144 | 144 Ticks per day (24 h), so tick 0 of each day ⇔ 08:00 of its date |
-| `SHIFT_START_TICK` | 0 | shift starts at Tick 0 → `SHIFT_START` fires at 08:00 |
-| `SHIFT_END_TICK` | 60 | shift ends at Tick 60 → `SHIFT_END` fires at 18:00 |
-| `SHIFT_START_HOUR` | 8 | the simulated day is anchored at 08:00 (`tickToTime(0) = "08:00"`, `tickToTime(60) = "18:00"`) |
-| `DEFAULT_SIM_MINUTES_PER_REAL_SECOND` | 1.0 | "busy clock" speed: simulated minutes per real second while the team is working |
+| `secondsPerTick` (`SECONDS_PER_TICK`) | 1.0 | the Tick ↔ simulated-time conversion (simulated seconds per tick); changing it rescales the geometry below |
+| `SIM_SECONDS_PER_SHIFT` | 36000 | the 10 h shift (08:00:00 → 18:00:00) in simulated seconds |
+| `SIM_SECONDS_PER_DAY` | 86400 | a full calendar day (08:00 → next 08:00) in simulated seconds |
+| `shiftStartTick` | 0 | tick 0 of each day ⇔ 08:00:00 (`SHIFT_START` fires) |
+| `shiftEndTick` | 36000 | shift ends at tick 36000 ⇔ 18:00:00 (`SHIFT_END` fires) |
+| `ticksPerDay` | 86400 | day cycle: 86400 ticks = 24 h at 1 s/tick (the after-hours window is skipped by the rollover jump) |
+| `taskTickMin` / `taskTickMax` | 0 / 36000 | note reminders can only be scheduled inside the shift (08:00:00–18:00:00) |
+| `simSecondsPerRealSecond` (`SIM_SECONDS_PER_REAL_SECOND`) | 1.0 | busy-clock speed: simulated seconds per real second of team work (1.0 = real-time flow) |
 | `WRAP_UP_GRACE_SECONDS` | 600 | real seconds the clock waits for the daily wrap-up before forcing the rollover |
 | `FAST_FORWARD_IDLE_SECONDS` | 60 | clock jumps when **all** roles have been idle ≥ 60 s |
+
+Examples at the default conversion: tick 0 → `08:00:00`, tick 21600 → `14:00:00`, tick 36000 →
+`18:00:00`, tick 86400 → the next day's `08:00:00`.
 
 How the clock moves (event-driven, not real-time):
 
 1. **Busy flow.** While at least one role is working (LLM round, tool call, talk wait), the clock
-   advances at the busy-clock speed — a task started at 09:00 may genuinely finish at 09:40.
-   Busy work can never push the clock past 18:00: anything still queued at shift end is **held
-   and carried over to the next day** (off-duty roles do not start new ordinary work after 18:00).
+   advances at the busy-clock speed — with the default real-time pacing, a task that really takes
+   40 s advances the simulated clock by 40 seconds (a task started at 14:23:10 may genuinely
+   finish at 14:23:50). Busy work can never push the clock past 18:00:00: anything still queued
+   at shift end is **held and carried over to the next day** (off-duty roles do not start new
+   ordinary work after 18:00).
 2. **Idle fast-forward.** When the whole team has been idle for `FAST_FORWARD_IDLE_SECONDS`, the
-   clock jumps to the next scheduled event Tick (a note reminder / the 18:00 shift end / …) —
+   clock jumps to the next scheduled event Tick (a note reminder / the 18:00:00 shift end / …) —
    nobody waits in real time and a busy LLM never "misses" a deadline.
-3. **Wrap-up & day rollover.** At 18:00 `SHIFT_END` fires: roles synchronously stuck in a `talk`
-   wait are woken first (otherwise they would never reach their summary task), then every role
-   writes its end-of-day summary and goes `OFF_DUTY`. Once **all** roles have wrapped up and the
-   team is idle, the clock rolls over to the **next calendar day at 08:00** (`SHIFT_START` fires
-   again) and the loop repeats. If a role's summary failed and the wrap-up stalls, the time
+3. **Wrap-up & day rollover.** At 18:00:00 `SHIFT_END` fires: roles synchronously stuck in a
+   `talk` wait are woken first (otherwise they would never reach their summary task), then every
+   role writes its end-of-day summary and goes `OFF_DUTY`. Once **all** roles have wrapped up and
+   the team is idle, the clock rolls over to the **next calendar day at 08:00:00** (`SHIFT_START`
+   fires again) and the loop repeats. If a role's summary failed and the wrap-up stalls, the time
    manager forces the rollover after `WRAP_UP_GRACE_SECONDS` instead of deadlocking.
 
-Work-rest events fire automatically: `SHIFT_START` (08:00), `SHIFT_END` (18:00). Scheduled notes
-with a reminder (`write_note` with `remind_tick`, tick 0~60 ⇔ 08:00~18:00) are registered on the
-same event schedule and fire a reminder event when due — notes and scheduled tasks are one unified
-concept. The simulated date/time (calendar date + HH:MM) is shown by `get_time`, in the shift-event
-payloads the roles read, on the Web UI header, and in journal/console output.
+Work-rest events fire automatically: `SHIFT_START` (08:00:00), `SHIFT_END` (18:00:00). Scheduled
+notes with a reminder (`write_note` with `remind_tick`, ticks 0~36000 ⇔ 08:00:00–18:00:00) are
+registered on the same event schedule and fire a reminder event when due — notes and scheduled
+tasks are one unified concept. The simulated date/time (calendar date + `HH:MM:SS`) is shown by
+`get_time`, in the shift-event payloads the roles read, on the Web UI header, and in journal/
+console output.
 
 ---
 
@@ -492,7 +501,8 @@ defaults.
 | `AGENTSOFTWARE_WEB_HOST` | `0.0.0.0` | Web UI listen address |
 | `AGENTSOFTWARE_WEB_PORT` | `8787` | Web UI port |
 | `AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT` | `1200000` (20 min) | Client A reply timeout in Web-input mode (ms) |
-| `AGENTSOFTWARE_SIM_MINUTES_PER_REAL_SECOND` | `1.0` | busy-clock speed: simulated minutes that pass per real second while at least one role is working (`0` freezes the clock while busy, the legacy behavior) |
+| `AGENTSOFTWARE_SECONDS_PER_TICK` | `1.0` | Tick ↔ simulated-time conversion: simulated seconds that one tick represents (default 1 Tick = 1 simulated second; rescales the shift/day tick geometry) |
+| `AGENTSOFTWARE_SIM_SECONDS_PER_REAL_SECOND` | `1.0` | busy-clock speed: simulated seconds that pass per real second while at least one role is working (`0` freezes the clock while busy) |
 | `AGENTSOFTWARE_DATA_DIR` / `_CONFIG_DIR` / `_CACHE_DIR` / `_LOG_DIR` | XDG dirs | path overrides for data / config / cache / log directories (PathManager, app prefix `AgentSoftware`) |
 
 Note: the simulation runtime of an `AgentSystem` roots its own files under its `dataDir`

@@ -411,7 +411,8 @@ public class AgentRole {
         parts.add("Today is " + timeManager().currentDateString()
                 + " (day " + timeManager().dayNumber() + "), company shift "
                 + timeManager().shiftStartTime() + "–" + timeManager().shiftEndTime()
-                + " (1 tick = 10 minutes).");
+                + " (1 tick = " + timeManager().secondsPerTick + " simulated second(s), " +
+                "tick 0 of the shift = 08:00:00).");
         parts.add("If you currently have no task, you may directly rest. "
                 + "Also note: do not send messages to others when you should not be disturbing them; "
                 + "only send when necessary. So when you have no task, do not ask others anything, "

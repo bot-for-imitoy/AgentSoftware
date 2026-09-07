@@ -16,11 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * TimeEventBus core time logic tests (the Java counterpart of the Python test_time_manager.py).
+ *
+ * The default tick geometry is 1 Tick = 1 simulated second: shift 08:00:00 (tick 0) →
+ * 18:00:00 (tick 36000) and a 86400-tick day cycle.
  */
 class TimeManagerTest {
-
-    private static final int TICKS_PER_DAY = 144;
-    private static final int SHIFT_END_TICK = 60;
 
     private final List<TimeEventBus> buses = new ArrayList<>();
 
@@ -55,6 +55,35 @@ class TimeManagerTest {
         }
     }
 
+    // ── Default geometry: 1 Tick = 1 simulated second ─────────
+
+    @Test
+    void testDefaultSecondsGeometry() {
+        TimeEventBus bus = makeBus();
+        assertEquals(1.0, bus.secondsPerTick);
+        assertEquals(0, bus.shiftStartTick);
+        assertEquals(36000, bus.shiftEndTick);   // 10 h of seconds = 08:00:00 → 18:00:00
+        assertEquals(86400, bus.ticksPerDay);    // 24 h of seconds
+        assertEquals(0, bus.taskTickMin);
+        assertEquals(36000, bus.taskTickMax);    // reminders may only be scheduled within the shift
+    }
+
+    @Test
+    void testSecondsPerTickRescalesGeometry() {
+        TimeEventBus bus = makeBus();
+        bus.setSecondsPerTick(2.0);  // one tick = 2 simulated seconds
+        assertEquals(2.0, bus.secondsPerTick);
+        assertEquals(18000, bus.shiftEndTick);
+        assertEquals(43200, bus.ticksPerDay);
+        assertEquals(18000, bus.taskTickMax);
+        assertEquals("18:00:00", bus.tickToTime(18000));
+        assertThrows(IllegalStateException.class, () -> {
+            bus.start();
+            bus.setSecondsPerTick(1.0);
+        });
+        bus.stop();
+    }
+
     // ── Tick math (explicit state, independent of the clock) ─────
 
     @Test
@@ -75,8 +104,8 @@ class TimeManagerTest {
         bus.debugSetTick(1);
         assertEquals(1, bus.currentTick());
         assertEquals(1, bus.dayNumber());
-        bus.debugSetTick(144);
-        assertEquals(144, bus.currentTick());
+        bus.debugSetTick(bus.ticksPerDay);
+        assertEquals(bus.ticksPerDay, bus.currentTick());
         assertEquals(2, bus.dayNumber());
         assertEquals(0, bus.tickOfDay());
     }
@@ -86,7 +115,7 @@ class TimeManagerTest {
         TimeEventBus bus = makeBus();
         bus.start();
         sleep(300);  // 0.3s of real time elapses
-        assertEquals(0, bus.currentTick());  // Tick stays frozen at 0
+        assertEquals(0, bus.currentTick());  // Tick stays frozen at 0 (nothing busy)
         bus.stop();
     }
 
@@ -110,8 +139,8 @@ class TimeManagerTest {
         TimeEventBus bus = makeBus();
         bus.start();
         bus.stop();
-        bus.debugSetTick(62);
-        assertEquals(TICKS_PER_DAY, bus.debugNextEventTick());
+        bus.debugSetTick(bus.shiftEndTick + 2);
+        assertEquals(bus.ticksPerDay, bus.debugNextEventTick());
     }
 
     @Test
@@ -119,8 +148,8 @@ class TimeManagerTest {
         TimeEventBus bus = makeBus();
         bus.start();
         bus.stop();
-        bus.debugSetTick(30);
-        assertEquals(SHIFT_END_TICK, bus.debugNextEventTick());
+        bus.debugSetTick(bus.shiftEndTick / 2);
+        assertEquals(bus.shiftEndTick, bus.debugNextEventTick());
     }
 
     // ── SHIFT_START/SHIFT_END window detection + firing once per day ─
@@ -133,15 +162,15 @@ class TimeManagerTest {
         bus.start();
         sleep(150);  // wait for the first check (tick 0 → Day 1 SHIFT_START)
         assertEquals(1, count(events, TimeEventBus.EVENT_SHIFT_START));
-        jump(bus, 60);
+        jump(bus, bus.shiftEndTick);
         assertEquals(1, count(events, TimeEventBus.EVENT_SHIFT_END));
-        // big jump into the Day 2 shift-start window (tick 145 → day2 tod=1): the window check must still fire
-        jump(bus, 145);
+        // big jump into the Day 2 shift-start window (day 2, tick-of-day 1): the window check must still fire
+        jump(bus, bus.ticksPerDay + 1);
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
-        jump(bus, 204);  // Day 2 shift end
+        jump(bus, bus.ticksPerDay + bus.shiftEndTick);  // Day 2 shift end
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_END));
-        jump(bus, 294);  // Day 3 shift-start window
+        jump(bus, 2 * bus.ticksPerDay + 1);  // Day 3 shift-start window
         assertEquals(3, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_END));
     }
@@ -159,7 +188,7 @@ class TimeManagerTest {
         jump(bus, 3);  // skip tick 2 → fires once, marked fired
         assertEquals(1, count(events, TimeEventBus.EVENT_TASK_DUE));
         assertTrue(task.fired);
-        jump(bus, 145);  // Day 2 shift start: fired tasks must not be re-registered
+        jump(bus, bus.ticksPerDay + 1);  // Day 2 shift start: fired tasks must not be re-registered
         assertEquals(2, count(events, TimeEventBus.EVENT_SHIFT_START));
         assertEquals(1, count(events, TimeEventBus.EVENT_TASK_DUE));
     }
@@ -186,8 +215,19 @@ class TimeManagerTest {
         bus.start();
         sleep(150);
         TimeEventBus.ScheduledTask task = bus.scheduleTask("t", "CEO", 1, 2, null);
-        jump(bus, 147);  // after Day 2 has started, moving the task back to Day 1 → rejected
+        jump(bus, bus.ticksPerDay + 3);  // after Day 2 has started, moving the task back to Day 1 → rejected
         assertThrows(IllegalArgumentException.class, () -> bus.editTask(task.taskId, null, 1, 1));
+    }
+
+    // ── Task tick bounds: reminders only within the shift (0~36000 default) ─
+
+    @Test
+    void testTaskTickBoundsAreTheShiftRange() {
+        TimeEventBus bus = makeBus();
+        assertThrows(IllegalArgumentException.class,
+                () -> bus.scheduleTask("too late", "CEO", bus.taskTickMax + 1, 1, null));
+        bus.scheduleTask("at shift end", "CEO", bus.taskTickMax, 1, null);  // 18:00:00 allowed
+        bus.scheduleTask("at shift start", "CEO", 0, 1, null);              // 08:00:00 allowed
     }
 
     // ── Scheduled task registration semantics ────────────────
@@ -214,7 +254,7 @@ class TimeManagerTest {
         TimeEventBus.ScheduledTask task = bus.scheduleTask("Tomorrow's task", "r1", 5, 2, null);
         assertTrue(task.eventId.isEmpty());  // next-day task at creation → only saved
         assertEquals(0, bus.tickSchedule.size());
-        bus.debugSetTick(144);  // fast-forward to Day 2
+        bus.debugSetTick(bus.ticksPerDay);  // fast-forward to Day 2
         bus.debugLoadTodayTasksToBus();
         assertTrue(!task.eventId.isEmpty());  // now registered
         assertEquals(1, bus.tickSchedule.size());
@@ -234,19 +274,21 @@ class TimeManagerTest {
         assertEquals(1, bus.tickSchedule.size());
     }
 
-    // ── Simulated wall clock (08:00 anchor, calendar dates) ─────
+    // ── Simulated wall clock (08:00:00 anchor, seconds display, calendar dates) ─────
 
     @Test
     void testTickToTimeAnchoredAtEight() {
         TimeEventBus bus = makeBus();
-        assertEquals("08:00", bus.tickToTime(0));     // shift start
-        assertEquals("18:00", bus.tickToTime(60));    // shift end
-        assertEquals("09:30", bus.tickToTime(9));
-        assertEquals("00:00", bus.tickToTime(96));    // crosses midnight within the day cycle
-        assertEquals("07:50", bus.tickToTime(143));
-        assertEquals("08:00", bus.tickToTime(144));   // next day's start
-        assertEquals("08:00", bus.shiftStartTime());
-        assertEquals("18:00", bus.shiftEndTime());
+        assertEquals("08:00:00", bus.tickToTime(0));         // shift start
+        assertEquals("18:00:00", bus.tickToTime(36000));     // shift end (10 h in seconds)
+        assertEquals("09:00:00", bus.tickToTime(3600));      // 1 h in
+        assertEquals("08:00:09", bus.tickToTime(9));         // tick = 1 simulated second
+        assertEquals("14:00:00", bus.tickToTime(21600));     // 6 h in
+        assertEquals("00:00:00", bus.tickToTime(57600));     // 08:00 + 16 h → crosses midnight
+        assertEquals("07:59:59", bus.tickToTime(86399));
+        assertEquals("08:00:00", bus.tickToTime(86400));     // next day's start (wraps)
+        assertEquals("08:00:00", bus.shiftStartTime());
+        assertEquals("18:00:00", bus.shiftEndTime());
     }
 
     @Test
@@ -255,15 +297,15 @@ class TimeManagerTest {
         bus.setBaseDate(java.time.LocalDate.of(2025, 1, 6));
         bus.debugSetTick(0);
         assertEquals(1, bus.dayNumber());
-        assertEquals("2025-01-06 08:00", bus.currentDateTime());
-        bus.debugSetTick(60);
-        assertEquals("2025-01-06 18:00", bus.currentDateTime());
-        bus.debugSetTick(100);  // 08:00 + 16h40m → 00:40 of the next calendar date
-        assertEquals(1, bus.dayNumber());            // the tick cycle still belongs to day 1
-        assertEquals("2025-01-07 00:40", bus.currentDateTime());
-        bus.debugSetTick(144);                       // next day's 08:00
+        assertEquals("2025-01-06 08:00:00", bus.currentDateTime());
+        bus.debugSetTick(bus.shiftEndTick);
+        assertEquals("2025-01-06 18:00:00", bus.currentDateTime());
+        bus.debugSetTick(60000);  // 08:00 + 16h40m → 00:40:00 of the next calendar date
+        assertEquals(1, bus.dayNumber());                   // the tick cycle still belongs to day 1
+        assertEquals("2025-01-07 00:40:00", bus.currentDateTime());
+        bus.debugSetTick(bus.ticksPerDay);                  // next day's 08:00:00
         assertEquals(2, bus.dayNumber());
-        assertEquals("2025-01-07 08:00", bus.currentDateTime());
+        assertEquals("2025-01-07 08:00:00", bus.currentDateTime());
     }
 
     @Test
@@ -273,9 +315,9 @@ class TimeManagerTest {
         bus.start();
         sleep(150);
         String onDuty = bus.describe();
-        assertTrue(onDuty.contains("2025-01-06 08:00"), onDuty);
+        assertTrue(onDuty.contains("2025-01-06 08:00:00"), onDuty);
         assertTrue(onDuty.contains("on duty"), onDuty);
-        bus.debugSetTick(60);
+        bus.debugSetTick(bus.shiftEndTick);
         assertTrue(bus.describe().contains("off duty"), bus.describe());
         bus.stop();
     }
@@ -283,36 +325,37 @@ class TimeManagerTest {
     // ── Busy clock: simulated time flows while roles work, capped at 18:00 ─
 
     @Test
-    void testBusyAdvanceFoldsSimulatedMinutesIntoTicks() {
+    void testBusyAdvanceFoldsSimSecondsIntoTicks() {
         TimeEventBus bus = makeBus();
         bus.start();
         sleep(150);
         assertEquals(0, bus.currentTick());  // nothing busy → clock frozen
-        bus.debugAdvanceBusySimMinutes(95);  // 95 sim minutes of work → 9 ticks (90 min), 5 min remainder
-        assertEquals(9, bus.tickOfDay());
-        assertEquals("09:30", bus.currentTime());
+        bus.debugAdvanceBusySimSeconds(95);  // 95 simulated seconds of work → 95 ticks (1 tick = 1 s)
+        assertEquals(95, bus.tickOfDay());
+        assertEquals("08:01:35", bus.currentTime());
         bus.stop();
     }
 
     @Test
     void testBusyAdvanceCappedAtShiftEnd() {
         TimeEventBus bus = makeBus();
-        bus.debugSetTick(55);  // 17:10
-        bus.debugAdvanceBusySimMinutes(10_000);  // no amount of busy work may pass 18:00
-        assertEquals(60, bus.tickOfDay());
-        assertEquals("18:00", bus.currentTime());
-        bus.debugAdvanceBusySimMinutes(10_000);  // wrap-up runs with the clock frozen at 18:00
-        assertEquals(60, bus.tickOfDay());
+        bus.debugSetTick(bus.shiftEndTick - 5);  // 17:59:55
+        bus.debugAdvanceBusySimSeconds(100_000);  // no amount of busy work may pass 18:00:00
+        assertEquals(bus.shiftEndTick, bus.tickOfDay());
+        assertEquals("18:00:00", bus.currentTime());
+        bus.debugAdvanceBusySimSeconds(100_000);  // wrap-up runs with the clock frozen at 18:00:00
+        assertEquals(bus.shiftEndTick, bus.tickOfDay());
     }
 
     @Test
     void testBusyRemainderCarriesSubTick() {
         TimeEventBus bus = makeBus();
-        bus.debugAdvanceBusySimMinutes(4);  // less than one tick
+        bus.setSecondsPerTick(2.0);  // one tick = 2 simulated seconds
+        bus.debugAdvanceBusySimSeconds(1);  // less than one tick
         assertEquals(0, bus.tickOfDay());
-        bus.debugAdvanceBusySimMinutes(6);  // completes the tick
-        assertEquals(1, bus.tickOfDay());
-        assertEquals("08:10", bus.currentTime());
+        bus.debugAdvanceBusySimSeconds(3);  // 4 sim seconds total → 2 complete ticks
+        assertEquals(2, bus.tickOfDay());
+        assertEquals("08:00:04", bus.currentTime());
     }
 
     // ── Day rollover gate: the next 08:00 is reachable only after the wrap-up ─
@@ -320,14 +363,14 @@ class TimeManagerTest {
     @Test
     void testNextDayReachableOnlyWhenRolloverReady() {
         TimeEventBus bus = makeBus();
-        bus.debugSetTick(62);
+        bus.debugSetTick(bus.shiftEndTick + 2);
         // no gate installed → next-day shift start reachable (standalone/legacy behavior)
-        assertEquals(TICKS_PER_DAY, bus.debugNextEventTick());
+        assertEquals(bus.ticksPerDay, bus.debugNextEventTick());
         // gate installed but the team has not wrapped up → the clock waits at 18:00
         bus.setRolloverReadyChecker(() -> false);
         assertNull(bus.debugNextEventTick());
         bus.setRolloverReadyChecker(() -> true);
-        assertEquals(TICKS_PER_DAY, bus.debugNextEventTick());
+        assertEquals(bus.ticksPerDay, bus.debugNextEventTick());
     }
 
     // ── Helpers ───────────────────────────────────────────────
