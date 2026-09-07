@@ -25,26 +25,34 @@ import java.util.function.Supplier;
  * day) and an event bus (3-layer filtering pipeline + timed event schedule table). Time and events
  * are deeply coupled.
  *
- * <p><b>Simulated wall clock.</b> One tick = {@link #MINUTES_PER_TICK} simulated minutes. Every
- * "work day" is a 24&nbsp;h tick cycle ({@link #TICKS_PER_DAY} ticks) that starts at 08:00 of a
- * real calendar date: tick 0 of each day is 08:00 and the shift-end tick
- * ({@link #SHIFT_END_TICK}) is 18:00. The calendar date is {@link #baseDate()} + (day&nbsp;−&nbsp;1)
- * (rolling past midnight within the cycle when needed), so entering the system always reads as
- * "today 08:00".
+ * <p><b>Tick ↔ simulated time.</b> One tick stands for {@link #secondsPerTick} simulated seconds
+ * (configurable, default {@value #DEFAULT_SECONDS_PER_TICK} — 1 Tick = 1 simulated second). The
+ * simulation keeps the classical tick geometry, expressed in seconds:
+ * <ul>
+ *   <li>the 10&nbsp;h work shift (08:00–18:00) is {@value #SIM_SECONDS_PER_SHIFT} simulated
+ *       seconds = {@code shiftEndTick} ticks (default {@value #DEFAULT_SHIFT_END_TICK} ticks at
+ *       1&nbsp;s/tick, i.e. tick&nbsp;0 → 08:00:00, tick 36000 → 18:00:00);</li>
+ *   <li>a full calendar day (08:00 → next 08:00) is {@value #SIM_SECONDS_PER_DAY} simulated
+ *       seconds = {@code ticksPerDay} ticks (default {@value #DEFAULT_TICKS_PER_DAY}); the
+ *       after-hours window (18:00 → 08:00) exists in tick space but is skipped by the rollover
+ *       jump;</li>
+ *   <li>calendar dates: day 1 = {@link #baseDate()} at 08:00:00, each day cycle the next date
+ *       (the clock rolls past midnight within the cycle when needed).</li>
+ * </ul>
  *
  * <p><b>Clock advancement rules (event-driven, does not flow with real time).</b>
  * <ul>
  *   <li><i>Busy flow:</i> while at least one role is working ({@link #setBusyChecker}), the clock
- *       advances with the real time spent working at a compressed rate
- *       ({@link #simMinutesPerRealSecond}, default 1 simulated minute per real second). Busy work
- *       may never push the clock past the 18:00 shift end of the current day — anything still
- *       queued then is carried over to the next day.</li>
+ *       advances with the real time spent working at
+ *       {@link #simSecondsPerRealSecond} simulated seconds per real second (default 1 — busy time
+ *       flows in real time). Busy work may never push the clock past the 18:00 shift end of the
+ *       current day — anything still queued then is carried over to the next day.</li>
  *   <li><i>Idle fast-forward:</i> once <b>all</b> roles have been idle for
  *       {@code idle_seconds}, the clock jumps straight to the next scheduled event tick (a task
  *       reminder / the shift end / the next shift start) — nobody waits in real time.</li>
  *   <li><i>Day rollover:</i> after SHIFT_END every role writes its daily summary and goes OFF_DUTY;
  *       once the whole team has wrapped up ({@link #setRolloverReadyChecker}) the clock rolls over
- *       to the next calendar day's 08:00 shift start. If the wrap-up stalls longer than
+ *       to the next calendar day's 08:00:00 shift start. If the wrap-up stalls longer than
  *       {@link #wrapUpGraceSeconds}, {@link #setRolloverForceHook} is invoked so the loop can
  *       never deadlock.</li>
  * </ul>
@@ -58,34 +66,44 @@ public class TimeEventBus extends EventBus {
     public static final String EVENT_SHIFT_END = "SHIFT_END";
     public static final String EVENT_TASK_DUE = "TASK_DUE";
 
-    public static final int MINUTES_PER_TICK = 10;        // 10 minutes per tick
-    public static final int TICKS_PER_DAY = 144;          // 144 ticks per day (24 hours)
-    public static final int SHIFT_START_TICK = 0;         // shift start: tick 0 of each day → 08:00
-    public static final int SHIFT_END_TICK = 60;          // shift end: tick 60 of each day → 18:00
-    public static final int TASK_TICK_MIN = 0;            // lower bound of the task tick range
-    public static final int TASK_TICK_MAX = 60;           // upper bound of the task tick range (tick 60 = 18:00)
-    public static final int SHIFT_START_HOUR = 8;         // the simulated day starts at 08:00
-    public static final int MINUTES_PER_DAY = 24 * 60;    // 1440 minutes in a day
+    // Tick ↔ simulated-time conversion (configurable; default 1 Tick = 1 simulated second)
+    public static final double DEFAULT_SECONDS_PER_TICK = 1.0;
+    /** Duration of the work shift 08:00–18:00, in simulated seconds. */
+    public static final int SIM_SECONDS_PER_SHIFT = 10 * 3600;   // 36000
+    /** Duration of a full calendar day (08:00 → next 08:00), in simulated seconds. */
+    public static final int SIM_SECONDS_PER_DAY = 24 * 3600;     // 86400
+
+    // Default tick geometry (with the default 1 simulated second per tick)
+    public static final int DEFAULT_SHIFT_START_TICK = 0;        // tick 0 of each day → 08:00:00
+    public static final int DEFAULT_SHIFT_END_TICK = SIM_SECONDS_PER_SHIFT;  // 36000 → 18:00:00
+    public static final int DEFAULT_TICKS_PER_DAY = SIM_SECONDS_PER_DAY;     // 86400 ticks / 24 h
+    public static final int TASK_TICK_MIN = 0;                   // lower bound of the task tick range
+    public static final int DEFAULT_TASK_TICK_MAX = SIM_SECONDS_PER_SHIFT;   // reminders only within the shift
+    public static final int SHIFT_START_HOUR = 8;                // the simulated day starts at 08:00
+    public static final int SHIFT_END_HOUR = 18;                 // the simulated shift ends at 18:00
 
     public static final double DEFAULT_CHECK_INTERVAL = 30.0;
     public static final double FAST_FORWARD_IDLE_SECONDS = 60.0;
-    /** Default speed of the busy clock: 1 real second of team work = 1 simulated minute. */
-    public static final double DEFAULT_SIM_MINUTES_PER_REAL_SECOND = 1.0;
+    /** Default busy-clock speed: 1 real second of team work = 1 simulated second (real-time pacing). */
+    public static final double DEFAULT_SIM_SECONDS_PER_REAL_SECOND = 1.0;
     /** Real seconds the clock waits for the daily wrap-up to finish before forcing the rollover. */
     public static final double DEFAULT_WRAP_UP_GRACE_SECONDS = 600.0;
     /** Poll cadence of the time thread while at least one role is busy (for a smooth clock). */
     public static final long BUSY_POLL_MILLIS = 250;
 
     // ── Configuration ──────────────────────────────────────────────
-    public int minutesPerTick = MINUTES_PER_TICK;
-    public int shiftStartTick = SHIFT_START_TICK;
-    public int shiftEndTick = SHIFT_END_TICK;
-    public int ticksPerDay = TICKS_PER_DAY;
+    /** How many simulated seconds one tick represents (default 1). Changing it rescales the shift/day tick geometry. */
+    public double secondsPerTick = DEFAULT_SECONDS_PER_TICK;
+    public int shiftStartTick = DEFAULT_SHIFT_START_TICK;
+    public int shiftEndTick = DEFAULT_SHIFT_END_TICK;
+    public int ticksPerDay = DEFAULT_TICKS_PER_DAY;
+    public int taskTickMin = TASK_TICK_MIN;
+    public int taskTickMax = DEFAULT_TASK_TICK_MAX;
     public double checkInterval = DEFAULT_CHECK_INTERVAL;
     /** Hour of the day the simulated clock shows at tick 0 of each day (default 08:00). */
     public int shiftStartHour = SHIFT_START_HOUR;
-    /** Busy-clock speed in simulated minutes per real second; 0 freezes the clock while busy (legacy). */
-    public double simMinutesPerRealSecond = DEFAULT_SIM_MINUTES_PER_REAL_SECOND;
+    /** Busy-clock speed in simulated seconds per real second; 0 freezes the clock while busy. */
+    public double simSecondsPerRealSecond = DEFAULT_SIM_SECONDS_PER_REAL_SECOND;
     /** Real seconds allowed for the post-shift wrap-up before {@link #rolloverForceHook} fires. */
     public double wrapUpGraceSeconds = DEFAULT_WRAP_UP_GRACE_SECONDS;
 
@@ -107,9 +125,9 @@ public class TimeEventBus extends EventBus {
     private volatile Double idleSince = null;          // wall-clock time when all roles became idle (epoch seconds)
     private double idleSeconds = FAST_FORWARD_IDLE_SECONDS;
 
-    // Simulated wall clock (calendar-anchored at 08:00)
+    // Simulated wall clock (calendar-anchored at 08:00:00)
     private LocalDate baseDate = LocalDate.now();      // calendar date of day 1 (run start, 08:00)
-    private volatile double busyAccumMinutes = 0.0;    // fractional busy-time accumulator (sub-tick remainder)
+    private volatile double busyAccumSeconds = 0.0;    // fractional busy-time accumulator (sub-tick remainder)
     private Supplier<Boolean> busyChecker = null;      // true while at least one role is working
     private Supplier<Boolean> rolloverReadyChecker = null; // true when the whole team has wrapped up (may roll the day)
     private Runnable rolloverForceHook = null;         // invoked when the wrap-up grace period is exceeded
@@ -212,6 +230,28 @@ public class TimeEventBus extends EventBus {
         this.rolloverForceHook = hook;
     }
 
+    /**
+     * Change the Tick ↔ simulated-time conversion (simulated seconds per tick, default 1) and
+     * rescale the day/shift geometry accordingly. Must be called before the clock starts.
+     *
+     * @throws IllegalStateException if the time thread is already running.
+     */
+    public void setSecondsPerTick(double secondsPerTickVal) {
+        if (running) {
+            throw new IllegalStateException("Cannot change secondsPerTick while the time thread is running");
+        }
+        if (!(secondsPerTickVal > 0)) {
+            throw new IllegalArgumentException("secondsPerTick must be > 0, got " + secondsPerTickVal);
+        }
+        this.secondsPerTick = secondsPerTickVal;
+        this.shiftEndTick = Math.max(1, (int) Math.round(SIM_SECONDS_PER_SHIFT / secondsPerTickVal));
+        this.taskTickMax = this.shiftEndTick;
+        this.ticksPerDay = Math.max(this.shiftEndTick + 1,
+                (int) Math.round(SIM_SECONDS_PER_DAY / secondsPerTickVal));
+        logger.info("TimeEventBus: secondsPerTick = {} → shift end tick {}, ticks per day {}",
+                secondsPerTickVal, shiftEndTick, ticksPerDay);
+    }
+
     /** Whether the next-day shift start is reachable right now (default true when no gate is installed). */
     private boolean dayRolloverReady() {
         return rolloverReadyChecker == null || Boolean.TRUE.equals(rolloverReadyChecker.get());
@@ -266,7 +306,8 @@ public class TimeEventBus extends EventBus {
         this.tick = target;
         idleSince = null;
         logger.debug("All roles have been idle for {}s, fast-forwarding to next event tick {} (was {})", (long) idleSeconds, target, current);
-        logger.info("⚡ Fast-forward: all roles idle ≥{}s, clock jumps to tick {} (was {})", (long) idleSeconds, target, current);
+        logger.info("⚡ Fast-forward: all roles idle ≥{}s, clock jumps to tick {} (was {}, now {})",
+                (long) idleSeconds, target, current, currentDateTime());
     }
 
     /** Compute the next event fire tick (absolute tick); returns null if none. */
@@ -305,7 +346,7 @@ public class TimeEventBus extends EventBus {
 
     // ── Simulated calendar clock (08:00 anchored) ──────────────
 
-    /** Calendar date of day 1 (the day the run starts, at 08:00). */
+    /** Calendar date of day 1 (the day the run starts, at 08:00:00). */
     public LocalDate baseDate() {
         return baseDate;
     }
@@ -324,33 +365,34 @@ public class TimeEventBus extends EventBus {
         return currentDate().toString();
     }
 
-    /** Current simulated time of day as "HH:MM". */
+    /** Current simulated time of day as "HH:MM:SS". */
     public String currentTime() {
         return tickToTime(tickOfDay());
     }
 
-    /** Current simulated date-time as "yyyy-MM-dd HH:mm". */
+    /** Current simulated date-time as "yyyy-MM-dd HH:mm:ss". */
     public String currentDateTime() {
         LocalDateTime dt = currentLocalDateTime();
-        return String.format("%s %02d:%02d", dt.toLocalDate(), dt.getHour(), dt.getMinute());
+        return String.format("%s %02d:%02d:%02d",
+                dt.toLocalDate(), dt.getHour(), dt.getMinute(), dt.getSecond());
     }
 
     /** Current simulated date-time. */
     public LocalDateTime currentLocalDateTime() {
-        long minutes = (long) shiftStartHour * 60 + (long) tickOfDay() * minutesPerTick;
-        long dayOffset = Math.floorDiv(minutes, MINUTES_PER_DAY);
-        int minutesOfDay = (int) Math.floorMod(minutes, MINUTES_PER_DAY);
+        long total = totalSimSecondsOfDay(tickOfDay());
+        long dayOffset = Math.floorDiv(total, SIM_SECONDS_PER_DAY);
+        int secondsOfDay = (int) Math.floorMod(total, SIM_SECONDS_PER_DAY);
         return LocalDateTime.of(
                 baseDate.plusDays((long) dayNumber() - 1 + dayOffset),
-                LocalTime.of(minutesOfDay / 60, minutesOfDay % 60));
+                LocalTime.ofSecondOfDay(secondsOfDay));
     }
 
-    /** Wall clock shown when each day's shift starts (e.g. "08:00"). */
+    /** Wall clock shown when each day's shift starts (e.g. "08:00:00"). */
     public String shiftStartTime() {
         return tickToTime(shiftStartTick);
     }
 
-    /** Wall clock shown when each day's shift ends (e.g. "18:00"). */
+    /** Wall clock shown when each day's shift ends (e.g. "18:00:00"). */
     public String shiftEndTime() {
         return tickToTime(shiftEndTick);
     }
@@ -370,19 +412,30 @@ public class TimeEventBus extends EventBus {
     }
 
     /**
-     * Convert a (day-local) tick to the simulated wall clock "HH:MM". The simulated day is anchored
-     * at {@link #shiftStartHour}:00, so tick 0 of each day maps to 08:00 and the shift-end tick
-     * ({@code SHIFT_END_TICK} = 60) maps to 18:00.
+     * Convert a (day-local) tick to the simulated wall clock "HH:MM:SS". The simulated day is
+     * anchored at {@link #shiftStartHour}:00:00, so tick 0 of each day maps to 08:00:00 and the
+     * shift-end tick ({@code shiftEndTick}, default 36000) maps to 18:00:00. Ticks past the day
+     * cycle wrap like a real clock (used for cross-boundary queries).
      */
     public String tickToTime(int tickVal) {
-        int totalMinutes = minutesOfDay(tickVal);
-        return String.format("%02d:%02d", totalMinutes / 60, totalMinutes % 60);
+        int seconds = secondsOfDay(tickVal);
+        return String.format("%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60);
     }
 
-    /** Minutes of day (0..1439) for the given tick, anchored at the 08:00 shift start. */
-    private int minutesOfDay(int tickVal) {
-        long total = (long) shiftStartHour * 60 + (long) tickVal * minutesPerTick;
-        return (int) Math.floorMod(total, MINUTES_PER_DAY);
+    /** Seconds of day (0..86399) at the given tick, anchored at the 08:00 shift start. */
+    private int secondsOfDay(int tickVal) {
+        return (int) Math.floorMod(totalSimSecondsOfDay(tickVal), SIM_SECONDS_PER_DAY);
+    }
+
+    /** Total simulated seconds from the 08:00 anchor: shift start hour + tick × secondsPerTick. */
+    private long totalSimSecondsOfDay(int tickVal) {
+        double total = (long) shiftStartHour * 3600.0 + (double) tickVal * secondsPerTick;
+        return (long) Math.floor(total);
+    }
+
+    /** Convert a number of ticks to simulated seconds (helper for callers of the conversion). */
+    public double ticksToSimSeconds(int tickVal) {
+        return (double) tickVal * secondsPerTick;
     }
 
     public boolean isWorkingHours() {
@@ -411,7 +464,7 @@ public class TimeEventBus extends EventBus {
         int tod = tickOfDay();
         String clock = currentDateTime();
         if (tod >= shiftEndTick) {
-            return String.format("%s Day %d (off duty — shift ended at %s; after the daily wrap-up the next shift starts tomorrow 08:00)",
+            return String.format("%s Day %d (off duty — shift ended at %s; after the daily wrap-up the next shift starts tomorrow 08:00:00)",
                     clock, day, shiftEndTime());
         }
         return String.format("%s Day %d (on duty — shift ends at %s)",
@@ -421,7 +474,7 @@ public class TimeEventBus extends EventBus {
     // ── Time thread (exclusive) ───────────────────────────────────
 
     /**
-     * Start the time thread. The system startup moment is recorded as tick 0 / day 1 = 08:00 of
+     * Start the time thread. The system startup moment is recorded as tick 0 / day 1 = 08:00:00 of
      * {@link #baseDate()}; if setProgress was called, jump directly to the resume point (event
      * flags are set according to the resume point; already-fired events are not replayed).
      */
@@ -435,7 +488,7 @@ public class TimeEventBus extends EventBus {
         firedStart = false;
         firedEnd = false;
         shiftEndedAt = null;
-        busyAccumMinutes = 0;
+        busyAccumSeconds = 0;
         if (pendingProgress != null) {
             int day = pendingProgress[0];
             int tod = pendingProgress[1];
@@ -450,7 +503,7 @@ public class TimeEventBus extends EventBus {
         thread = new Thread(this::tickLoop, "time-manager");
         thread.setDaemon(true);
         thread.start();
-        logger.info("TimeEventBus time thread started (startup moment = {} 08:00 day 1, check interval {}s)",
+        logger.info("TimeEventBus time thread started (startup moment = {} 08:00:00 day 1, check interval {}s)",
                 baseDate, checkInterval);
     }
 
@@ -481,13 +534,15 @@ public class TimeEventBus extends EventBus {
     /**
      * Register a scheduled task; when the specified tick is reached, send a reminder event to the event bus.
      *
-     * @throws IllegalArgumentException if target_tick is outside the [0, 60] range.
+     * @throws IllegalArgumentException if target_tick is outside the shift range
+     *         [taskTickMin, taskTickMax] (default 0~36000, i.e. 08:00:00–18:00:00).
      */
     public ScheduledTask scheduleTask(String description, String ownerRole, int targetTick,
                                       Integer day, Map<String, Object> payload) {
-        if (targetTick < TASK_TICK_MIN || targetTick > TASK_TICK_MAX) {
+        if (targetTick < taskTickMin || targetTick > taskTickMax) {
             throw new IllegalArgumentException(String.format(
-                    "target_tick must be within %d~%d, got %d", TASK_TICK_MIN, TASK_TICK_MAX, targetTick));
+                    "target_tick must be within %d~%d (shift 08:00–18:00), got %d",
+                    taskTickMin, taskTickMax, targetTick));
         }
         ScheduledTask task = new ScheduledTask(description, ownerRole, targetTick,
                 day != null ? day : dayNumber(),
@@ -496,8 +551,8 @@ public class TimeEventBus extends EventBus {
         // Only save the task list; register an event directly for same-day tasks, and load next-day tasks
         // automatically when the target day's shift starts
         registerTaskEventIfToday(task);
-        logger.info("TimeEventBus: scheduled task registered [{}] {} → tick {} (day {}), owner {}",
-                task.taskId, description, targetTick, task.day, ownerRole);
+        logger.info("TimeEventBus: scheduled task registered [{}] {} → tick {} (day {}, ≈{}), owner {}",
+                task.taskId, description, targetTick, task.day, tickToTime(targetTick), ownerRole);
         return task;
     }
 
@@ -585,14 +640,15 @@ public class TimeEventBus extends EventBus {
         }
         int newDay = day != null ? day : task.day;
         int newTick = targetTick != null ? targetTick : task.targetTick;
-        if (newTick < TASK_TICK_MIN || newTick > TASK_TICK_MAX) {
+        if (newTick < taskTickMin || newTick > taskTickMax) {
             throw new IllegalArgumentException(String.format(
-                    "target_tick must be within %d~%d, got %d", TASK_TICK_MIN, TASK_TICK_MAX, newTick));
+                    "target_tick must be within %d~%d (shift 08:00–18:00), got %d",
+                    taskTickMin, taskTickMax, newTick));
         }
         if ((newDay - 1) * ticksPerDay + newTick < currentTick()) {
             throw new IllegalArgumentException(String.format(
-                    "cannot move task [ID=%s] to a past time: day %d tick %d has already passed (current absolute tick %d)",
-                    taskId, newDay, newTick, currentTick()));
+                    "cannot move task [ID=%s] to a past time: day %d tick %d (≈%s) has already passed (current absolute tick %d)",
+                    taskId, newDay, newTick, tickToTime(newTick), currentTick()));
         }
         cancelTaskEvent(taskId);
         if (description != null) {
@@ -666,35 +722,35 @@ public class TimeEventBus extends EventBus {
 
     /**
      * Advance the simulated clock by the real time spent with at least one role busy
-     * ({@link #simMinutesPerRealSecond} simulated minutes per real second). Busy work may never
+     * ({@link #simSecondsPerRealSecond} simulated seconds per real second). Busy work may never
      * push the clock past the current day's shift-end tick (18:00): work still queued when the
      * shift ends simply carries over to the next day.
      */
     private void advanceBusyClock(double realSeconds) {
-        if (simMinutesPerRealSecond <= 0 || realSeconds <= 0) {
+        if (simSecondsPerRealSecond <= 0 || realSeconds <= 0) {
             return;
         }
-        advanceBusySimMinutes(realSeconds * simMinutesPerRealSecond);
+        advanceBusySimSeconds(realSeconds * simSecondsPerRealSecond);
     }
 
-    /** Fold accumulated simulated busy minutes into ticks (never past the 18:00 shift end). */
-    private void advanceBusySimMinutes(double simMinutes) {
-        if (simMinutes <= 0) {
+    /** Fold accumulated simulated busy seconds into ticks (never past the 18:00 shift end). */
+    private void advanceBusySimSeconds(double simSeconds) {
+        if (simSeconds <= 0) {
             return;
         }
         if (tickOfDay() >= shiftEndTick) {
-            busyAccumMinutes = 0;  // the work day is over (wrap-up runs with the clock frozen at 18:00)
+            busyAccumSeconds = 0;  // the work day is over (wrap-up runs with the clock frozen at 18:00)
             return;
         }
-        busyAccumMinutes += simMinutes;
-        while (busyAccumMinutes >= minutesPerTick) {
+        busyAccumSeconds += simSeconds;
+        while (busyAccumSeconds >= secondsPerTick) {
             int available = shiftEndTick - tickOfDay();
             if (available <= 0) {
-                busyAccumMinutes = 0;  // reached 18:00: discard busy time beyond the shift (it belongs to tomorrow)
+                busyAccumSeconds = 0;  // reached 18:00: discard busy time beyond the shift (it belongs to tomorrow)
                 break;
             }
-            int step = Math.min((int) Math.floor(busyAccumMinutes / minutesPerTick), available);
-            busyAccumMinutes -= (double) step * minutesPerTick;
+            int step = Math.min((int) Math.floor(busyAccumSeconds / secondsPerTick), available);
+            busyAccumSeconds -= (double) step * secondsPerTick;
             this.tick += step;
             logger.debug("Sim clock busy-advance: +{} tick(s) → tick {} ({})",
                     step, tick, currentTime());
@@ -747,8 +803,8 @@ public class TimeEventBus extends EventBus {
             firedStart = false;
             firedEnd = false;
             shiftEndedAt = null;
-            busyAccumMinutes = 0;  // a new 08:00 shift starts with a clean busy-time budget
-            logger.info("TimeEventBus: entering day {} ({} 08:00)", day, baseDate.plusDays((long) day - 1));
+            busyAccumSeconds = 0;  // a new 08:00 shift starts with a clean busy-time budget
+            logger.info("TimeEventBus: entering day {} ({} 08:00:00)", day, baseDate.plusDays((long) day - 1));
         }
 
         // Shift-start event (fires once per day; the condition uses a range rather than strict == to avoid missing the tick-0 window)
@@ -817,9 +873,9 @@ public class TimeEventBus extends EventBus {
         return registerTaskEventIfToday(task);
     }
 
-    /** Advance the clock by simulated busy minutes without waiting on a wall clock (test hook). */
-    void debugAdvanceBusySimMinutes(double simMinutes) {
-        advanceBusySimMinutes(simMinutes);
+    /** Advance the clock by simulated busy seconds without waiting on a wall clock (test hook). */
+    void debugAdvanceBusySimSeconds(double simSeconds) {
+        advanceBusySimSeconds(simSeconds);
     }
 
     // ── Process-level default shared clock ─────────────────────────────────

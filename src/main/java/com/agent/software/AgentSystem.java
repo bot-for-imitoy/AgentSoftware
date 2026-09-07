@@ -123,16 +123,26 @@ public class AgentSystem {
         this.timeManager.setBusyChecker(() -> !allRolesIdle());
         this.timeManager.setRolloverReadyChecker(this::dayRolloverReady);
         this.timeManager.setRolloverForceHook(this::forceWrapUp);
-        // Busy-clock speed is tunable per run (simulated minutes per real second of team work)
-        double simRate = TimeEventBus.DEFAULT_SIM_MINUTES_PER_REAL_SECOND;
+        // Tick ↔ simulated-time conversion (simulated seconds per tick, default 1) and the busy
+        // clock speed (simulated seconds per real second of team work, default 1 = real-time flow)
+        double secondsPerTick = TimeEventBus.DEFAULT_SECONDS_PER_TICK;
         try {
-            simRate = Double.parseDouble(System.getProperty(
-                    "agentsoftware.simMinutesPerRealSecond",
-                    System.getenv().getOrDefault("AGENTSOFTWARE_SIM_MINUTES_PER_REAL_SECOND",
-                            String.valueOf(TimeEventBus.DEFAULT_SIM_MINUTES_PER_REAL_SECOND))));
+            secondsPerTick = Double.parseDouble(System.getProperty(
+                    "agentsoftware.secondsPerTick",
+                    System.getenv().getOrDefault("AGENTSOFTWARE_SECONDS_PER_TICK",
+                            String.valueOf(TimeEventBus.DEFAULT_SECONDS_PER_TICK))));
         } catch (NumberFormatException ignored) {
         }
-        this.timeManager.simMinutesPerRealSecond = simRate;
+        this.timeManager.setSecondsPerTick(secondsPerTick);
+        double simRate = TimeEventBus.DEFAULT_SIM_SECONDS_PER_REAL_SECOND;
+        try {
+            simRate = Double.parseDouble(System.getProperty(
+                    "agentsoftware.simSecondsPerRealSecond",
+                    System.getenv().getOrDefault("AGENTSOFTWARE_SIM_SECONDS_PER_REAL_SECOND",
+                            String.valueOf(TimeEventBus.DEFAULT_SIM_SECONDS_PER_REAL_SECOND))));
+        } catch (NumberFormatException ignored) {
+        }
+        this.timeManager.simSecondsPerRealSecond = simRate;
 
         List<AgentRole> all = new ArrayList<>();
         if (roles != null) {

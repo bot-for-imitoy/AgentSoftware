@@ -40,10 +40,10 @@ class AgentSystemTimeTest {
     @Test
     void allRolesIdleTreatsQueuedWorkAsActivityBeforeShiftEnd() {
         AgentSystem s = make(tmp.resolve("a"));
-        s.timeManager.setProgress(1, 30);  // mid-shift (11:00)
+        s.timeManager.setProgress(1, s.timeManager.shiftEndTick / 3);  // mid-shift (≈11:20:00)
         s.timeManager.start();             // applies the resume point synchronously
         try {
-            assertEquals(30, s.timeManager.tickOfDay());
+            assertEquals(s.timeManager.shiftEndTick / 3, s.timeManager.tickOfDay());
             assertTrue(s.allRolesIdle());  // nobody busy, queues empty
             s.assignTask("CEO", task("review the design"));
             assertFalse(s.allRolesIdle());  // queued work keeps the clock alive
@@ -57,7 +57,7 @@ class AgentSystemTimeTest {
     @Test
     void afterShiftEndLeftoverQueuesDoNotBlockRollover() {
         AgentSystem s = make(tmp.resolve("b"));
-        s.timeManager.setProgress(1, 60);  // shift ended (18:00)
+        s.timeManager.setProgress(1, s.timeManager.shiftEndTick);  // shift ended (18:00:00)
         s.timeManager.start();
         try {
             for (AgentRole r : s.pool.allRoles()) {
@@ -66,7 +66,7 @@ class AgentSystemTimeTest {
             s.assignTask("CEO", task("leftover task carried over to tomorrow"));
             // the leftover queue must not block the clock...
             assertTrue(s.allRolesIdle());
-            // ...and once every role is OFF_DUTY the team is ready to roll to the next 08:00
+            // ...and once every role is OFF_DUTY the team is ready to roll to the next 08:00:00
             assertTrue(s.dayRolloverReady());
         } finally {
             s.timeManager.stop();
@@ -78,7 +78,7 @@ class AgentSystemTimeTest {
     @Test
     void dayRolloverWaitsForTheDailyWrapUp() {
         AgentSystem s = make(tmp.resolve("c"));
-        s.timeManager.setProgress(1, 60);
+        s.timeManager.setProgress(1, s.timeManager.shiftEndTick);
         s.timeManager.start();
         try {
             AgentRole ceo = s.getRole("CEO");

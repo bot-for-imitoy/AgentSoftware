@@ -8,7 +8,8 @@ import java.util.Map;
 
 /**
  * get_time — view the current simulated schedule time (calendar date, clock and work-rest status).
- * Time rules: 1 tick = 10 minutes, each day starts at 08:00 (tick 0) and ends at 18:00 (tick 60).
+ * Time rules: 1 tick = 1 simulated second (configurable), each day starts at 08:00:00 (tick 0)
+ * and the shift ends at 18:00:00 (tick 36000 by default).
  */
 public class GetTime extends Tool {
 
