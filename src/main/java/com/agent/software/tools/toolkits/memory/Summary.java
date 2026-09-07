@@ -70,6 +70,14 @@ public class Summary extends Tool {
                 agentRole.setState(Types.AgentState.OFF_DUTY);
                 logger.info("[{}] summary complete, role switched to OFF_DUTY", agentRole.roleId);
             }
+            // Conversation management (role ↔ LLM API): the day's recap now lives in the summary
+            // note above, so close the day dialogue — clear the context and mark the day closed
+            // (the in-flight "summary saved" exchange will not be appended afterwards)
+            try {
+                agentRole.conversation().closeDay(day);
+            } catch (Exception e) {
+                logger.warn("[{}] failed to close the day conversation", agentRole.roleId, e);
+            }
             try {
                 Computer comp = agentRole.computerIfCreated();
                 if (comp != null && comp.isOn()) {

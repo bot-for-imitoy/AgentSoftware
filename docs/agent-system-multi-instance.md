@@ -99,6 +99,8 @@ New direct fields on `AgentSystem` (all per-system independent instances; multip
 - `mcpManager` (MCPManager) / `skillManager` (SkillManager) — one per system
 - `clientLock` (ClientCommunicationLock) — one Client A conversation lock per system
 - `chatStore` (ChatStore) — one chat store per system (data source for the Web UI)
+- `conversationManager` (ConversationManager) — one role ↔ LLM API dialogue registry per system
+  (each role's day conversation lives here, so multiple systems never share dialogue state)
 - `dataDir` (Path) — per-system data root directory, default `./data`
 
 Derived data directories (all rooted at `dataDir`): `journalDir/notesDir/todosDir/mailDir/
@@ -111,9 +113,9 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
 
 | File | Change |
 |---|---|
-| `AgentSystem` | Add direct fields `computerManager/mailService/mcpManager/skillManager/clientLock/chatStore/dataDir` created at construction time; add an `AgentSystem(Path dataDir, ...)` overload (original signature stays compatible); `addRoles` unconditionally binds `bindTimeManager` + `bindSystem(this)`; add accessors for each data directory |
+| `AgentSystem` | Add direct fields `computerManager/mailService/mcpManager/skillManager/clientLock/chatStore/conversationManager/dataDir` created at construction time; add an `AgentSystem(Path dataDir, ...)` overload (original signature stays compatible); `addRoles` unconditionally binds `bindTimeManager` + `bindSystem(this)`; add accessors for each data directory |
 | `RolePool` | Add a constructor overload carrying `AgentSystem owner` (may be null = standalone role pool); `setupRole` binds `bindSystem`; default MCP groups use `role.mcpManager()`; `removeRole` uses `role.computerManager()`; `newLlm` uses `owner.configStore` |
-| `AgentRole` | Add a `system` field and `bindSystem()/system()`; add `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()/chatStore()` resolution helpers (use the system instance when owned by a system, otherwise fall back to global defaults to keep legacy usage compatible); `computer()/mailAddress()/noteStore()/todoStore()/journal()` all go through the owning system |
+| `AgentRole` | Add a `system` field and `bindSystem()/system()`; add `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()/chatStore()/conversation()` resolution helpers (use the system instance when owned by a system, otherwise fall back to global defaults to keep legacy usage compatible); `computer()/mailAddress()/noteStore()/todoStore()/journal()` all go through the owning system |
 | `Toolkits.defaultToolkits` | Build tool classes with `role.mcpManager()/skillManager()/mailService()` (roles inside a system get that system's instances) |
 | `toolkits/client/Client` + `TalkToClient` | Use `role.system().clientLock` / `.chatStore` (unbound systems fall back to global defaults / no chat store) |
 | `toolkits/talk/TalkTo` | `recordTalk` uses `role.system().chatStore` |

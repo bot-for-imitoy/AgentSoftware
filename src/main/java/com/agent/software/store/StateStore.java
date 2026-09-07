@@ -158,6 +158,10 @@ public class StateStore {
             history.add(t.toDict());
         }
         m.put("history", history);
+        // Role ↔ LLM conversation state (open day dialogue only; closed/empty conversations are skipped)
+        if (!role.conversation().isEmpty()) {
+            m.put("conversation", role.conversation().toDict());
+        }
         return m;
     }
 
@@ -269,6 +273,13 @@ public class StateStore {
         try {
             role.setState(Types.AgentState.from(Json.str(rdata, "state", role.state.value)));
         } catch (IllegalArgumentException ignored) {
+        }
+        // Restore the role ↔ LLM conversation (open day dialogue), if the archive carried one
+        Object convObj = rdata.get("conversation");
+        if (convObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> conv = (Map<String, Object>) convObj;
+            role.conversation().restore(conv);
         }
         return role;
     }

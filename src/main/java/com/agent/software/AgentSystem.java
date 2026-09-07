@@ -2,6 +2,7 @@ package com.agent.software;
 
 import com.agent.software.computers.Computer;
 import com.agent.software.computers.ComputerManager;
+import com.agent.software.conversation.ConversationManager;
 import com.agent.software.core.Types;
 import com.agent.software.event.EventDispatcher;
 import com.agent.software.event.TimeEventBus;
@@ -63,6 +64,8 @@ public class AgentSystem {
     public final ClientCommunicationLock clientLock;
     /** This system's chat message storage + Client A conversation coordination (Web UI data source). */
     public final ChatStore chatStore;
+    /** This system's role ↔ LLM API conversation registry (one ongoing dialogue per role, per day). */
+    public final ConversationManager conversationManager = new ConversationManager();
 
     /**
      * This system's client-input channel (console {@link StdInput} or Web-page {@link WebInput}),
