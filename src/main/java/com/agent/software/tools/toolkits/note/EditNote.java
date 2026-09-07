@@ -29,7 +29,7 @@ public class EditNote extends Tool {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("name", "The name of the note to edit.");
         schema.put("content", "The new content of the note.");
-        schema.put("reminder_tick", "(Optional) Reminder Tick. 0~60.");
+        schema.put("reminder_tick", "(Optional) Reminder Tick, within the shift 0~60 (0 = 08:00, 60 = 18:00).");
         schema.put("reminder_day", "(Optional, needs reminder_tick) Reminder day, default to today.");
         return schema;
     }

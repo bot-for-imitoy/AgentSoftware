@@ -234,6 +234,102 @@ class TimeManagerTest {
         assertEquals(1, bus.tickSchedule.size());
     }
 
+    // ── Simulated wall clock (08:00 anchor, calendar dates) ─────
+
+    @Test
+    void testTickToTimeAnchoredAtEight() {
+        TimeEventBus bus = makeBus();
+        assertEquals("08:00", bus.tickToTime(0));     // shift start
+        assertEquals("18:00", bus.tickToTime(60));    // shift end
+        assertEquals("09:30", bus.tickToTime(9));
+        assertEquals("00:00", bus.tickToTime(96));    // crosses midnight within the day cycle
+        assertEquals("07:50", bus.tickToTime(143));
+        assertEquals("08:00", bus.tickToTime(144));   // next day's start
+        assertEquals("08:00", bus.shiftStartTime());
+        assertEquals("18:00", bus.shiftEndTime());
+    }
+
+    @Test
+    void testCalendarDateMath() {
+        TimeEventBus bus = makeBus();
+        bus.setBaseDate(java.time.LocalDate.of(2025, 1, 6));
+        bus.debugSetTick(0);
+        assertEquals(1, bus.dayNumber());
+        assertEquals("2025-01-06 08:00", bus.currentDateTime());
+        bus.debugSetTick(60);
+        assertEquals("2025-01-06 18:00", bus.currentDateTime());
+        bus.debugSetTick(100);  // 08:00 + 16h40m → 00:40 of the next calendar date
+        assertEquals(1, bus.dayNumber());            // the tick cycle still belongs to day 1
+        assertEquals("2025-01-07 00:40", bus.currentDateTime());
+        bus.debugSetTick(144);                       // next day's 08:00
+        assertEquals(2, bus.dayNumber());
+        assertEquals("2025-01-07 08:00", bus.currentDateTime());
+    }
+
+    @Test
+    void testDescribeCarriesCalendarClock() {
+        TimeEventBus bus = makeBus();
+        bus.setBaseDate(java.time.LocalDate.of(2025, 1, 6));
+        bus.start();
+        sleep(150);
+        String onDuty = bus.describe();
+        assertTrue(onDuty.contains("2025-01-06 08:00"), onDuty);
+        assertTrue(onDuty.contains("on duty"), onDuty);
+        bus.debugSetTick(60);
+        assertTrue(bus.describe().contains("off duty"), bus.describe());
+        bus.stop();
+    }
+
+    // ── Busy clock: simulated time flows while roles work, capped at 18:00 ─
+
+    @Test
+    void testBusyAdvanceFoldsSimulatedMinutesIntoTicks() {
+        TimeEventBus bus = makeBus();
+        bus.start();
+        sleep(150);
+        assertEquals(0, bus.currentTick());  // nothing busy → clock frozen
+        bus.debugAdvanceBusySimMinutes(95);  // 95 sim minutes of work → 9 ticks (90 min), 5 min remainder
+        assertEquals(9, bus.tickOfDay());
+        assertEquals("09:30", bus.currentTime());
+        bus.stop();
+    }
+
+    @Test
+    void testBusyAdvanceCappedAtShiftEnd() {
+        TimeEventBus bus = makeBus();
+        bus.debugSetTick(55);  // 17:10
+        bus.debugAdvanceBusySimMinutes(10_000);  // no amount of busy work may pass 18:00
+        assertEquals(60, bus.tickOfDay());
+        assertEquals("18:00", bus.currentTime());
+        bus.debugAdvanceBusySimMinutes(10_000);  // wrap-up runs with the clock frozen at 18:00
+        assertEquals(60, bus.tickOfDay());
+    }
+
+    @Test
+    void testBusyRemainderCarriesSubTick() {
+        TimeEventBus bus = makeBus();
+        bus.debugAdvanceBusySimMinutes(4);  // less than one tick
+        assertEquals(0, bus.tickOfDay());
+        bus.debugAdvanceBusySimMinutes(6);  // completes the tick
+        assertEquals(1, bus.tickOfDay());
+        assertEquals("08:10", bus.currentTime());
+    }
+
+    // ── Day rollover gate: the next 08:00 is reachable only after the wrap-up ─
+
+    @Test
+    void testNextDayReachableOnlyWhenRolloverReady() {
+        TimeEventBus bus = makeBus();
+        bus.debugSetTick(62);
+        // no gate installed → next-day shift start reachable (standalone/legacy behavior)
+        assertEquals(TICKS_PER_DAY, bus.debugNextEventTick());
+        // gate installed but the team has not wrapped up → the clock waits at 18:00
+        bus.setRolloverReadyChecker(() -> false);
+        assertNull(bus.debugNextEventTick());
+        bus.setRolloverReadyChecker(() -> true);
+        assertEquals(TICKS_PER_DAY, bus.debugNextEventTick());
+    }
+
     // ── Helpers ───────────────────────────────────────────────
 
     private static Types.Event ev(String eventType) {

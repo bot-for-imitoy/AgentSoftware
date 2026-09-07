@@ -26,6 +26,8 @@ const state = {
   inputEnabled: false,
   day: 1,
   tick: 0,
+  date: "",
+  time: "",
   describe: "",
 };
 
@@ -476,8 +478,11 @@ async function pollState() {
   if (!body.ok) return;
   state.day = body.day;
   state.tick = body.tick;
+  state.date = body.date || "";
+  state.time = body.time || "";
   state.describe = body.describe || "";
-  $("sysInfo").textContent = `Day ${body.day} · Tick ${body.tick} · ${state.describe}`;
+  $("sysInfo").textContent =
+    `${state.date ? state.date + " · " : ""}Day ${body.day} · ${state.time} · ${state.describe}`;
 
   const ct = body.clientTalk || { active: false };
   state.clientTalk = ct;

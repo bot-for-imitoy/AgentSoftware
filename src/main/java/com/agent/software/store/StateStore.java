@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -124,6 +125,7 @@ public class StateStore {
         Map<String, Object> time = new LinkedHashMap<>();
         time.put("day", tm.dayNumber());
         time.put("tick_of_day", tm.tickOfDay());
+        time.put("base_date", tm.baseDate().toString());  // calendar date of day 1 (simulated wall clock)
         data.put("time", time);
         data.put("roles", rolesData);
         data.put("computers", computers);
@@ -210,6 +212,17 @@ public class StateStore {
         int day = t.get("day") instanceof Number n ? n.intValue() : 1;
         int tod = t.get("tick_of_day") instanceof Number n2 ? n2.intValue() : 0;
         system.timeManager.setProgress(day, tod);
+        // Simulated calendar base date (archives saved before this feature fall back to today)
+        String baseDateStr = t.get("base_date") instanceof String s ? s : null;
+        if (baseDateStr != null) {
+            try {
+                system.timeManager.setBaseDate(LocalDate.parse(baseDateStr));
+            } catch (Exception e) {
+                logger.warn("StateStore: invalid base_date '{}' in archive, using today", baseDateStr);
+            }
+        } else if (day > 1) {
+            logger.warn("StateStore: archive has no base_date; simulated calendar dates will be counted from today");
+        }
 
         logger.info("StateStore: restored {} roles → {}", restored, system.timeManager.describe());
         return restored;

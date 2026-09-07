@@ -13,7 +13,7 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 (0-token filtering), and per-role computers give every agent an isolated filesystem.
 
 > Status: actively developed. The engine, role system, toolkits, Web UI and persistence are in
-> place and covered by **181 JUnit tests**; the simulation flow itself keeps being refined.
+> place and covered by **193 JUnit tests**; the simulation flow itself keeps being refined.
 
 ---
 
@@ -35,10 +35,14 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 
 ## Key Ideas
 
-- **Shift-driven, not loop-driven.** A shared `TimeEventBus` provides the clock (day / Tick)
-  and the event bus at the same time. The work day starts at Tick 0 (`SHIFT_START`) and ends at
-  Tick 60 (`SHIFT_END`). The clock only advances while roles are busy and **fast-forwards to the
-  next event Tick** once the whole team has been idle for a while — nobody waits in real time.
+- **Shift-driven on a simulated calendar clock, not loop-driven.** A shared `TimeEventBus`
+  provides the clock and the event bus at the same time. The simulation runs on a **calendar
+  clock**: each work day starts at **08:00 of a real calendar date** (day 1 = the day the run
+  starts, `SHIFT_START`) and ends at **18:00** (`SHIFT_END`). The clock **advances while roles
+  are busy** (a compressed "busy clock", default 1 simulated minute per real second of team
+  work), **fast-forwards to the next event Tick** once the whole team has been idle for a while,
+  and after the end-of-day summaries **rolls over to the next day at 08:00** and loops — nobody
+  waits in real time.
 - **0-token event filtering.** Every event passes a per-role 3-layer filter (state mask →
   keyword salience → wake) before it ever costs a token. Irrelevant events are dropped for free,
   which is what keeps a large team affordable.
@@ -95,7 +99,7 @@ AgentSoftware/
 │       ├── providers.local.example.json
 │       ├── mcp_group_rules.json     # MCP servers + tool groups (file_ops, git_ops, github_ops)
 │       └── web/                     # static assets of the Web UI (index.html/app.js/style.css)
-├── src/test/java/                   # JUnit 5 tests (181 tests / 26 classes)
+├── src/test/java/                   # JUnit 5 tests (193 tests / 27 classes)
 └── data/                            # runtime data (gitignored)
     ├── computers/<role_id>/         # one host folder per role computer (mounted at /home/agent)
     ├── journals/                    # per-role activity journals
@@ -120,7 +124,7 @@ AgentSoftware/
 
 ```bash
 mvn compile     # compile
-mvn test        # run all JUnit tests (181 tests, 26 test classes)
+mvn test        # run all JUnit tests (193 tests, 27 test classes)
 mvn package     # produce target/agent-software.jar
 ```
 
@@ -165,24 +169,42 @@ What a `Main` run looks like:
 
 ## How a "Day" Works
 
-Time constants live in `event/TimeEventBus.java`:
+The clock is a **simulated calendar clock** living in `event/TimeEventBus.java`. Day 1 is the
+calendar date the run starts on (08:00); every simulated day after that is the next calendar
+date. Key constants:
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `MINUTES_PER_TICK` | 10 | one Tick = 10 minutes of company time |
-| `TICKS_PER_DAY` | 144 | 144 Ticks per day (24 h) |
-| `SHIFT_START_TICK` | 0 | shift starts at Tick 0 → `SHIFT_START` fires |
-| `SHIFT_END_TICK` | 60 | shift ends at Tick 60 (10 h) → `SHIFT_END` fires |
+| `MINUTES_PER_TICK` | 10 | one Tick = 10 simulated minutes |
+| `TICKS_PER_DAY` | 144 | 144 Ticks per day (24 h), so tick 0 of each day ⇔ 08:00 of its date |
+| `SHIFT_START_TICK` | 0 | shift starts at Tick 0 → `SHIFT_START` fires at 08:00 |
+| `SHIFT_END_TICK` | 60 | shift ends at Tick 60 → `SHIFT_END` fires at 18:00 |
+| `SHIFT_START_HOUR` | 8 | the simulated day is anchored at 08:00 (`tickToTime(0) = "08:00"`, `tickToTime(60) = "18:00"`) |
+| `DEFAULT_SIM_MINUTES_PER_REAL_SECOND` | 1.0 | "busy clock" speed: simulated minutes per real second while the team is working |
+| `WRAP_UP_GRACE_SECONDS` | 600 | real seconds the clock waits for the daily wrap-up before forcing the rollover |
 | `FAST_FORWARD_IDLE_SECONDS` | 60 | clock jumps when **all** roles have been idle ≥ 60 s |
 
-The clock is *event-driven, not real-time*: Ticks only advance while some role is busy, and when
-everyone has been idle for `FAST_FORWARD_IDLE_SECONDS`, the clock fast-forwards to the next
-scheduled event Tick (scheduled task / reminder / shift end / next shift start). A busy LLM never
-"misses" a future-Tick deadline because the clock simply waits for it.
+How the clock moves (event-driven, not real-time):
 
-Work-rest events fire automatically: `SHIFT_START` (Tick 0), `SHIFT_END` (Tick 60). Scheduled
-notes with a reminder (`write_note` with `remind_tick`) are registered on the same event schedule
-and fire a reminder event when due — notes and scheduled tasks are one unified concept.
+1. **Busy flow.** While at least one role is working (LLM round, tool call, talk wait), the clock
+   advances at the busy-clock speed — a task started at 09:00 may genuinely finish at 09:40.
+   Busy work can never push the clock past 18:00: anything still queued at shift end is **held
+   and carried over to the next day** (off-duty roles do not start new ordinary work after 18:00).
+2. **Idle fast-forward.** When the whole team has been idle for `FAST_FORWARD_IDLE_SECONDS`, the
+   clock jumps to the next scheduled event Tick (a note reminder / the 18:00 shift end / …) —
+   nobody waits in real time and a busy LLM never "misses" a deadline.
+3. **Wrap-up & day rollover.** At 18:00 `SHIFT_END` fires: roles synchronously stuck in a `talk`
+   wait are woken first (otherwise they would never reach their summary task), then every role
+   writes its end-of-day summary and goes `OFF_DUTY`. Once **all** roles have wrapped up and the
+   team is idle, the clock rolls over to the **next calendar day at 08:00** (`SHIFT_START` fires
+   again) and the loop repeats. If a role's summary failed and the wrap-up stalls, the time
+   manager forces the rollover after `WRAP_UP_GRACE_SECONDS` instead of deadlocking.
+
+Work-rest events fire automatically: `SHIFT_START` (08:00), `SHIFT_END` (18:00). Scheduled notes
+with a reminder (`write_note` with `remind_tick`, tick 0~60 ⇔ 08:00~18:00) are registered on the
+same event schedule and fire a reminder event when due — notes and scheduled tasks are one unified
+concept. The simulated date/time (calendar date + HH:MM) is shown by `get_time`, in the shift-event
+payloads the roles read, on the Web UI header, and in journal/console output.
 
 ---
 
@@ -347,8 +369,9 @@ dropping mail.
 `StateStore` aggregates all serializable state into a single JSON file (default
 `data/state.json`, atomic writes): role profiles, task history, incomplete (queued) tasks,
 computer/container bindings (existing containers are re-bound, not rebuilt) and the clock
-(day/Tick). `Main` auto-saves on exit and auto-restores on startup, so a simulation can resume
-from where it stopped.
+(day / tick of day / the simulated calendar `base_date` of day 1). `Main` auto-saves on exit and
+auto-restores on startup, so a simulation can resume from where it stopped — with the same
+calendar dates.
 
 ### 10. LLM layer & provider manager
 
@@ -388,7 +411,7 @@ HTTP API (polled by the frontend, no auth):
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/state` | group roster + clock + Client A conversation state (`clientTalk.active`) |
+| `GET /api/state` | group roster + clock (day / tick / date / time / describe) + Client A conversation state (`clientTalk.active`) |
 | `GET /api/messages?since=N` | incremental messages with seq > N |
 | `POST /api/reply` `{"text": "…"}` | submit a Client A reply (409 unless someone is waiting) |
 | `POST /api/attach` | Web attach heartbeat |
@@ -469,6 +492,7 @@ defaults.
 | `AGENTSOFTWARE_WEB_HOST` | `0.0.0.0` | Web UI listen address |
 | `AGENTSOFTWARE_WEB_PORT` | `8787` | Web UI port |
 | `AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT` | `1200000` (20 min) | Client A reply timeout in Web-input mode (ms) |
+| `AGENTSOFTWARE_SIM_MINUTES_PER_REAL_SECOND` | `1.0` | busy-clock speed: simulated minutes that pass per real second while at least one role is working (`0` freezes the clock while busy, the legacy behavior) |
 | `AGENTSOFTWARE_DATA_DIR` / `_CONFIG_DIR` / `_CACHE_DIR` / `_LOG_DIR` | XDG dirs | path overrides for data / config / cache / log directories (PathManager, app prefix `AgentSoftware`) |
 
 Note: the simulation runtime of an `AgentSystem` roots its own files under its `dataDir`

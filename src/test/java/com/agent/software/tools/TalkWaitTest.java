@@ -155,6 +155,31 @@ class TalkWaitTest {
         assertEquals(Types.AgentState.ON_DUTY_IDLE, a.state);
     }
 
+    // ── 1b) Shift-end unstick: aborting the wait wakes the blocked talker ─
+
+    @Test
+    void testAbortWaitUnblocksInfiniteWait() throws InterruptedException {
+        RolePool pool = new RolePool();
+        Map<String, Talk> tks = setupRoles(pool, "A", "B");
+        AgentRole roleA = pool.getRole("A");
+        AtomicReference<String> result = new AtomicReference<>();
+        Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "How's the progress?", true)));
+        t.start();
+        try {
+            assertTrue(waitUntil(() -> roleA.state == Types.AgentState.WAIT, 5000), "A did not enter WAIT");
+            // SHIFT_END handler wakes the waiter with a synthetic message
+            roleA.abortWait("[System: the shift ended — treat this as the reply and wrap up today's work.]");
+            t.join(5000);
+        } finally {
+            t.join(1000);
+            pool.shutdown(false);
+        }
+        assertFalse(t.isAlive());
+        assertTrue(result.get().contains("[System: the shift ended"), result.get());
+        assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // state restored after the wait ended
+        assertNull(roleA.debugReplyBox());  // endWait cleared the synthetic reply mailbox
+    }
+
     // ── 2) Mutual wait decomposed ─────────────────────────────
 
     @Test
