@@ -81,6 +81,23 @@ public class MCPServer {
             readerThread.setDaemon(true);
             readerThread.start();
 
+            // Drain stderr in the background: stdout carries the JSON-RPC protocol (must never be
+            // mixed with logs), and an unread stderr pipe (chatty servers such as playwright-mcp)
+            // would eventually block the server process.
+            Thread errThread = new Thread(() -> {
+                try (BufferedReader err = new BufferedReader(
+                        new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = err.readLine()) != null) {
+                        logger.debug("MCP '{}' stderr: {}", packageName, line);
+                    }
+                } catch (IOException ignored) {
+                    // stream ended with the process
+                }
+            }, "mcp-" + packageName + "-stderr");
+            errThread.setDaemon(true);
+            errThread.start();
+
             // handshake: initialize → initialized
             Map<String, Object> resp = request("initialize", Map.of(
                     "protocolVersion", PROTOCOL_VERSION,
