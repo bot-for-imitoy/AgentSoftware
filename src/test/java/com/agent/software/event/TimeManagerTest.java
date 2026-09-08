@@ -358,6 +358,39 @@ class TimeManagerTest {
         assertEquals("08:00:04", bus.currentTime());
     }
 
+    // ── Clock pause: the simulated clock freezes while paused ─
+
+    @Test
+    void testClockPauseFreezesAndResumeContinues() {
+        TimeEventBus bus = makeBus();
+        bus.simSecondsPerRealSecond = 100;   // busy time races (1 real second = 100 simulated seconds)
+        bus.setBusyChecker(() -> true);       // someone is always working → the busy clock runs
+        bus.start();
+        try {
+            // wait until the busy clock has visibly advanced
+            long deadline = System.currentTimeMillis() + 5000;
+            while (bus.currentTick() < 50 && System.currentTimeMillis() < deadline) {
+                sleep(50);
+            }
+            assertTrue(bus.currentTick() >= 50, "busy clock should advance, tick=" + bus.currentTick());
+
+            bus.setClockPaused(true);
+            sleep(400);   // let the tick loop settle into the paused branch
+            int frozen = bus.currentTick();
+            sleep(800);   // several busy-poll periods elapse
+            assertEquals(frozen, bus.currentTick(), "the clock must not advance while paused");
+
+            bus.setClockPaused(false);
+            deadline = System.currentTimeMillis() + 5000;
+            while (bus.currentTick() <= frozen && System.currentTimeMillis() < deadline) {
+                sleep(50);
+            }
+            assertTrue(bus.currentTick() > frozen, "the clock must resume advancing after unpause");
+        } finally {
+            bus.stop();
+        }
+    }
+
     // ── Day rollover gate: the next 08:00 is reachable only after the wrap-up ─
 
     @Test

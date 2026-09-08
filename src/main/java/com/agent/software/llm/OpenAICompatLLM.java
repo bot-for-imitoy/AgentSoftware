@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Unified OpenAI-compatible chat/completions client (the OpenAICompatLLM of the Python llm.py).
@@ -59,6 +61,20 @@ public class OpenAICompatLLM implements LLM {
     protected String label = "";                 // role label (DEBUG log prefix)
     protected String retryError = "";            // reason of the most recent request failure
     protected final ConfigStore configStore;
+
+    // ── System pause / auto-pause integration ──────────────────
+    /** Invoked when the API reports an exhausted account balance/quota (auto-pause hook). */
+    protected Consumer<String> onInsufficientBalance = null;
+    /** While this supplier returns true (the system is paused) no request is sent/retried. */
+    protected Supplier<Boolean> pauseGate = null;
+
+    /** Lowercased error-body markers that mean the account balance/quota ran out. */
+    private static final String[] INSUFFICIENT_BALANCE_MARKERS = {
+            "insufficient_quota", "insufficient quota", "insufficient balance",
+            "exceeded your current quota", "out of credits", "not enough balance",
+            "no enough balance", "payment required", "quota exceeded",
+            "余额不足", "账户余额", "余额已用完", "欠费", "额度不足",
+    };
 
     /** Convenience constructor: everything goes through layered config (system property &gt; environment variable &gt; ConfigStore &gt; default value). */
     public OpenAICompatLLM() {
@@ -120,6 +136,68 @@ public class OpenAICompatLLM implements LLM {
 
     private static String stripSlash(String s) {
         return s != null && s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
+    }
+
+    // ── Pause / auto-pause wiring (set by the owning system) ──
+
+    /**
+     * Install the auto-pause hook: called once per exhausted-account error with a short reason
+     * (e.g. "API reported insufficient balance/quota (HTTP 402)") so the owning AgentSystem can
+     * pause the whole simulation.
+     */
+    public void setOnInsufficientBalance(Consumer<String> listener) {
+        this.onInsufficientBalance = listener;
+    }
+
+    /**
+     * Install the pause gate: while it returns true (the owning AgentSystem is paused) this client
+     * sends no new request and aborts retries — the caller receives "[API error: aborted: system
+     * paused]" so in-flight tasks stop cleanly and held tasks resume later.
+     */
+    public void setPauseGate(Supplier<Boolean> gate) {
+        this.pauseGate = gate;
+    }
+
+    /** Whether the owning system is paused right now (false when no pause gate is installed). */
+    protected boolean isSystemPaused() {
+        if (pauseGate == null) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(pauseGate.get());
+        } catch (Exception e) {
+            logger.debug("{} pause-gate check failed", apiName, e);
+            return false;
+        }
+    }
+
+    /** Whether an API error response means the account balance/quota ran out (auto-pause trigger). */
+    static boolean isInsufficientBalance(int status, String body) {
+        if (status == 402) {
+            return true;  // 402 Payment Required — the canonical exhausted-account status
+        }
+        if (body == null || body.isEmpty()) {
+            return false;
+        }
+        String lower = body.toLowerCase();
+        for (String marker : INSUFFICIENT_BALANCE_MARKERS) {
+            if (lower.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Log the exhausted-account failure and invoke the auto-pause hook (if installed). */
+    private void notifyInsufficientBalance(int status) {
+        String reason = "API reported insufficient balance/quota (HTTP " + status + ")";
+        if (onInsufficientBalance != null) {
+            try {
+                onInsufficientBalance.accept(reason);
+            } catch (Exception e) {
+                logger.warn("{} insufficient-balance auto-pause hook failed", apiName, e);
+            }
+        }
     }
 
     // ── Debug logging (with role prefix) ──────────────────
@@ -281,6 +359,11 @@ public class OpenAICompatLLM implements LLM {
     /**
      * Send a POST request, automatically retrying on failure (rate limit / timeout / 5xx etc. recoverable errors).
      *
+     * <p>Two failure classes are <b>not</b> retried: exhausted-account errors (HTTP 402 or an error
+     * body mentioning insufficient balance/quota — the auto-pause hook fires immediately so the
+     * whole system stops instead of hammering an empty account) and requests sent while the system
+     * is paused (the pause gate aborts them so a paused simulation makes no further API calls).
+     *
      * @return the response JSON Map; returns null when giving up (reason in retryError).
      */
     protected Map<String, Object> postWithRetry(URI url, Map<String, Object> payload) {
@@ -289,6 +372,14 @@ public class OpenAICompatLLM implements LLM {
                 .build();
         String lastErr = "";
         for (int attempt = 1; attempt <= retryMax; attempt++) {
+            // System pause: never send (or keep retrying) a request while paused — the caller
+            // receives "[API error: aborted: system paused]" and holds until resume.
+            if (isSystemPaused()) {
+                retryError = "aborted: system paused";
+                logger.warn("{} API request aborted: system paused (attempt {}/{})",
+                        apiName, attempt, retryMax);
+                return null;
+            }
             HttpRequest.Builder rb = HttpRequest.newBuilder(url)
                     .timeout(Duration.ofSeconds(apiTimeoutSeconds))
                     .header("Content-Type", "application/json")
@@ -300,6 +391,17 @@ public class OpenAICompatLLM implements LLM {
             try {
                 HttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = resp.statusCode();
+                String respBody = resp.body();
+                // Exhausted account balance/quota: unrecoverable until the account is topped up —
+                // notify the auto-pause hook and give up immediately (402 never recovers, and some
+                // backends report quota exhaustion as 429, which the generic branch would retry forever).
+                if (isInsufficientBalance(status, respBody)) {
+                    retryError = "HTTP " + status + ": " + truncate(respBody, 200);
+                    logger.error("{} API request failed — account balance/quota insufficient, "
+                            + "auto-pausing: {}", apiName, retryError);
+                    notifyInsufficientBalance(status);
+                    return null;
+                }
                 if (status == 429 || status >= 500) {
                     lastErr = "HTTP " + status;
                     logger.warn("{} API request failed ({}, attempt {}/{}), retrying in {}s",
@@ -308,11 +410,11 @@ public class OpenAICompatLLM implements LLM {
                     continue;
                 }
                 if (status >= 400) {
-                    retryError = "HTTP " + status + ": " + truncate(resp.body(), 200);
+                    retryError = "HTTP " + status + ": " + truncate(respBody, 200);
                     logger.error("{} API request failed, unrecoverable: {}", apiName, retryError);
                     return null;
                 }
-                return parseBody(resp.body());
+                return parseBody(respBody);
             } catch (java.net.http.HttpTimeoutException e) {
                 lastErr = "timeout";
                 logger.warn("{} API request timed out (attempt {}/{}), retrying in {}s", apiName, attempt, retryMax, (long) retryDelay);
@@ -329,11 +431,20 @@ public class OpenAICompatLLM implements LLM {
         return null;
     }
 
+    /** Wait {@link #retryDelay} between attempts, waking early (and aborting the retry) when the system pauses. */
     private void sleep() {
-        try {
-            Thread.sleep((long) (retryDelay * 1000));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        long end = System.currentTimeMillis() + (long) (retryDelay * 1000);
+        while (System.currentTimeMillis() < end) {
+            if (isSystemPaused()) {
+                return;  // the attempt loop re-checks the pause gate and aborts without another request
+            }
+            long remain = end - System.currentTimeMillis();
+            try {
+                Thread.sleep(Math.min(200L, remain));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 

@@ -130,6 +130,60 @@ class ChatWebServerTest {
         assertEquals(400, bad.statusCode());
     }
 
+    // ── /api/pause and /api/resume ────────────────────────
+
+    @Test
+    void testPauseAndResumeViaApi() throws Exception {
+        HttpResponse<String> s0 = get("/api/state");
+        assertFalse((Boolean) json(s0).get("paused"));
+
+        // pause with a reason (e.g. the automatic insufficient-balance pause)
+        HttpResponse<String> p = post("/api/pause",
+                "{\"reason\":\"API reported insufficient balance/quota (HTTP 402)\"}");
+        assertEquals(200, p.statusCode());
+        Map<String, Object> pb = json(p);
+        assertTrue((Boolean) pb.get("ok"));
+        assertTrue((Boolean) pb.get("paused"));
+        assertEquals("API reported insufficient balance/quota (HTTP 402)", pb.get("pauseReason"));
+
+        assertTrue(system.isPaused());
+        assertTrue(system.timeManager.isClockPaused());
+
+        // the state endpoint reports the pause
+        Map<String, Object> s1 = json(get("/api/state"));
+        assertTrue((Boolean) s1.get("paused"));
+        assertEquals("API reported insufficient balance/quota (HTTP 402)", s1.get("pauseReason"));
+
+        // resume
+        HttpResponse<String> r = post("/api/resume", "");
+        assertEquals(200, r.statusCode());
+        Map<String, Object> rb = json(r);
+        assertTrue((Boolean) rb.get("ok"));
+        assertFalse((Boolean) rb.get("paused"));
+        assertFalse(system.isPaused());
+        assertFalse(system.timeManager.isClockPaused());
+
+        Map<String, Object> s2 = json(get("/api/state"));
+        assertFalse((Boolean) s2.get("paused"));
+    }
+
+    @Test
+    void testPauseDefaultReasonAndMethodGuard() throws Exception {
+        // only POST is accepted
+        assertEquals(405, get("/api/pause").statusCode());
+        assertEquals(405, get("/api/resume").statusCode());
+
+        // an empty body falls back to the default reason
+        HttpResponse<String> p = post("/api/pause", "");
+        assertEquals(200, p.statusCode());
+        assertEquals("paused via the Web UI", json(p).get("pauseReason"));
+        assertTrue(system.isPaused());
+        // an invalid JSON body is rejected
+        assertEquals(400, post("/api/pause", "not-json").statusCode());
+        system.resume();
+        assertFalse(system.isPaused());
+    }
+
     // ── Full round trip: leader waits → page reply ────────────
 
     @Test

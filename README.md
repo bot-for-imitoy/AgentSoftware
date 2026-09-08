@@ -13,7 +13,7 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 (0-token filtering), and per-role computers give every agent an isolated filesystem.
 
 > Status: actively developed. The engine, role system, toolkits, Web UI and persistence are in
-> place and covered by **196 JUnit tests**; the simulation flow itself keeps being refined.
+> place and covered by **205 JUnit tests**; the simulation flow itself keeps being refined.
 
 ---
 
@@ -100,7 +100,7 @@ AgentSoftware/
 │       ├── providers.local.example.json
 │       ├── mcp_group_rules.json     # MCP servers + tool groups (file_ops, git_ops, github_ops)
 │       └── web/                     # static assets of the Web UI (index.html/app.js/style.css)
-├── src/test/java/                   # JUnit 5 tests (196 tests / 27 classes)
+├── src/test/java/                   # JUnit 5 tests (205 tests / 28 classes)
 └── data/                            # runtime data (gitignored)
     ├── computers/<role_id>/         # one host folder per role computer (mounted at /home/agent)
     ├── journals/                    # per-role activity journals
@@ -125,7 +125,7 @@ AgentSoftware/
 
 ```bash
 mvn compile     # compile
-mvn test        # run all JUnit tests (196 tests, 27 test classes)
+mvn test        # run all JUnit tests (205 tests, 28 test classes)
 mvn package     # produce target/agent-software.jar
 ```
 
@@ -415,6 +415,13 @@ A zero-dependency Web UI (`ChatWebServer` on the JDK `com.sun.net.httpserver`, s
   include your own (Client A) conversations.
 - **Input box**: enabled only when the Leadership Group is selected *and* a member is currently
   waiting for your reply via `talk_to_client`; type your answer and press Enter.
+- **Pause / Resume** (top-right button): pauses the whole simulation — the simulated clock
+  freezes (no shift events / task reminders fire), no role starts a new task, and in-flight LLM
+  requests stop being retried; click again (or `POST /api/resume`) to continue with all held work.
+  The system **auto-pauses** when the LLM API reports an exhausted account balance/quota
+  (HTTP 402 or an `insufficient_quota` / "Insufficient Balance" / `余额不足` … error) so an empty
+  account is never hammered with retries — the top bar turns amber and shows the reason until you
+  resume it. Pause/resume events appear in the chat feed as "System paused/resumed" notices.
 
 The client's reply channel is decided by the `Input` passed to the `AgentSystem` at creation:
 `StdInput` (console prompt) or `WebInput` (page input box, default 20-minute reply timeout,
@@ -424,9 +431,11 @@ HTTP API (polled by the frontend, no auth):
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/state` | group roster + clock (day / tick / date / time / describe) + Client A conversation state (`clientTalk.active`) |
+| `GET /api/state` | group roster + clock (day / tick / date / time / describe) + Client A conversation state (`clientTalk.active`) + pause state (`paused` / `pauseReason`) |
 | `GET /api/messages?since=N` | incremental messages with seq > N |
 | `POST /api/reply` `{"text": "…"}` | submit a Client A reply (409 unless someone is waiting) |
+| `POST /api/pause` `{"reason": "…"}` | pause the whole simulation (reason optional; default "paused via the Web UI") |
+| `POST /api/resume` | resume a paused simulation |
 | `POST /api/attach` | Web attach heartbeat |
 
 Message kinds: `talk`, `client`, `reason`, `note`, `tool`, `answer`; trace messages carry
