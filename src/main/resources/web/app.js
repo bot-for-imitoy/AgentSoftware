@@ -23,6 +23,9 @@ const state = {
   messagesAll: [],            // every message, ascending by seq (All Activity feed)
   clientTalk: { active: false, holderName: null, holderRoleId: null },
   prevClientActive: false,
+  paused: false,
+  prevPaused: false,
+  pauseReason: "",
   inputEnabled: false,
   day: 1,
   tick: 0,
@@ -57,6 +60,50 @@ function toast(text) {
   el.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+// ── Pause / resume control ───────────────────────
+
+/** Top-bar status line, with a visible PAUSED marker while the system is paused. */
+function sysInfoText() {
+  const base =
+    `${state.date ? state.date + " · " : ""}Day ${state.day} · ${state.time} · ${state.describe}`;
+  if (!state.paused) return base;
+  return `${base} · ⏸ PAUSED${state.pauseReason ? " — " + state.pauseReason : ""}`;
+}
+
+/** Reflect the current pause state on the Pause/Resume button and the paused chip. */
+function renderPauseControl() {
+  const btn = $("pauseBtn");
+  const chip = $("pauseChip");
+  if (state.paused) {
+    document.body.classList.add("paused");
+    btn.textContent = "▶ Resume";
+    btn.title = "Resume the simulation — roles continue their held work and the clock runs again";
+    chip.textContent = "⏸ " + (state.pauseReason || "Paused");
+    chip.title = state.pauseReason || "Paused";
+    chip.classList.remove("hidden");
+  } else {
+    document.body.classList.remove("paused");
+    btn.textContent = "⏸ Pause";
+    btn.title = "Pause the whole simulation — the clock freezes and every role holds its work";
+    chip.classList.add("hidden");
+  }
+}
+
+/** POST /api/pause or /api/resume depending on the current state, then refresh. */
+async function togglePause() {
+  const pausing = !state.paused;
+  const { status, body } = await fetchJson(pausing ? "/api/pause" : "/api/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: pausing ? JSON.stringify({ reason: "paused via the Web UI" }) : "",
+  });
+  if (status === 200 && body.ok) {
+    await pollState();
+  } else {
+    toast(body.reason || "Failed to update the pause state");
+  }
 }
 
 async function fetchJson(url, opts) {
@@ -481,8 +528,17 @@ async function pollState() {
   state.date = body.date || "";
   state.time = body.time || "";
   state.describe = body.describe || "";
-  $("sysInfo").textContent =
-    `${state.date ? state.date + " · " : ""}Day ${body.day} · ${state.time} · ${state.describe}`;
+  state.paused = !!body.paused;
+  state.pauseReason = body.pauseReason || "";
+  $("sysInfo").textContent = sysInfoText();
+
+  // Pause / resume transitions (manual or automatic insufficient-balance pause) — notify once
+  if (state.paused && !state.prevPaused) {
+    toast("⏸ System paused" + (state.pauseReason ? " — " + state.pauseReason : ""));
+  } else if (!state.paused && state.prevPaused) {
+    toast("▶ System resumed");
+  }
+  state.prevPaused = state.paused;
 
   const ct = body.clientTalk || { active: false };
   state.clientTalk = ct;
@@ -511,6 +567,7 @@ async function pollState() {
 
   updateGroupItemVisuals();
   applyInputState();
+  renderPauseControl();
 }
 
 async function pollMessages() {
@@ -566,6 +623,7 @@ async function sendReply() {
 
 function init() {
   $("sendBtn").addEventListener("click", sendReply);
+  $("pauseBtn").addEventListener("click", togglePause);
   $("replyInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

@@ -32,6 +32,8 @@ import java.util.function.Supplier;
  *   <li>{@code GET /api/state}   — group roster + system time + client dialogue state;</li>
  *   <li>{@code GET /api/messages?since=N} — new messages with seq &gt; N;</li>
  *   <li>{@code POST /api/reply}  — the client submits a reply {@code {"text": "..."}};</li>
+ *   <li>{@code POST /api/pause}  — pause the whole simulation (optionally {@code {"reason": "..."}});</li>
+ *   <li>{@code POST /api/resume} — resume a paused simulation;</li>
  *   <li>{@code POST /api/attach} — Web frontend attach heartbeat (any API poll also refreshes the heartbeat).</li>
  * </ul>
  *
@@ -190,6 +192,8 @@ public final class ChatWebServer {
             case "/api/state" -> sendJson(ex, 200, apiState());
             case "/api/messages" -> sendJson(ex, 200, apiMessages(ex));
             case "/api/reply" -> handleReply(ex);
+            case "/api/pause" -> handlePause(ex, true);
+            case "/api/resume" -> handlePause(ex, false);
             case "/api/attach" -> sendJson(ex, 200, Map.of("ok", true, "attached", true));
             default -> sendJson(ex, 404, Map.of("ok", false, "reason", "unknown api: " + path));
         }
@@ -207,6 +211,8 @@ public final class ChatWebServer {
         resp.put("time", system.timeManager.currentTime());
         resp.put("datetime", system.timeManager.currentDateTime());
         resp.put("describe", system.describe());
+        resp.put("paused", system.isPaused());
+        resp.put("pauseReason", system.isPaused() ? system.pauseReason() : "");
 
         Map<String, Object> web = new LinkedHashMap<>();
         web.put("host", host);
@@ -334,6 +340,45 @@ public final class ChatWebServer {
         resp.put("ok", true);
         resp.put("delivered", true);
         resp.put("message", ChatStore.toMap(recorded));
+        sendJson(ex, 200, resp);
+    }
+
+    // ── POST /api/pause | /api/resume ───────────────────────
+
+    /**
+     * Pause or resume the whole simulation ({@code pause=true} → /api/pause, otherwise /api/resume).
+     * A pause accepts an optional JSON body {@code {"reason": "..."}} describing why the system was
+     * paused (the Web button and the automatic insufficient-balance hook both report a reason).
+     */
+    private void handlePause(HttpExchange ex, boolean pause) throws IOException {
+        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("ok", false, "reason", "method not allowed"));
+            return;
+        }
+        if (system == null) {
+            sendJson(ex, 500, Map.of("ok", false, "reason", "agent system unavailable"));
+            return;
+        }
+        String reason = "";
+        try {
+            String bodyText = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (!bodyText.isBlank()) {
+                Map<String, Object> body = Json.parseObject(bodyText);
+                reason = Json.str(body, "reason", "").strip();
+            }
+        } catch (Exception e) {
+            sendJson(ex, 400, Map.of("ok", false, "reason", "invalid json body"));
+            return;
+        }
+        if (pause) {
+            system.pause(reason.isEmpty() ? "paused via the Web UI" : reason);
+        } else {
+            system.resume();
+        }
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("paused", system.isPaused());
+        resp.put("pauseReason", system.pauseReason());
         sendJson(ex, 200, resp);
     }
 
