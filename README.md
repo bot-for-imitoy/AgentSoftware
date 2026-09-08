@@ -345,14 +345,18 @@ available for calling a Hermes agent conversationally.
   directory-based simulation.
 - Podman computers run as containers named `maf-<role_id>` on the custom bridge network
   `maf-net`. The base image `maf-base:latest` is defined by the root `Containerfile`
-  (Ubuntu 24.04 with Aliyun mirrors, sudo/git/node/python, and the MCP filesystem server
-  preinstalled) and is built automatically on first use.
+  (Ubuntu 24.04 with Aliyun mirrors, Node 22 LTS, sudo/git/python, and the MCP servers
+  preinstalled: the official filesystem server + Microsoft `@playwright/mcp` browser
+  automation with chromium baked in) and is built automatically on first use.
 - The role's host folder `data/computers/<role_id>` is mounted at the container's `/home/agent`
   (the same files visible from both sides, with a pinyin `username` and a stable uid per
   employee). A shared corporate **cloud drive** is mounted at `/mnt/drive` (`Public` + per-
   employee directories).
 - Computers are **powered off at shift end right after the daily summary is saved** and started
-  again when work resumes. MCP servers run *inside* the container via `podman exec`; session
+  again when work resumes. MCP servers run *inside* the container via `podman exec`; each
+  computer automatically starts two stdio sessions — the filesystem server (file tools) and the
+  Playwright browser server `@playwright/mcp` (headless chromium, `browser_*` tools) — and their
+  tools show up in `mcp_search`/`mcp_list` for the role to install via `mcp_add`. Session
   liveness is probed at each shift start so servers are rebuilt automatically after a stop.
 
 ### 7. Company email

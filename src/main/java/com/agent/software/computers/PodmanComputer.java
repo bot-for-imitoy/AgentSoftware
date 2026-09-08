@@ -100,51 +100,105 @@ public class PodmanComputer extends Computer {
     }
 
     @Override
-    public List<String> installMcpServer() {
-        // Plan C: the MCP server runs inside the container (podman exec -i keeps the stdio pipe)
-        if (mcpServer != null) {
-            return listInstalledMcpTools();
-        }
+    public List<String> ensureMcpServers() {
+        // Plan C: MCP servers run inside the container (podman exec -i keeps the stdio pipe).
+        // Every auto-created computer starts two stdio servers and registers their tools:
+        //   1) the filesystem server (file tools, authorized dir "/" = the whole container)
+        //   2) the Playwright browser server (@playwright/mcp; headless chromium is baked into
+        //      the base image under /ms-playwright; the process runs as the employee user).
         if (!autoMcp) {
-            logger.info("Computer[{}] not auto-created; skipping automatic MCP server install", roleId);
+            logger.info("Computer[{}] not auto-created; skipping automatic MCP server start", roleId);
             return new ArrayList<>();
         }
         try {
-            ensureContainer();  // ensure the container is running + the package is preinstalled
-            mcpServer = new MCPServer(MCP_FILESYSTEM_PACKAGE,
-                    List.of("/"),  // authorize all files inside the container
-                    "podman",
-                    List.of("exec", "-i", "--user", username, containerName, "node",
-                            "/usr/local/bin/mcp-server-filesystem", "/"));
-            mcpServer.connect();
-            if (!mcpServer.isAlive(5.0)) {
-                throw new RuntimeException("Failed to connect to the in-container MCP server");
-            }
-            for (Map<String, Object> tool : mcpServer.listTools()) {
-                String tname = String.valueOf(tool.get("name"));
-                if (tname == null || tname.isEmpty() || "null".equals(tname)) {
-                    continue;
-                }
-                MCPServer server = mcpServer;
-                ToolRegistry.ToolDef td = new ToolRegistry.ToolDef(
-                        tname,
-                        String.valueOf(tool.getOrDefault("description", "")),
-                        mapOf(tool.get("inputSchema")),
-                        args -> server.callTool(tname, args),
-                        "mcp:" + MCP_FILESYSTEM_PACKAGE + " (inside container " + containerName + ")");
-                mcpTools.put(tname, td);
-            }
-            logger.info("Computer[{}] in-container MCP server installed, {} tools: {}",
-                    roleId, mcpTools.size(), listInstalledMcpTools());
+            ensureContainer();  // ensure the container is running + the packages are preinstalled
         } catch (Exception exc) {
             connectError = String.valueOf(exc.getMessage());
-            logger.error("Computer[{}] failed to install the in-container MCP server", roleId, exc);
+            logger.error("Computer[{}] failed to prepare the container for MCP servers", roleId, exc);
             return new ArrayList<>();
         }
+        // 1) filesystem server
+        ensureServerSession(MCP_FILESYSTEM_PACKAGE, false,
+                List.of("exec", "-i", "--user", username, containerName, "node",
+                        "/usr/local/bin/mcp-server-filesystem", "/"));
+        // 2) browser server (@playwright/mcp; optional - if it cannot start, file tools still work)
+        ensureServerSession(MCP_BROWSER_PACKAGE, true,
+                List.of("exec", "-i", "--user", username, containerName,
+                        MCP_BROWSER_BIN, "--headless", "--no-sandbox"));
         return listInstalledMcpTools();
     }
 
+    /**
+     * Start/connect one MCP server session of the given npm package inside this container and
+     * register its tools. Existing sessions of the same package are reused (reconnected when
+     * dead). Failures of {@code optional} servers are logged and skipped so that one broken
+     * server does not take down the others.
+     */
+    private void ensureServerSession(String packageName, boolean optional, List<String> execArgs) {
+        for (MCPServer srv : mcpServers) {
+            if (!srv.packageName.equals(packageName)) {
+                continue;
+            }
+            // session already exists: reconnect if it died (e.g. across a power cycle)
+            try {
+                if (!srv.isAlive(5.0)) {
+                    srv.close();
+                    srv.connect();
+                }
+            } catch (Exception exc) {
+                connectError = String.valueOf(exc.getMessage());
+                logger.error("Computer[{}] MCP server '{}' reconnect failed", roleId, packageName, exc);
+            }
+            return;
+        }
+        MCPServer server = new MCPServer(packageName, new ArrayList<>(), "podman", execArgs);
+        try {
+            server.connect();
+            if (!server.isAlive(5.0)) {
+                throw new RuntimeException("MCP server " + packageName
+                        + " did not answer tools/list after connect");
+            }
+            mcpServers.add(server);
+            registerServerTools(server, packageName);
+            logger.info("Computer[{}] in-container MCP server '{}' started ({} tools registered so far)",
+                    roleId, packageName, mcpTools.size());
+        } catch (Exception exc) {
+            connectError = String.valueOf(exc.getMessage());
+            if (optional) {
+                logger.warn("Computer[{}] optional MCP server '{}' unavailable, skipped: {}",
+                        roleId, packageName, exc.getMessage());
+            } else {
+                logger.error("Computer[{}] failed to start the in-container MCP server '{}'",
+                        roleId, packageName, exc);
+            }
+        }
+    }
+
+    /** Register all tools reported by one MCP server into this computer's tool map (handlers forward over the session). */
+    private void registerServerTools(MCPServer server, String packageName) {
+        for (Map<String, Object> tool : server.listTools()) {
+            String tname = String.valueOf(tool.get("name"));
+            if (tname == null || tname.isEmpty() || "null".equals(tname)) {
+                continue;
+            }
+            MCPServer srv = server;
+            ToolRegistry.ToolDef td = new ToolRegistry.ToolDef(
+                    tname,
+                    String.valueOf(tool.getOrDefault("description", "")),
+                    mapOf(tool.get("inputSchema")),
+                    args -> srv.callTool(tname, args),
+                    "mcp:" + packageName + " (inside container " + containerName + ")");
+            if (mcpTools.put(tname, td) != null) {
+                logger.warn("Computer[{}] MCP tool '{}' redefined by server '{}'", roleId, tname, packageName);
+            }
+        }
+    }
+
     public static final String MCP_FILESYSTEM_PACKAGE = "@modelcontextprotocol/server-filesystem";
+    /** Browser MCP server (Microsoft @playwright/mcp), npm-preinstalled into the base image by the Containerfile. */
+    public static final String MCP_BROWSER_PACKAGE = "@playwright/mcp";
+    /** Absolute path of the playwright-mcp CLI inside the container (npm global bin of the base image). */
+    public static final String MCP_BROWSER_BIN = "/usr/local/bin/playwright-mcp";
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> mapOf(Object o) {
@@ -257,17 +311,22 @@ public class PodmanComputer extends Computer {
             throw new RuntimeException("podman exec failed to initialize the cloud drive (" + r.returnCode + "): "
                     + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
         }
-        // Preinstall the MCP filesystem server package (globally inside the container)
+        // Preinstall the MCP server packages globally inside the container (idempotent self-heal:
+        // npm check per package, so both filesystem and @playwright/mcp are present even when the
+        // base image predates the Containerfile preinstall)
         if (!mcpPkgInstalled) {
             r = pod(300, "exec", containerName, "sh", "-c",
                     "npm ls -g --depth=0 2>/dev/null | grep -q 'server-filesystem' "
-                            + "|| npm install -g --no-fund --no-audit " + shlexQuote(MCP_FILESYSTEM_PACKAGE));
+                            + "|| npm install -g --no-fund --no-audit " + shlexQuote(MCP_FILESYSTEM_PACKAGE) + "; "
+                            + "npm ls -g --depth=0 2>/dev/null | grep -q '@playwright/mcp' "
+                            + "|| npm install -g --no-fund --no-audit " + shlexQuote(MCP_BROWSER_PACKAGE));
             if (r.returnCode != 0) {
-                throw new RuntimeException("Failed to preinstall the MCP filesystem package in the container (" + r.returnCode + "): "
+                throw new RuntimeException("Failed to preinstall the MCP packages in the container (" + r.returnCode + "): "
                         + truncate(r.stderr != null ? r.stderr : r.stdout, 300));
             }
             mcpPkgInstalled = true;
-            logger.info("Computer[{}] MCP filesystem server preinstalled in container (npm -g)", roleId);
+            logger.info("Computer[{}] MCP packages preinstalled in container (npm -g): {} + {}",
+                    roleId, MCP_FILESYSTEM_PACKAGE, MCP_BROWSER_PACKAGE);
         }
     }
 
@@ -284,8 +343,8 @@ public class PodmanComputer extends Computer {
         try {
             ensureContainer();
             on = true;
-            // Reconnect across days: stopping the container kills the MCP stdio pipe, so check session liveness after power-on
-            reconnectMcpServer();
+            // Reconnect across days: stopping the container kills the MCP stdio pipes, so check all sessions after power-on
+            reconnectMcpServers();
             return "Computer [" + roleId + "] (podman container " + containerName + ") powered on. Work directory: " + workdir();
         } catch (Exception exc) {
             return "Error: power-on failed - " + exc.getMessage();

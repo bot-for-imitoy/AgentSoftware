@@ -23,9 +23,9 @@ import java.util.Set;
  * MCP tool manager - manages the MCP server tools on each role's computer
  * (originally MCPManagerToolkit.MCPManager; moved into the template-style package when the old toolkit class was removed).
  *
- * Architecture (plan C): each role's computer (podman container) runs an independent MCP filesystem
- * server, with the authorized directory being the container working directory. MCPManager keeps no global
- * tool pool; all queries/installs are based on the current role's own computer server.
+ * Architecture (plan C): each role's computer (podman container) runs its own MCP server sessions
+ * (the filesystem server + the Playwright browser server, started by {@code Computer.ensureMcpServers}).
+ * MCPManager keeps no global tool pool; all queries/installs are based on the current role's own computer.
  */
 public final class MCPManager {
 
@@ -68,9 +68,9 @@ public final class MCPManager {
      * Returns the list of tool names that were installed successfully.
      */
     public List<String> installGroupDefaults(AgentRole role, String group) {
-        // 1) Make sure the role computer's independent MCP server is installed
+        // 1) Make sure the role computer's MCP server sessions are up and their tools registered
         Computer computer = role.computer();
-        computer.installMcpServer();
+        computer.ensureMcpServers();
         List<String> installed = computer.listInstalledMcpTools();
         if (installed.isEmpty()) {
             logger.warn("[{}] computer has no MCP server tools, skipping default group '{}'", role.roleId, group);
@@ -117,10 +117,10 @@ public final class MCPManager {
         return ok;
     }
 
-    /** Install an MCP tool for the role (from the role computer's independent MCP server). */
+    /** Install an MCP tool for the role (from the MCP servers of the role's own computer). */
     public String addTool(AgentRole role, String toolName) {
         Computer computer = role.computer();
-        computer.installMcpServer();
+        computer.ensureMcpServers();
         String roleId = role.roleId;
         Set<String> mine = roleTools.computeIfAbsent(roleId, k -> new LinkedHashSet<>());
         if (mine.contains(toolName)) {

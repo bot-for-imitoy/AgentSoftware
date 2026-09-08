@@ -40,9 +40,10 @@ public abstract class Computer {
 
     public final String roleId;
     protected boolean on = false;
-    protected final boolean autoMcp;              // auto-created computers: automatically install the MCP server at creation time
+    protected final boolean autoMcp;              // auto-created computers: start their MCP servers at creation time
     protected final Map<String, ToolRegistry.ToolDef> mcpTools = new LinkedHashMap<>();
-    protected MCPServer mcpServer = null;          // this computer's own MCP server connection (lazily created)
+    /** This computer's MCP server sessions (started by subclasses that support an MCP server, e.g. {@link PodmanComputer}). */
+    protected final List<MCPServer> mcpServers = new ArrayList<>();
     protected String connectError = null;          // reason for the most recent MCP connection failure (for diagnostics)
 
     protected Computer(String roleId, boolean autoMcp) {
@@ -52,47 +53,57 @@ public abstract class Computer {
 
     // ── MCP session liveness check and reconnect ───────────────────────────
 
-    protected boolean mcpServerAlive() {
-        MCPServer srv = mcpServer;
-        if (srv == null) {
+    /** Whether all MCP server sessions of this computer are alive (no sessions → true). */
+    protected boolean mcpServersAlive() {
+        if (mcpServers.isEmpty()) {
             return true;
         }
-        try {
-            return srv.isAlive(5.0);
-        } catch (Exception e) {
-            return false;
+        for (MCPServer srv : mcpServers) {
+            try {
+                if (!srv.isAlive(5.0)) {
+                    return false;
+                }
+            } catch (Exception e) {
+                return false;
+            }
         }
+        return true;
     }
 
-    /** Rebuild the MCP server session when it becomes invalid (podman stop after a cross-day shutdown kills the stdio pipe). */
-    protected void reconnectMcpServer() {
-        if (mcpServer == null){
-            logger.error("MCPServer is null");
-            return;
-        }
-        if (mcpServerAlive()) {
-            return;
-        }
-        logger.warn("Reconnecting MCP Sever in computer [{}] ...", roleId);
-        try {
-            mcpServer.close();
-        } catch (Exception ignored) {
-        }
-        mcpTools.clear();  // the old handlers are bound to the dead server
-        try {
-            mcpServer.connect();
-        } catch (Exception e) {
-            logger.error("Computer [{}] MCP server rebuild failed", roleId, e);
+    /**
+     * Rebuild MCP server sessions that became invalid (podman stop after a cross-day shutdown
+     * kills the stdio pipes). Tool handlers are bound to their server object, which is reused
+     * across reconnects, so already-registered tools stay valid without re-registration.
+     */
+    protected void reconnectMcpServers() {
+        for (MCPServer srv : mcpServers) {
+            try {
+                if (srv.isAlive(5.0)) {
+                    continue;
+                }
+            } catch (Exception e) {
+                // not alive -> reconnect below
+            }
+            logger.warn("Reconnecting MCP server '{}' in computer [{}] ...", srv.packageName, roleId);
+            try {
+                srv.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                srv.connect();
+            } catch (Exception e) {
+                logger.error("Computer [{}] MCP server '{}' rebuild failed", roleId, srv.packageName, e);
+            }
         }
     }
 
     /**
-     * Install this computer's independent MCP server and return the tool names it
-     * exposes. The base computer runs no MCP server; computers that support one
+     * Ensure this computer's MCP server sessions are started/connected and return the tool
+     * names they expose. The base computer runs no MCP server; computers that support one
      * (e.g. {@link PodmanComputer}) override this method.
      */
-    public List<String> installMcpServer() {
-        logger.warn("Computer [{}] does not support an MCP server, nothing installed", roleId);
+    public List<String> ensureMcpServers() {
+        logger.warn("Computer [{}] does not support an MCP server, nothing started", roleId);
         return new ArrayList<>();
     }
 
