@@ -111,6 +111,8 @@ public class TimeEventBus extends EventBus {
     private int tick = 0;                              // current absolute tick (explicit state, jumps on fast-forward)
     private Thread thread = null;
     private boolean running = false;
+    /** While true the time thread does nothing: the simulated clock is frozen (pause). */
+    private volatile boolean clockPaused = false;
     private Consumer<Types.Event> eventSender = null;
     private Supplier<Instant> clock = Instant::now;    // time source (API retained; tick is explicit state)
     private int firedDay = 0;                          // day on which events were fired
@@ -197,6 +199,22 @@ public class TimeEventBus extends EventBus {
 
     public void setEventSender(Consumer<Types.Event> sender) {
         this.eventSender = sender;
+    }
+
+    // ── Clock pause (freeze) ───────────────────────────────────
+
+    /**
+     * Freeze or unfreeze the simulated clock. While frozen the time thread does nothing: no busy
+     * advance, no timed events / shift events, no fast-forward and no wrap-up forcing — the whole
+     * simulation stands still until the clock is unfrozen (used by the system-level pause feature).
+     */
+    public void setClockPaused(boolean paused) {
+        this.clockPaused = paused;
+    }
+
+    /** Whether the simulated clock is currently frozen (system pause). */
+    public boolean isClockPaused() {
+        return clockPaused;
     }
 
     // ── Fast-forward (skip waiting when all roles are idle) ───────────────────
@@ -484,6 +502,7 @@ public class TimeEventBus extends EventBus {
         }
         tick = 0;
         running = true;
+        clockPaused = false;   // a fresh start is never frozen (a leftover pause must not stick)
         firedDay = 0;
         firedStart = false;
         firedEnd = false;
@@ -679,6 +698,18 @@ public class TimeEventBus extends EventBus {
         long lastBusyNanos = System.nanoTime();
         boolean wasBusy = false;
         while (running) {
+            // Paused: the clock is frozen. Do not advance / fire events / fast-forward / force
+            // wrap-up; drop stale timers so nothing jumps the instant the clock is unfrozen.
+            if (clockPaused) {
+                wasBusy = false;
+                idleSince = null;
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
             long nowNanos = System.nanoTime();
             boolean busy = isAnyRoleBusy();
             try {

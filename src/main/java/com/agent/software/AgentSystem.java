@@ -451,6 +451,85 @@ public class AgentSystem {
         pool.assignTask(roleId, task);
     }
 
+    // ── Pause / resume ──────────────────────────────────────────
+
+    /** Pause-state lock (guards {@link #paused} + {@link #pauseReason}). */
+    private final Object pauseLock = new Object();
+    private boolean paused = false;
+    private String pauseReason = "";
+
+    /** Whether the whole system is paused (simulated clock frozen, roles hold new tasks). */
+    public boolean isPaused() {
+        synchronized (pauseLock) {
+            return paused;
+        }
+    }
+
+    /** Why the system is paused ("" while running). */
+    public String pauseReason() {
+        synchronized (pauseLock) {
+            return pauseReason;
+        }
+    }
+
+    /**
+     * Pause the whole system: the simulated clock freezes (no shift events / task reminders fire)
+     * and no role starts a new task until {@link #resume()} is called. Idempotent: repeated calls
+     * while paused only refresh the reason; the log entry, activity-journal notice and Web chat
+     * notice are emitted on the running → paused transition only.
+     *
+     * <p>Triggered by the Web UI pause button and automatically by the LLM layer when the API
+     * reports an exhausted account balance/quota (see {@code OpenAICompatLLM} auto-pause hook).
+     */
+    public void pause(String reason) {
+        boolean transition;
+        synchronized (pauseLock) {
+            transition = !paused;
+            paused = true;
+            if (reason != null && !reason.isBlank()) {
+                pauseReason = reason;
+            }
+        }
+        timeManager.setClockPaused(true);  // freeze the simulated clock immediately
+        if (transition) {
+            logger.warn("AgentSystem PAUSED: {}", pauseReason());
+            notice("⏸ System paused" + (pauseReason().isEmpty() ? "" : " — " + pauseReason()));
+            pool.journalAll("System paused: " + (pauseReason().isEmpty()
+                    ? "paused via the Web UI" : pauseReason()));
+        }
+    }
+
+    /**
+     * Resume a paused system: unfreeze the simulated clock; role workers start processing their
+     * held task queues again. No-op when the system is not paused.
+     */
+    public void resume() {
+        boolean transition;
+        synchronized (pauseLock) {
+            transition = paused;
+            paused = false;
+            pauseReason = "";
+        }
+        timeManager.setClockPaused(false);
+        if (transition) {
+            logger.info("AgentSystem resumed: {}", timeManager.currentDateTime());
+            notice("▶ System resumed — " + timeManager.currentDateTime());
+            pool.journalAll("System resumed at " + timeManager.currentDateTime());
+        }
+    }
+
+    /** Record one system-level notice into the Web chat feed (visible under All Activity). */
+    private void notice(String text) {
+        if (chatStore == null) {
+            return;
+        }
+        try {
+            chatStore.record(ChatStore.KIND_NOTE, "", "", "System", "", "", text, null);
+        } catch (Exception e) {
+            logger.warn("AgentSystem: failed to record system notice", e);
+        }
+    }
+
     // ── Lifecycle ──────────────────────────────────────────
 
     /** Start the system: role pool threads + time thread. Startup moment = Tick 0 / Day 1. */

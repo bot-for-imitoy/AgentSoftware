@@ -115,8 +115,16 @@ public class RolePool {
 
     /** Create an LLM client per role (with role log prefix); configuration goes through unified OpenAI layered resolution. */
     public LLM newLlm(String roleId) {
-        return new OpenAICompatLLM(llmApiKey, null, llmModel, roleId,
+        OpenAICompatLLM llm = new OpenAICompatLLM(llmApiKey, null, llmModel, roleId,
                 owner != null ? owner.configStore : null);
+        if (owner != null) {
+            // System pause integration: when the API reports an exhausted account balance/quota
+            // the whole system pauses automatically (no retries on an empty account), and no new
+            // request is sent while the system is paused.
+            llm.setOnInsufficientBalance(reason -> owner.pause(reason));
+            llm.setPauseGate(owner::isPaused);
+        }
+        return llm;
     }
 
     /** Dynamic onboarding: register a new role and immediately start its worker thread (used by the hiring flow). */
@@ -262,6 +270,17 @@ public class RolePool {
     public void roleLoop(AgentRole role) {
         logger.info("[{}] Worker loop started", role.roleId);
         while (role.isRunning() && !shutdownFlag.get()) {
+            // System pause: the whole team holds — no task is popped or started while paused.
+            // A task already in flight finishes (or is aborted at its next LLM interaction by the
+            // pause gate installed on the role's LLM client); everything queued waits for resume.
+            if (owner != null && owner.isPaused()) {
+                try {
+                    Thread.sleep(200);  // hold the queue; resume() turns the team back on
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
             // Off-duty hold after shift end (18:00): a role that wrote its daily summary is OFF_DUTY;
             // ordinary tasks still queued (leftovers of the finished shift) are held until the next
             // day's shift start and only CRITICAL tasks (EMERGENCY events) may wake it immediately.
