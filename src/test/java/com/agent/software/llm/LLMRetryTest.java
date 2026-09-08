@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -137,6 +138,74 @@ class LLMRetryTest {
         LLM.ChatResponse r = client(s).chat("s", "u", 0.7, 8);
         assertTrue(r.text.startsWith("[API error:"));
         assertEquals(1, s.calls.get());
+    }
+
+    // ── Insufficient balance / quota (auto-pause trigger) ─────
+
+    @Test
+    void testInsufficientBalanceMarkerDetection() {
+        // HTTP 402 is always treated as an exhausted-account error
+        assertTrue(OpenAICompatLLM.isInsufficientBalance(402, "{}"));
+        // … as are error bodies mentioning balance / quota exhaustion (any status)
+        assertTrue(OpenAICompatLLM.isInsufficientBalance(200,
+                "{\"error\":{\"message\":\"Insufficient Balance\"}}"));
+        assertTrue(OpenAICompatLLM.isInsufficientBalance(429,
+                "{\"error\":{\"type\":\"insufficient_quota\",\"message\":\"You exceeded your current quota\"}}"));
+        assertTrue(OpenAICompatLLM.isInsufficientBalance(403,
+                "{\"error\":{\"message\":\"余额不足\"}}"));
+        // transient errors are NOT treated as balance exhaustion
+        assertFalse(OpenAICompatLLM.isInsufficientBalance(429,
+                "{\"error\":{\"message\":\"Rate limit reached, slow down\"}}"));
+        assertFalse(OpenAICompatLLM.isInsufficientBalance(500, "server error"));
+        assertFalse(OpenAICompatLLM.isInsufficientBalance(200, "ok"));
+    }
+
+    @Test
+    void test402InsufficientBalanceNoRetryAndNotifies() throws IOException {
+        FakeServer s = fake(402);
+        AtomicInteger notified = new AtomicInteger(0);
+        OpenAICompatLLM llm = client(s);
+        llm.setOnInsufficientBalance(reason -> notified.incrementAndGet());
+        LLM.ChatResponse r = llm.chat("s", "u", 0.7, 8);
+        assertTrue(r.text.startsWith("[API error: HTTP 402"), r.text);
+        assertEquals(1, s.calls.get());    // no retries on an empty account
+        assertEquals(1, notified.get());   // the auto-pause hook fired
+    }
+
+    /** Some backends report quota exhaustion as 429 with an insufficient_quota body — must not retry forever. */
+    @Test
+    void test429WithInsufficientQuotaBodyNoRetryAndNotifies() throws IOException {
+        FakeServer s = new FakeServer(429);
+        servers.add(s);
+        s.server.removeContext("/v1/chat/completions");
+        s.server.createContext("/v1/chat/completions", ex -> {
+            s.calls.incrementAndGet();
+            String body = "{\"error\":{\"type\":\"insufficient_quota\","
+                    + "\"message\":\"You exceeded your current quota, please check your plan and billing details.\"}}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(429, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        AtomicInteger notified = new AtomicInteger(0);
+        OpenAICompatLLM llm = client(s);
+        llm.setOnInsufficientBalance(reason -> notified.incrementAndGet());
+        LLM.ChatResponse r = llm.chat("s", "u", 0.7, 8);
+        assertTrue(r.text.startsWith("[API error:"), r.text);
+        assertEquals(1, s.calls.get());
+        assertEquals(1, notified.get());
+    }
+
+    // ── System pause: no request is sent / retried while paused ─
+
+    @Test
+    void testPauseGateAbortsRequestWithoutCallingApi() throws IOException {
+        FakeServer s = fake(500);
+        OpenAICompatLLM llm = client(s);
+        llm.setPauseGate(() -> true);   // the owning system is paused
+        LLM.ChatResponse r = llm.chat("s", "u", 0.7, 8);
+        assertTrue(r.text.contains("system paused"), r.text);
+        assertEquals(0, s.calls.get());  // paused → the API is never contacted
     }
 
     @Test
