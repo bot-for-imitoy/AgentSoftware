@@ -75,8 +75,15 @@ public class EventDispatcher {
                 if (!roleName.equals(event.targetRole)) {
                     continue;
                 }
-                // Roles that are off duty / wrapping up / waiting are not disturbed by non-urgent targeted events
-                if (event.priority.value < Types.Priority.EMERGENCY.value
+                // Roles that are off duty / wrapping up / waiting are not disturbed by non-urgent targeted events.
+                // Exception: scheduled task reminders (TASK_DUE, e.g. note reminders). They fire exactly once —
+                // if dropped here they are lost forever (the sender already marked them fired), so they must
+                // always reach the target role's queue: a WAIT role processes them right after its current
+                // wait ends, an OFF_DUTY role's held queue resumes them at the next shift start.
+                boolean scheduledReminder = TimeEventBus.EVENT_TASK_DUE.equals(event.eventType)
+                        && "task".equals(event.source);
+                if (!scheduledReminder
+                        && event.priority.value < Types.Priority.EMERGENCY.value
                         && (role.state == Types.AgentState.OFF_DUTY
                         || role.state == Types.AgentState.WRAPPING_UP
                         || role.state == Types.AgentState.WAIT)) {
