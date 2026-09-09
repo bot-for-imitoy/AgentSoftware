@@ -13,7 +13,7 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 (0-token filtering), and per-role computers give every agent an isolated filesystem.
 
 > Status: actively developed. The engine, role system, toolkits, Web UI and persistence are in
-> place and covered by **205 JUnit tests**; the simulation flow itself keeps being refined.
+> place and covered by **208 JUnit tests**; the simulation flow itself keeps being refined.
 
 ---
 
@@ -100,7 +100,7 @@ AgentSoftware/
 │       ├── providers.local.example.json
 │       ├── mcp_group_rules.json     # MCP servers + tool groups (file_ops, git_ops, github_ops)
 │       └── web/                     # static assets of the Web UI (index.html/app.js/style.css)
-├── src/test/java/                   # JUnit 5 tests (205 tests / 28 classes)
+├── src/test/java/                   # JUnit 5 tests (208 tests / 29 classes)
 └── data/                            # runtime data (gitignored)
     ├── computers/<role_id>/         # one host folder per role computer (mounted at /home/agent)
     ├── journals/                    # per-role activity journals
@@ -125,7 +125,7 @@ AgentSoftware/
 
 ```bash
 mvn compile     # compile
-mvn test        # run all JUnit tests (205 tests, 28 test classes)
+mvn test        # run all JUnit tests (208 tests, 29 test classes)
 mvn package     # produce target/agent-software.jar
 ```
 
