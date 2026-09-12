@@ -57,7 +57,10 @@ time, summaries persisted every day), events decide *whether* an agent should wa
   email (virtual mailbox, optionally real SMTP), hire new colleagues on the spot (`post_job_posting`),
   and the CEO talks to **you** — the client — through the console or the Web UI.
 - **Java 21+ virtual threads.** Each role runs on its own resident virtual thread; LLM requests
-  use the JDK `HttpClient` with retry semantics (429 / 5xx / timeouts).
+  use the JDK `HttpClient` with retry semantics (429 / 5xx / timeouts). When the endpoint starts
+  rate-limiting, the retries are **ordered by retry count** instead of racing: the request that has
+  already been retried the most is served first, the requests that have retried fewer times wait
+  for it to finish, and only then are the rest served in turn (see `RetryArbiter`).
 - **Everything is configurable, JSON-first.** Role templates live in
   `role_templates.json`, the LLM-provider catalog in `providers.default.json`, MCP tool groups in
   `mcp_group_rules.json`.
@@ -84,7 +87,8 @@ AgentSoftware/
 │   │   ├── role/                    # AgentRole, RolePool, RoleLoader (JSON templates), RoleFactory, ToolRegistry
 │   │   ├── computers/               # Computer, ComputerManager, PodmanComputer, SSHComputer (kind: podman|local|ssh)
 │   │   ├── io/                      # Input / StdInput (console) / WebInput (Web page) — client replies
-│   │   ├── llm/                     # LLM, OpenAICompatLLM (layered config, retries)
+│   │   ├── llm/                     # LLM, OpenAICompatLLM (layered config, retries), RetryArbiter
+│   │   │                            #   (rate-limit ordering: most-retried request first)
 │   │   │   └── provider/            # ProviderManager + provider catalog (18 providers, 2 wire dialects)
 │   │   ├── tools/                   # Tool / Toolkit base classes + registry
 │   │   │   └── toolkits/            # memory, note, time, todo, taskview, pc, mcp, skill, email,
@@ -391,6 +395,27 @@ calendar dates.
 - `OpenAICompatLLM` talks to any **OpenAI-compatible** endpoint over the JDK `HttpClient`, with
   layered config resolution: explicit constructor args → Java args (`-D…`) → environment
   variables → config file (`llm.*` keys) → defaults (`https://api.openai.com`, `gpt-4o-mini`).
+- **Retry ordering under rate limiting** (`RetryArbiter`). A retryable failure (HTTP 429 or 5xx)
+  retries after `retryDelay` (10s) up to `retryMax` (200) times, as before — but from the first
+  such failure the endpoint is *congested* and every further attempt asks a per-endpoint arbiter
+  for a slot, ordered by **retry count, highest first**:
+
+  | Situation | Behaviour |
+  |---|---|
+  | Endpoint healthy | Arbiter is transparent — no queueing, no concurrency limit |
+  | 429 / 5xx seen | Endpoint congests; attempts are serialized (one at a time) |
+  | A waits with fewer retries than B | **A is blocked** until B's attempt has finished |
+  | Equal retry counts | Served in arrival order (FIFO) |
+  | 429/5xx again | Stays congested, next-highest retry count is served |
+  | Success, nobody parked | Congestion lifts; the endpoint runs freely again |
+
+  The slot is released *before* the retry delay, so a request's backoff does not hold the
+  endpoint — parked callers drain into those gaps and no request is starved of service. A parked
+  request that aborts (system paused, thread interrupted) leaves the queue immediately. One
+  arbiter is shared per Base URL across every role and every `AgentSystem` in the JVM, and
+  `maxConcurrentWhileCongested` raises the concurrency if the endpoint's limit allows more.
+  Tests: `RetryArbiterTest` (ordering/queueing) and `LLMRetryPriorityTest` (two clients against a
+  gated HTTP endpoint).
 - `llm.provider.ProviderManager` bundles a **provider catalog** (`providers.default.json`, 18
   providers: OpenAI, Anthropic, Google Gemini, DeepSeek, Mistral, Groq, OpenRouter, Together,
   xAI, Moonshot, Zhipu, DashScope, SiliconFlow, Cerebras, NVIDIA, Ollama, vLLM, LM Studio) with

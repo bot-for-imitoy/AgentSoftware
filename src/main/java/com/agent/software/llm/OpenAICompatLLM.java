@@ -47,10 +47,18 @@ public class OpenAICompatLLM implements LLM {
 
     // ── Request failure retry (user-specified) ─────────────
     // Recoverable errors retry after retryDelay seconds (10s), up to retryMax times (200);
-    // unrecoverable client errors (400/401/403/404 etc.) are not retried.
+    // unrecoverable client errors (400/401/403/404 etc.) are not retried. While such an error is
+    // in effect the attempts are additionally ordered by retry count (see retryArbiter below).
     public double retryDelay = 10.0;
     public int retryMax = 200;
     public int apiTimeoutSeconds = 120;
+
+    // ── Retry ordering while the endpoint is rate-limiting us ──
+    // While a 429/5xx is in effect, attempts of the same endpoint are funnelled through this
+    // arbiter, which serves the request with the highest retry count first and parks the callers
+    // that have retried less (see RetryArbiter). Shared per Base URL, so it orders the attempts
+    // of all roles at once; outside congestion it is transparent and costs nothing.
+    protected RetryArbiter retryArbiter;
 
     /** Log prefix (e.g. "OpenAI"). */
     public String apiName = "OpenAI";
@@ -107,6 +115,7 @@ public class OpenAICompatLLM implements LLM {
         this.apiKey = resolve(apiKey, API_KEY_ENV, "llm.api_key", null, env, props);
         this.baseUrl = stripSlash(resolve(baseUrl, BASE_URL_ENV, "llm.base_url", DEFAULT_BASE_URL, env, props));
         this.model = resolve(model, MODEL_ENV, "llm.model", DEFAULT_MODEL, env, props);
+        this.retryArbiter = RetryArbiter.forEndpoint(this.baseUrl);
     }
 
     /**
@@ -156,6 +165,24 @@ public class OpenAICompatLLM implements LLM {
      */
     public void setPauseGate(Supplier<Boolean> gate) {
         this.pauseGate = gate;
+    }
+
+    /**
+     * The arbiter that orders this client's attempts while its endpoint is throttling us
+     * (shared per Base URL with every other client of the same endpoint).
+     */
+    public RetryArbiter retryArbiter() {
+        RetryArbiter arbiter = this.retryArbiter;
+        if (arbiter == null) {   // defensive: subclasses may skip the constructor
+            arbiter = RetryArbiter.forEndpoint(baseUrl);
+            this.retryArbiter = arbiter;
+        }
+        return arbiter;
+    }
+
+    /** Replace the endpoint arbiter (tests, or an arbiter shared across several endpoints). */
+    public void setRetryArbiter(RetryArbiter arbiter) {
+        this.retryArbiter = arbiter;
     }
 
     /** Whether the owning system is paused right now (false when no pause gate is installed). */
@@ -364,12 +391,22 @@ public class OpenAICompatLLM implements LLM {
      * whole system stops instead of hammering an empty account) and requests sent while the system
      * is paused (the pause gate aborts them so a paused simulation makes no further API calls).
      *
+     * <p><b>Retry ordering.</b> Once an attempt sees a retryable API error (HTTP 429 or 5xx) the
+     * endpoint is marked congested and every further attempt of this endpoint asks {@link
+     * RetryArbiter} for a slot first: the request with the highest retry count is served first and
+     * the requests that have retried fewer times are blocked until it has finished, after which
+     * they are served in turn. A fresh request therefore never overtakes a request that is already
+     * several retries deep, and the slot is given back before the retry delay so the queue drains
+     * into the backoff gaps. This is what keeps a rate-limited endpoint from being hammered by all
+     * roles at once.
+     *
      * @return the response JSON Map; returns null when giving up (reason in retryError).
      */
     protected Map<String, Object> postWithRetry(URI url, Map<String, Object> payload) {
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(apiTimeoutSeconds))
                 .build();
+        RetryArbiter arbiter = retryArbiter();
         String lastErr = "";
         for (int attempt = 1; attempt <= retryMax; attempt++) {
             // System pause: never send (or keep retrying) a request while paused — the caller
@@ -388,6 +425,15 @@ public class OpenAICompatLLM implements LLM {
                 rb.header("Authorization", "Bearer " + apiKey);
             }
             HttpRequest request = rb.build();
+            // Retry ordering: while the endpoint is rate-limiting us, this request must wait for
+            // every request that has already been retried more often (see RetryArbiter). Outside
+            // congestion the gate grants the slot immediately and this costs nothing.
+            int retries = attempt - 1;
+            RetryArbiter.Slot slot = acquireSlot(arbiter, retries);
+            if (slot == null) {
+                return null;   // paused / interrupted while queued; retryError already set
+            }
+            boolean succeeded = false;
             try {
                 HttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = resp.statusCode();
@@ -404,31 +450,70 @@ public class OpenAICompatLLM implements LLM {
                 }
                 if (status == 429 || status >= 500) {
                     lastErr = "HTTP " + status;
+                    // Rate limit / server overload: switch the endpoint into congested mode so
+                    // that from now on the most-retried request is served first.
+                    arbiter.throttled(lastErr);
                     logger.warn("{} API request failed ({}, attempt {}/{}), retrying in {}s",
                             apiName, lastErr, attempt, retryMax, (long) retryDelay);
-                    sleep();
-                    continue;
-                }
-                if (status >= 400) {
+                } else if (status >= 400) {
                     retryError = "HTTP " + status + ": " + truncate(respBody, 200);
                     logger.error("{} API request failed, unrecoverable: {}", apiName, retryError);
                     return null;
+                } else {
+                    Map<String, Object> data = parseBody(respBody);
+                    succeeded = true;   // a parsed 2xx body is what lifts congestion again
+                    return data;
                 }
-                return parseBody(respBody);
             } catch (java.net.http.HttpTimeoutException e) {
                 lastErr = "timeout";
                 logger.warn("{} API request timed out (attempt {}/{}), retrying in {}s", apiName, attempt, retryMax, (long) retryDelay);
-                sleep();
             } catch (Exception e) {
                 lastErr = e.getClass().getSimpleName() + ": " + truncate(e.getMessage(), 120);
                 logger.warn("{} API request error ({}, attempt {}/{}), retrying in {}s",
                         apiName, lastErr, attempt, retryMax, (long) retryDelay);
-                sleep();
+            } finally {
+                // Hand the slot back before the backoff below: a waiting caller must not be held
+                // up by this request's retry delay, which is what lets the parked queue drain.
+                slot.release(succeeded);
             }
+            sleep();
         }
         retryError = "Retried " + retryMax + " times and still failed: " + lastErr;
         logger.error("{} API request failed {} times, giving up: {}", apiName, retryMax, lastErr);
         return null;
+    }
+
+    /**
+     * Take an attempt slot from the endpoint arbiter.
+     *
+     * <p>The caller parks (keeping its place in the priority queue) until it is its turn; the
+     * arbiter re-checks the pause gate every {@link RetryArbiter#POLL_MILLIS} through the supplied
+     * condition, so a request queued behind a more-retried one aborts cleanly when the whole
+     * simulation is paused instead of sitting in the queue until resume.
+     *
+     * @return the slot to release after the attempt, or null when the caller must give up
+     *         (then {@link #retryError} holds the reason)
+     */
+    private RetryArbiter.Slot acquireSlot(RetryArbiter arbiter, int retries) {
+        RetryArbiter.Slot slot = arbiter.acquire(retries, RetryArbiter.POLL_MILLIS,
+                () -> !isSystemPaused());
+        if (slot == null) {
+            if (isSystemPaused()) {
+                retryError = "aborted: system paused";
+                logger.warn("{} API request aborted: system paused while queued (retries={})",
+                        apiName, retries);
+            } else {
+                retryError = "aborted: interrupted";
+                logger.warn("{} API request aborted: interrupted while queued (retries={})",
+                        apiName, retries);
+            }
+            return null;
+        }
+        if (slot.waitedMillis() > 0) {
+            logger.debug("{} request (retries={}) waited {}ms for its turn ({})",
+                    apiName, retries, slot.waitedMillis(), arbiter);
+        }
+        return slot;
     }
 
     /** Wait {@link #retryDelay} between attempts, waking early (and aborting the retry) when the system pauses. */
