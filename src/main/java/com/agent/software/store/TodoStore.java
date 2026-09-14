@@ -23,7 +23,7 @@ public class TodoStore {
 
     private static final Logger logger = LoggerFactory.getLogger(TodoStore.class);
 
-    /** Valid statuses (consistent with the Hermes todo tool). */
+    /** Valid todo statuses. */
     public static final List<String> TODO_STATUSES = List.of("pending", "in_progress", "completed");
 
     public final String roleId;

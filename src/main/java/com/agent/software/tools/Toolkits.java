@@ -22,7 +22,7 @@ import java.util.List;
  *
  * DEFAULT_TOOLKITS (toolkits auto-assembled for roles, all template-style toolkits.* implementations):
  *   memory / note / time / todo / task_view / pc / mcp_manager /
- *   skill_manager / email (hermes is disabled by default, consistent with the Python version).
+ *   skill_manager / email.
  *
  * Notes:
  *   - The note tool has been split out of memory: memory only keeps memory-related content (summary),
