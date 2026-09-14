@@ -3,11 +3,9 @@ package com.agent.software.adapters.computer;
 import com.agent.software.computers.Computer;
 import com.agent.software.domain.Payload;
 import com.agent.software.kernel.FailureText;
-import com.agent.software.kernel.JsonSchema;
 import com.agent.software.ports.ComputerPort;
 import com.agent.software.ports.ToolResult;
 import com.agent.software.ports.ToolSpec;
-import com.agent.software.role.ToolRegistry;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -84,11 +82,7 @@ public final class LegacyComputerAdapter implements ComputerPort {
 
     @Override
     public List<ToolSpec> mcpTools() {
-        List<ToolSpec> out = new ArrayList<>();
-        for (ToolRegistry.ToolDef def : computer.iterMcpTools()) {
-            out.add(new ToolSpec(def.name, def.description, JsonSchema.fromMap(def.inputSchema)));
-        }
-        return out;
+        return computer.iterMcpTools();
     }
 
     @Override

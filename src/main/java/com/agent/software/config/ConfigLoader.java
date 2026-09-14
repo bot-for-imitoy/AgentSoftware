@@ -1,7 +1,7 @@
 package com.agent.software.config;
 
 import com.agent.software.kernel.AgentException;
-import com.agent.software.utils.Json;
+import com.agent.software.kernel.Json;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

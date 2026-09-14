@@ -2,8 +2,8 @@ package com.agent.software.adapters.llm;
 
 import com.agent.software.config.AppConfig;
 import com.agent.software.kernel.AgentException;
-import com.agent.software.llm.provider.Provider;
-import com.agent.software.llm.provider.ProviderManager;
+import com.agent.software.adapters.llm.provider.Provider;
+import com.agent.software.adapters.llm.provider.ProviderManager;
 
 /**
  * Builds an {@link OpenAiCompatibleClient.Endpoint} from {@link AppConfig.Llm}

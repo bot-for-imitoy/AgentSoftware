@@ -6,8 +6,8 @@ import com.agent.software.kernel.TaskId;
 import com.agent.software.ports.ToolCall;
 import com.agent.software.ports.ToolResult;
 import com.agent.software.ports.TracePort;
-import com.agent.software.utils.Json;
-import com.agent.software.web.ChatStore;
+import com.agent.software.kernel.Json;
+import com.agent.software.adapters.web.ChatStore;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

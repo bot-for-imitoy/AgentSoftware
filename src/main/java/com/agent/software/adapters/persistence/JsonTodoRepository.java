@@ -3,7 +3,7 @@ package com.agent.software.adapters.persistence;
 import com.agent.software.kernel.AgentException;
 import com.agent.software.kernel.Names;
 import com.agent.software.ports.TodoRepository;
-import com.agent.software.utils.Json;
+import com.agent.software.kernel.Json;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

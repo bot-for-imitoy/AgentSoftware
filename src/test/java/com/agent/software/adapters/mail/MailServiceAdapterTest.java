@@ -4,7 +4,7 @@ import com.agent.software.domain.Payload;
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.kernel.RoleId;
 import com.agent.software.ports.MailPort;
-import com.agent.software.services.MailService;
+import com.agent.software.adapters.mail.MailService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

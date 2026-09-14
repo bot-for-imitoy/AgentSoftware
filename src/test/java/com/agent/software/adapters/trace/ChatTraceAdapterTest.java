@@ -6,7 +6,7 @@ import com.agent.software.kernel.RoleId;
 import com.agent.software.kernel.TaskId;
 import com.agent.software.ports.ToolCall;
 import com.agent.software.ports.ToolResult;
-import com.agent.software.web.ChatStore;
+import com.agent.software.adapters.web.ChatStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

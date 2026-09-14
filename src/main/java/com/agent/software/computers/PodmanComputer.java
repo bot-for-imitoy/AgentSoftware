@@ -1,7 +1,8 @@
 package com.agent.software.computers;
 
-import com.agent.software.core.MCPServer;
-import com.agent.software.role.ToolRegistry;
+import com.agent.software.adapters.mcp.MCPServer;
+import com.agent.software.kernel.JsonSchema;
+import com.agent.software.ports.ToolSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -194,13 +195,12 @@ public class PodmanComputer extends Computer {
                 continue;
             }
             MCPServer srv = server;
-            ToolRegistry.ToolDef td = new ToolRegistry.ToolDef(
+            ToolSpec spec = new ToolSpec(
                     tname,
                     String.valueOf(tool.getOrDefault("description", "")),
-                    mapOf(tool.get("inputSchema")),
-                    args -> srv.callTool(tname, args),
-                    "mcp:" + packageName + " (inside container " + containerName + ")");
-            if (mcpTools.put(tname, td) != null) {
+                    JsonSchema.fromMap(mapOf(tool.get("inputSchema"))));
+            McpTool binding = new McpTool(spec, args -> srv.callTool(tname, args));
+            if (mcpTools.put(tname, binding) != null) {
                 logger.warn("Computer[{}] MCP tool '{}' redefined by server '{}'", roleId, tname, packageName);
             }
         }

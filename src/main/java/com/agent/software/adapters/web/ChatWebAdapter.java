@@ -1,7 +1,7 @@
 package com.agent.software.adapters.web;
 
-import com.agent.software.utils.Json;
-import com.agent.software.web.ChatStore;
+import com.agent.software.kernel.Json;
+import com.agent.software.adapters.web.ChatStore;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 

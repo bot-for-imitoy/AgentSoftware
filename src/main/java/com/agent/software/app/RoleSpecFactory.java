@@ -5,7 +5,7 @@ import com.agent.software.domain.RoleSpec;
 import com.agent.software.kernel.AgentException;
 import com.agent.software.kernel.RoleId;
 import com.agent.software.ports.LlmPort;
-import com.agent.software.utils.Json;
+import com.agent.software.kernel.Json;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;

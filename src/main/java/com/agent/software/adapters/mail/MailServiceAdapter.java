@@ -2,7 +2,7 @@ package com.agent.software.adapters.mail;
 
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.ports.MailPort;
-import com.agent.software.services.MailService;
+import com.agent.software.adapters.mail.MailService;
 
 import java.util.ArrayList;
 import java.util.List;

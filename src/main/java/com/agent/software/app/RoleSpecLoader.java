@@ -4,7 +4,7 @@ import com.agent.software.domain.Payload;
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.kernel.AgentException;
 import com.agent.software.kernel.RoleId;
-import com.agent.software.utils.Json;
+import com.agent.software.kernel.Json;
 
 import java.io.IOException;
 import java.io.InputStream;

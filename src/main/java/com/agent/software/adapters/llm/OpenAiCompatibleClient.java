@@ -1,12 +1,12 @@
 package com.agent.software.adapters.llm;
 
 import com.agent.software.domain.Payload;
-import com.agent.software.llm.RetryArbiter;
+import com.agent.software.adapters.llm.RetryArbiter;
 import com.agent.software.ports.ChatMessage;
 import com.agent.software.ports.LlmPort;
 import com.agent.software.ports.ToolCall;
 import com.agent.software.ports.ToolSpec;
-import com.agent.software.utils.Json;
+import com.agent.software.kernel.Json;
 
 import java.io.IOException;
 import java.net.URI;

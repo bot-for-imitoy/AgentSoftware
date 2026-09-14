@@ -1,7 +1,7 @@
 package com.agent.software.computers;
 
-import com.agent.software.core.MCPServer;
-import com.agent.software.role.ToolRegistry;
+import com.agent.software.adapters.mcp.MCPServer;
+import com.agent.software.ports.ToolSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +41,7 @@ public abstract class Computer {
     public final String roleId;
     protected boolean on = false;
     protected final boolean autoMcp;              // auto-created computers: start their MCP servers at creation time
-    protected final Map<String, ToolRegistry.ToolDef> mcpTools = new LinkedHashMap<>();
+    protected final Map<String, McpTool> mcpTools = new LinkedHashMap<>();
     /** This computer's MCP server sessions (started by subclasses that support an MCP server, e.g. {@link PodmanComputer}). */
     protected final List<MCPServer> mcpServers = new ArrayList<>();
     protected String connectError = null;          // reason for the most recent MCP connection failure (for diagnostics)
@@ -254,27 +254,42 @@ public abstract class Computer {
         return names;
     }
 
-    public ToolRegistry.ToolDef getMcpTool(String name) {
-        return mcpTools.get(name);
+    public ToolSpec getMcpTool(String name) {
+        McpTool tool = mcpTools.get(name);
+        return tool == null ? null : tool.spec();
     }
 
-    public List<ToolRegistry.ToolDef> iterMcpTools() {
-        return new ArrayList<>(mcpTools.values());
+    /** Description of one MCP tool exposed by this computer. */
+    public record McpTool(ToolSpec spec, McpToolHandler handler) {
+    }
+
+    /** Executes an MCP tool locally (in-container for podman computers). */
+    @FunctionalInterface
+    public interface McpToolHandler {
+        String handle(Map<String, Object> args);
+    }
+
+    public List<ToolSpec> iterMcpTools() {
+        List<ToolSpec> out = new ArrayList<>(mcpTools.size());
+        for (McpTool tool : mcpTools.values()) {
+            out.add(tool.spec());
+        }
+        return out;
     }
 
     /** Run an MCP tool (executed on this computer). */
     public String runMcpTool(String toolName, Map<String, Object> args) {
-        ToolRegistry.ToolDef td = mcpTools.get(toolName);
-        if (td == null) {
+        McpTool tool = mcpTools.get(toolName);
+        if (tool == null) {
             return "Error: MCP tool '" + toolName + "' is not installed on this computer. Installed: "
                     + (listInstalledMcpTools().isEmpty() ? "(none)" : listInstalledMcpTools())
                     + ". Use mcp_search / mcp_list to view available tools, and mcp_add to install.";
         }
-        if (td.handler == null) {
+        if (tool.handler() == null) {
             return "Error: tool '" + toolName + "' has no executable handler.";
         }
         try {
-            return String.valueOf(td.handler.handle(args));
+            return String.valueOf(tool.handler().handle(args));
         } catch (Exception exc) {
             logger.error("MCP tool {} execution failed", toolName, exc);
             return "Error: tool '" + toolName + "' execution failed - " + exc.getMessage();

@@ -2,7 +2,7 @@ package com.agent.software.adapters.input;
 
 import com.agent.software.kernel.RoleId;
 import com.agent.software.ports.InputPort;
-import com.agent.software.web.ChatStore;
+import com.agent.software.adapters.web.ChatStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

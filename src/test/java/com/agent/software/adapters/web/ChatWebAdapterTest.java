@@ -1,6 +1,6 @@
 package com.agent.software.adapters.web;
 
-import com.agent.software.web.ChatStore;
+import com.agent.software.adapters.web.ChatStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
