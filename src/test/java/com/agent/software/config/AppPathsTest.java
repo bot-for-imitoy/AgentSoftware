@@ -49,4 +49,22 @@ class AppPathsTest {
         assertEquals(Path.of("/d/sub/file.json"), p.dataFile("sub", "file.json"));
         assertEquals(Path.of("/c/config.json"), p.configFile("config.json"));
     }
+
+    @Test
+    void storageEnvOverridesPlatformDefaultsButNotExplicitStorage() {
+        Map<String, String> env = Map.of(
+                "HOME", "/home/u",
+                "AGENTSOFTWARE_STORAGE_DATA_DIR", "/env/data",
+                "AGENTSOFTWARE_STORAGE_CONFIG_DIR", "/env/config");
+
+        AppPaths fromEnv = AppPaths.resolve(new AppConfig.Storage(null, null, null, null), "App", env, "Linux");
+        assertEquals(Path.of("/env/data"), fromEnv.dataDir());
+        assertEquals(Path.of("/env/config"), fromEnv.configDir());
+        assertEquals(Path.of("/env/config"), fromEnv.configFile("config.json").getParent());
+
+        AppPaths explicit = AppPaths.resolve(
+                new AppConfig.Storage("/explicit/data", "/explicit/config", null, null), "App", env, "Linux");
+        assertEquals(Path.of("/explicit/data"), explicit.dataDir());
+        assertEquals(Path.of("/explicit/config"), explicit.configDir());
+    }
 }

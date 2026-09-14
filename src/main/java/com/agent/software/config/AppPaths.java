@@ -43,31 +43,35 @@ public record AppPaths(Path configDir, Path dataDir, Path cacheDir, Path logDir,
                 windows ? e.get("USERPROFILE") : e.get("HOME"),
                 System.getProperty("user.home"), "."));
 
-        Path config = configured(s.configDir())
-                ? Paths.get(s.configDir())
-                : windows ? fromEnv(e, "APPDATA", home.resolve("AppData/Roaming")).resolve(appName)
-                : macos ? home.resolve("Library/Application Support").resolve(appName)
-                : fromEnv(e, "XDG_CONFIG_HOME", home.resolve(".config")).resolve(appName);
+        Path config = pick(s.configDir(), e.get("AGENTSOFTWARE_STORAGE_CONFIG_DIR"))
+                .orElseGet(() -> windows ? fromEnv(e, "APPDATA", home.resolve("AppData/Roaming")).resolve(appName)
+                        : macos ? home.resolve("Library/Application Support").resolve(appName)
+                        : fromEnv(e, "XDG_CONFIG_HOME", home.resolve(".config")).resolve(appName));
 
-        Path data = configured(s.dataDir())
-                ? Paths.get(s.dataDir())
-                : windows ? fromEnv(e, "LOCALAPPDATA", home.resolve("AppData/Local")).resolve(appName)
-                : macos ? home.resolve("Library/Application Support").resolve(appName)
-                : fromEnv(e, "XDG_DATA_HOME", home.resolve(".local/share")).resolve(appName);
+        Path data = pick(s.dataDir(), e.get("AGENTSOFTWARE_STORAGE_DATA_DIR"))
+                .orElseGet(() -> windows ? fromEnv(e, "LOCALAPPDATA", home.resolve("AppData/Local")).resolve(appName)
+                        : macos ? home.resolve("Library/Application Support").resolve(appName)
+                        : fromEnv(e, "XDG_DATA_HOME", home.resolve(".local/share")).resolve(appName));
 
-        Path cache = configured(s.cacheDir())
-                ? Paths.get(s.cacheDir())
-                : windows ? data.resolve("Cache")
-                : macos ? home.resolve("Library/Caches").resolve(appName)
-                : fromEnv(e, "XDG_CACHE_HOME", home.resolve(".cache")).resolve(appName);
+        Path cache = pick(s.cacheDir(), e.get("AGENTSOFTWARE_STORAGE_CACHE_DIR"))
+                .orElseGet(() -> windows ? data.resolve("Cache")
+                        : macos ? home.resolve("Library/Caches").resolve(appName)
+                        : fromEnv(e, "XDG_CACHE_HOME", home.resolve(".cache")).resolve(appName));
 
-        Path log = configured(s.logDir())
-                ? Paths.get(s.logDir())
-                : windows ? data.resolve("Logs")
-                : macos ? home.resolve("Library/Logs").resolve(appName)
-                : fromEnv(e, "XDG_STATE_HOME", home.resolve(".local/state")).resolve(appName);
+        Path log = pick(s.logDir(), e.get("AGENTSOFTWARE_STORAGE_LOG_DIR"))
+                .orElseGet(() -> windows ? data.resolve("Logs")
+                        : macos ? home.resolve("Library/Logs").resolve(appName)
+                        : fromEnv(e, "XDG_STATE_HOME", home.resolve(".local/state")).resolve(appName));
 
         return new AppPaths(config, data, cache, log, appName);
+    }
+
+    /** First configured value wins: explicit storage field, then the environment override. */
+    private static java.util.Optional<Path> pick(String explicit, String envValue) {
+        if (configured(explicit)) {
+            return java.util.Optional.of(Paths.get(explicit));
+        }
+        return configured(envValue) ? java.util.Optional.of(Paths.get(envValue)) : java.util.Optional.empty();
     }
 
     public Path configFile(String... parts) {
