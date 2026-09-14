@@ -34,7 +34,9 @@ import com.agent.software.runtime.LifecycleCoordinator;
 import com.agent.software.runtime.TeamRuntime;
 import com.agent.software.runtime.ToolLoop;
 import com.agent.software.services.MailService;
+import com.agent.software.tools.builtin.ClientToolkit;
 import com.agent.software.tools.builtin.EmailToolkit;
+import com.agent.software.tools.builtin.HrToolkit;
 import com.agent.software.tools.builtin.MemoryToolkit;
 import com.agent.software.tools.builtin.NoteToolkit;
 import com.agent.software.tools.builtin.PcToolkit;
@@ -47,6 +49,7 @@ import com.agent.software.tools.spi.ToolService;
 import com.agent.software.web.ChatStore;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -83,6 +86,19 @@ public final class Application implements AutoCloseable {
     private final DispatchService dispatch;
     private final LifecycleCoordinator lifecycle;
     private final ClockService clock;
+
+    /** Used when no console/web input channel was supplied. */
+    private static final InputPort UNAVAILABLE_INPUT = new InputPort() {
+        @Override
+        public boolean interactive() {
+            return false;
+        }
+
+        @Override
+        public ClientReply ask(ClientQuestion question, Duration timeout) {
+            return ClientReply.unavailable("no client input channel is configured");
+        }
+    };
 
     private Application(AppConfig config, AppPaths paths, InputPort input, ChatStore chatStore,
                         MailService mailService, MailServiceAdapter mail, NoteRepository notes,
@@ -123,6 +139,7 @@ public final class Application implements AutoCloseable {
     public static Application create(AppConfig config, InputPort input, LlmPort llmOverride) {
         AppConfig cfg = config == null ? AppConfig.defaults() : config;
         AppPaths paths = AppPaths.resolve(cfg.storage());
+        InputPort effectiveInput = input != null ? input : UNAVAILABLE_INPUT;
 
         ChatStore chatStore = new ChatStore();
         ChatTraceAdapter trace = new ChatTraceAdapter(chatStore);
@@ -180,6 +197,9 @@ public final class Application implements AutoCloseable {
                 .map(runtime -> computerPorts.computeIfAbsent(id,
                         key -> ComputerAdapters.open(computers, runtime.spec())));
 
+        RoleSpecFactory roleFactory = new RoleSpecFactory(llm, cfg.toolkits().defaults(),
+                () -> team.all().stream().map(AgentRuntime::spec).toList());
+
         ToolkitCatalog catalog = new ToolkitCatalog()
                 .register(NoteToolkit.create(notes))
                 .register(TodoToolkit.create(todos))
@@ -194,7 +214,16 @@ public final class Application implements AutoCloseable {
                 .register(TalkToolkit.create(team, computerLookup, talk -> chatStore.record(
                         ChatStore.KIND_TALK, talk.group(), talk.fromRole().value(), talk.fromName(),
                         talk.toRole().value(), talk.toName(), talk.text(), talk.urgency(), Map.of())))
-                .register(TaskViewToolkit.create(team));
+                .register(TaskViewToolkit.create(team))
+                .register(ClientToolkit.create(effectiveInput,
+                        id -> team.find(id).map(AgentRuntime::spec),
+                        record -> chatStore.record(ChatStore.KIND_CLIENT, record.group(),
+                                record.role().value(), record.name(), "", ChatStore.CLIENT_NAME,
+                                record.text(), null, Map.of()),
+                        Duration.ofMillis(cfg.web().replyTimeoutMs())))
+                .register(HrToolkit.create(roleFactory::create,
+                        spec -> team.hire(spec),
+                        () -> RoleSpecLoader.fromClasspath(cfg.toolkits().defaults()).all()));
         catalogHolder[0] = catalog;
 
         if (llm instanceof OpenAiCompatibleClient client) {
@@ -202,7 +231,7 @@ public final class Application implements AutoCloseable {
             client.setOnInsufficientBalance(lifecycle::pause);
         }
 
-        Application app = new Application(cfg, paths, input, chatStore, mailService, mail, notes,
+        Application app = new Application(cfg, paths, effectiveInput, chatStore, mailService, mail, notes,
                 todos, computers, computerPorts, tools, catalog, team, dispatch, lifecycle, clock);
         app.wireMailNotifications();
         return app;
