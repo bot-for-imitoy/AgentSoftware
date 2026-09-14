@@ -1,8 +1,8 @@
 package com.agent.software.adapters.computer;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.core.Types;
 import com.agent.software.domain.Payload;
+import com.agent.software.kernel.FailureText;
 import com.agent.software.kernel.JsonSchema;
 import com.agent.software.ports.ComputerPort;
 import com.agent.software.ports.ToolResult;
@@ -61,7 +61,7 @@ public final class LegacyComputerAdapter implements ComputerPort {
     @Override
     public Optional<String> readFile(String path) {
         String content = computer.readFile(path);
-        if (content == null || Types.isFailureText(content)) {
+        if (content == null || FailureText.isFailure(content)) {
             return Optional.empty();
         }
         return Optional.of(content);
@@ -94,7 +94,7 @@ public final class LegacyComputerAdapter implements ComputerPort {
     @Override
     public ToolResult callMcpTool(String name, Payload arguments) {
         String result = computer.runMcpTool(name, arguments == null ? Payload.empty().asMap() : arguments.asMap());
-        if (result == null || Types.isFailureText(result)) {
+        if (result == null || FailureText.isFailure(result)) {
             return ToolResult.error(result == null ? "Error: MCP tool '" + name + "' returned no result" : result);
         }
         return ToolResult.success(result);

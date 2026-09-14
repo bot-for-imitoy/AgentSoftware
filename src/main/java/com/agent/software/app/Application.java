@@ -55,7 +55,6 @@ import com.agent.software.tools.builtin.TimeToolkit;
 import com.agent.software.tools.builtin.TodoToolkit;
 import com.agent.software.tools.spi.ToolkitCatalog;
 import com.agent.software.tools.spi.ToolService;
-import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.web.ChatStore;
 
 import java.io.IOException;
@@ -224,8 +223,7 @@ public final class Application implements AutoCloseable {
         RoleSpecFactory roleFactory = new RoleSpecFactory(llm, cfg.toolkits().defaults(),
                 () -> team.all().stream().map(AgentRuntime::spec).toList());
 
-        SkillRepository skills = new JsonSkillLibrary(
-                new SkillManager(paths.dataFile("skills").toString()));
+        SkillRepository skills = new JsonSkillLibrary(paths.dataFile("skills"));
 
         ToolkitCatalog catalog = new ToolkitCatalog()
                 .register(NoteToolkit.create(notes))

@@ -1,66 +1,132 @@
 package com.agent.software.adapters.persistence;
 
+import com.agent.software.kernel.AgentException;
+import com.agent.software.kernel.Names;
 import com.agent.software.ports.TodoRepository;
-import com.agent.software.store.NoteStore;
-import com.agent.software.store.TodoStore;
+import com.agent.software.utils.Json;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
-/** {@link TodoRepository} backed by the existing JSON {@code TodoStore}. */
+/** File-backed {@link TodoRepository}: one JSON array per role. */
 public final class JsonTodoRepository implements TodoRepository {
 
-    private final Path baseDir;
-    private final Map<String, TodoStore> stores = new ConcurrentHashMap<>();
+    private final Path base;
 
-    public JsonTodoRepository(Path baseDir) {
-        this.baseDir = baseDir == null ? Path.of("data", "todos") : baseDir;
+    public JsonTodoRepository(Path base) {
+        this.base = base == null ? Path.of("data", "todos") : base;
     }
 
-    private TodoStore store(String roleId) {
-        String key = roleId == null || roleId.isBlank() ? "shared" : roleId;
-        return stores.computeIfAbsent(key, r -> new TodoStore(
-                r, baseDir.resolve(NoteStore.sanitizeTitle(r) + ".json").toString()));
+    private Path file(String roleId) {
+        return base.resolve(Names.sanitize(roleId == null || roleId.isBlank() ? "shared" : roleId) + ".json");
     }
 
     @Override
     public List<TodoItem> list(String roleId, String status) {
-        List<Map<String, Object>> raw = store(roleId).list(status);
-        List<TodoItem> out = new ArrayList<>(raw.size());
-        for (Map<String, Object> m : raw) {
-            out.add(convert(m));
+        List<TodoItem> out = new ArrayList<>();
+        for (Map<String, Object> item : load(roleId)) {
+            TodoItem converted = convert(item);
+            if (status == null || status.equals(converted.status())) {
+                out.add(converted);
+            }
         }
         return out;
     }
 
     @Override
     public TodoItem add(String roleId, String title, String detail) {
-        return convert(store(roleId).add(title, detail));
+        List<Map<String, Object>> items = load(roleId);
+        double now = System.currentTimeMillis() / 1000.0;
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", UUID.randomUUID().toString().replace("-", "").substring(0, 8));
+        item.put("title", title == null ? "" : title);
+        item.put("detail", detail == null ? "" : detail);
+        item.put("status", "pending");
+        item.put("created_at", now);
+        item.put("updated_at", now);
+        items.add(item);
+        save(roleId, items);
+        return convert(item);
     }
 
     @Override
     public Optional<TodoItem> update(String roleId, String id, String status) {
-        Map<String, Object> updated = store(roleId).update(id, status);
-        return updated == null ? Optional.empty() : Optional.of(convert(updated));
+        if (!STATUSES.contains(status)) {
+            throw new IllegalArgumentException("Invalid status '" + status + "', allowed: " + STATUSES);
+        }
+        List<Map<String, Object>> items = load(roleId);
+        for (Map<String, Object> item : items) {
+            if (id != null && id.equals(String.valueOf(item.get("id")))) {
+                item.put("status", status);
+                item.put("updated_at", System.currentTimeMillis() / 1000.0);
+                save(roleId, items);
+                return Optional.of(convert(item));
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
     public boolean delete(String roleId, String id) {
-        return store(roleId).delete(id);
+        List<Map<String, Object>> items = load(roleId);
+        boolean removed = items.removeIf(item -> id != null && id.equals(String.valueOf(item.get("id"))));
+        if (removed) {
+            save(roleId, items);
+        }
+        return removed;
     }
 
-    private static TodoItem convert(Map<String, Object> m) {
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> load(String roleId) {
+        Path path = file(roleId);
+        if (!Files.isRegularFile(path)) {
+            return new ArrayList<>();
+        }
+        try {
+            String text = Files.readString(path, StandardCharsets.UTF_8);
+            if (text.isBlank()) {
+                return new ArrayList<>();
+            }
+            Object parsed = Json.parse(text);
+            if (!(parsed instanceof List<?> list)) {
+                return new ArrayList<>();
+            }
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) {
+                    out.add((Map<String, Object>) map);
+                }
+            }
+            return out;
+        } catch (IOException | RuntimeException e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private void save(String roleId, List<Map<String, Object>> items) {
+        try {
+            Json.atomicWrite(file(roleId), Json.stringifyPretty(items));
+        } catch (IOException e) {
+            throw new AgentException.PortException("cannot save todos: " + file(roleId), e);
+        }
+    }
+
+    private static TodoItem convert(Map<String, Object> item) {
         return new TodoItem(
-                string(m.get("id")),
-                string(m.get("title")),
-                string(m.get("detail")),
-                string(m.get("status")),
-                number(m.get("created_at")),
-                number(m.get("updated_at")));
+                string(item.get("id")),
+                string(item.get("title")),
+                string(item.get("detail")),
+                string(item.get("status")),
+                number(item.get("created_at")),
+                number(item.get("updated_at")));
     }
 
     private static String string(Object value) {
