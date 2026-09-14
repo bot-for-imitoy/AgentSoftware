@@ -76,7 +76,7 @@ class ClientToolkitTest {
     void returnsTheClientReplyAndRecordsTheQuestion() {
         FakeInput input = new FakeInput();
         AtomicReference<ClientToolkit.ClientRecord> recorded = new AtomicReference<>();
-        Toolkit toolkit = ClientToolkit.create(input, roles(), recorded::set, Duration.ofSeconds(1));
+        Toolkit toolkit = ClientToolkit.create(() -> input, roles(), recorded::set, Duration.ofSeconds(1));
         ToolService service = new ToolService();
         service.bind(CEO, List.of(toolkit));
 
@@ -93,7 +93,7 @@ class ClientToolkitTest {
         FakeInput input = new FakeInput();
         input.available = false;
         ToolService service = new ToolService();
-        service.bind(CEO, List.of(ClientToolkit.create(input, roles(), r -> {
+        service.bind(CEO, List.of(ClientToolkit.create(() -> input, roles(), r -> {
         }, Duration.ofSeconds(1))));
 
         ToolResult result = call(service, CEO, "hello?");
@@ -106,7 +106,7 @@ class ClientToolkitTest {
         FakeInput input = new FakeInput();
         input.entered = new CountDownLatch(1);
         input.release = new CountDownLatch(1);
-        Toolkit toolkit = ClientToolkit.create(input, roles(), r -> {
+        Toolkit toolkit = ClientToolkit.create(() -> input, roles(), r -> {
         }, Duration.ofSeconds(2));
         ToolService service = new ToolService();
         service.bind(CEO, List.of(toolkit));

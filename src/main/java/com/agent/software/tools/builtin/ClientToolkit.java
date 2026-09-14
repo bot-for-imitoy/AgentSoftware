@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * The {@code client} toolkit: talk to the human client through the configured
@@ -32,7 +33,7 @@ public final class ClientToolkit {
     private ClientToolkit() {
     }
 
-    public static Toolkit create(InputPort input,
+    public static Toolkit create(Supplier<InputPort> input,
                                  Function<RoleId, Optional<RoleSpec>> roles,
                                  Consumer<ClientRecord> recorder,
                                  Duration timeout) {
@@ -59,7 +60,11 @@ public final class ClientToolkit {
                         if (recorder != null) {
                             recorder.accept(new ClientRecord(role, name, group, question));
                         }
-                        InputPort.ClientReply reply = input.ask(
+                        InputPort channel = input == null ? null : input.get();
+                        if (channel == null) {
+                            return ToolResult.error("talk_to_client: Error: no client input channel is configured.");
+                        }
+                        InputPort.ClientReply reply = channel.ask(
                                 new InputPort.ClientQuestion(role, name, group, question), timeout);
                         if (!reply.answered()) {
                             return ToolResult.error("talk_to_client: Error: "

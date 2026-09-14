@@ -84,7 +84,7 @@ public final class Application implements AutoCloseable {
 
     private final AppConfig config;
     private final AppPaths paths;
-    private final InputPort input;
+    private final java.util.concurrent.atomic.AtomicReference<InputPort> inputRef;
 
     private final ChatStore chatStore;
     private final MailService mailService;
@@ -117,7 +117,9 @@ public final class Application implements AutoCloseable {
         }
     };
 
-    private Application(AppConfig config, AppPaths paths, InputPort input, ChatStore chatStore,
+    private Application(AppConfig config, AppPaths paths,
+                        java.util.concurrent.atomic.AtomicReference<InputPort> inputRef,
+                        ChatStore chatStore,
                         MailService mailService, MailServiceAdapter mail, NoteRepository notes,
                         TodoRepository todos, ComputerManager computers,
                         Map<RoleId, ComputerPort> computerPorts, StateRepository stateRepository,
@@ -126,7 +128,7 @@ public final class Application implements AutoCloseable {
                         LifecycleCoordinator lifecycle, ClockService clock) {
         this.config = config;
         this.paths = paths;
-        this.input = input;
+        this.inputRef = inputRef;
         this.chatStore = chatStore;
         this.mailService = mailService;
         this.mail = mail;
@@ -159,6 +161,8 @@ public final class Application implements AutoCloseable {
         AppConfig cfg = config == null ? AppConfig.defaults() : config;
         AppPaths paths = AppPaths.resolve(cfg.storage());
         InputPort effectiveInput = input != null ? input : UNAVAILABLE_INPUT;
+        java.util.concurrent.atomic.AtomicReference<InputPort> inputRef =
+                new java.util.concurrent.atomic.AtomicReference<>(effectiveInput);
 
         ChatStore chatStore = new ChatStore();
         ChatTraceAdapter trace = new ChatTraceAdapter(chatStore);
@@ -238,7 +242,7 @@ public final class Application implements AutoCloseable {
                         ChatStore.KIND_TALK, talk.group(), talk.fromRole().value(), talk.fromName(),
                         talk.toRole().value(), talk.toName(), talk.text(), talk.urgency(), Map.of())))
                 .register(TaskViewToolkit.create(team))
-                .register(ClientToolkit.create(effectiveInput,
+                .register(ClientToolkit.create(inputRef::get,
                         id -> team.find(id).map(AgentRuntime::spec),
                         record -> chatStore.record(ChatStore.KIND_CLIENT, record.group(),
                                 record.role().value(), record.name(), "", ChatStore.CLIENT_NAME,
@@ -256,7 +260,7 @@ public final class Application implements AutoCloseable {
             client.setOnInsufficientBalance(lifecycle::pause);
         }
 
-        Application app = new Application(cfg, paths, effectiveInput, chatStore, mailService, mail, notes,
+        Application app = new Application(cfg, paths, inputRef, chatStore, mailService, mail, notes,
                 todos, computers, computerPorts, stateRepository, tools, catalog, team, dispatch, lifecycle, clock);
         app.wireMailNotifications();
         return app;
@@ -496,11 +500,31 @@ public final class Application implements AutoCloseable {
         lifecycle.resume();
     }
 
-    /** Hire every role listed in the bundled templates. */
+    /** Hire the default 47-role team. */
     public List<AgentRuntime> hireDefaultRoles() {
         RoleSpecLoader loader = RoleSpecLoader.fromClasspath(config.toolkits().defaults());
         List<AgentRuntime> hired = new ArrayList<>();
+        for (RoleSpec spec : loader.defaultRoles()) {
+            hired.add(team.hire(spec));
+        }
+        return hired;
+    }
+
+    /** Hire every role template (all 55). */
+    public List<AgentRuntime> hireAllRoles() {
+        RoleSpecLoader loader = RoleSpecLoader.fromClasspath(config.toolkits().defaults());
+        List<AgentRuntime> hired = new ArrayList<>();
         for (RoleSpec spec : loader.all()) {
+            hired.add(team.hire(spec));
+        }
+        return hired;
+    }
+
+    /** Hire the roles named in {@code roleIds}. */
+    public List<AgentRuntime> hireRoles(List<String> roleIds) {
+        RoleSpecLoader loader = RoleSpecLoader.fromClasspath(config.toolkits().defaults());
+        List<AgentRuntime> hired = new ArrayList<>();
+        for (RoleSpec spec : loader.many(roleIds)) {
             hired.add(team.hire(spec));
         }
         return hired;
@@ -523,7 +547,12 @@ public final class Application implements AutoCloseable {
     }
 
     public InputPort input() {
-        return input;
+        return inputRef.get();
+    }
+
+    /** Replace the client input channel (e.g. switch to the Web input after startup). */
+    public void setInput(InputPort input) {
+        inputRef.set(input == null ? UNAVAILABLE_INPUT : input);
     }
 
     public ChatStore chatStore() {

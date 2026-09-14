@@ -29,6 +29,21 @@ public final class RoleSpecLoader {
     public static final String DEFAULT_RESOURCE = "role_templates.json";
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
+    /** Default team hired by the simulation (management + engineering + test/security). */
+    public static final List<String> DEFAULT_ROLE_IDS = List.of(
+            "CEO", "COO", "HR", "CTO", "business_analyst",
+            "frontend_lead", "backend_lead", "fullstack_lead", "mobile_lead", "test_lead",
+            "architect", "release_manager",
+            "frontend_dev_1", "frontend_dev_2", "frontend_dev_3",
+            "backend_dev_1", "backend_dev_2", "backend_dev_3",
+            "mobile_dev_1", "mobile_dev_2", "mobile_dev_3",
+            "fullstack_dev_1", "fullstack_dev_2", "fullstack_dev_3",
+            "tester_1", "tester_2", "tester_3", "tester_4", "tester_5",
+            "tester_6", "tester_7", "tester_8", "tester_9", "tester_10",
+            "tester_11", "tester_12", "tester_13", "tester_14", "tester_15",
+            "tester_16", "tester_17", "tester_18", "tester_19", "tester_20",
+            "attacker_1", "attacker_2", "attacker_3");
+
     private final Map<String, Map<String, Object>> templates;
     private final List<String> defaultToolkits;
 
@@ -117,6 +132,11 @@ public final class RoleSpecLoader {
             out.add(require(id));
         }
         return out;
+    }
+
+    /** The default 47-role team used by the simulation. */
+    public List<RoleSpec> defaultRoles() {
+        return many(DEFAULT_ROLE_IDS);
     }
 
     public List<String> defaultToolkits() {
