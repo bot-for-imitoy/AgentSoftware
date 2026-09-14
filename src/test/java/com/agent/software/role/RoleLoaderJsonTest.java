@@ -63,8 +63,8 @@ class RoleLoaderJsonTest {
             assertNotNull(conf.get("responsibilities"), id + " missing responsibilities");
             assertNotNull(conf.get("personality"), id + " missing personality");
             assertTrue(Json.strList(conf, "skills").size() > 0, id + " has empty skills");
-            assertTrue(Json.strList(conf, "interest_keywords").size() > 0,
-                    id + " has empty interest_keywords");
+            // refactor v2 removed content filtering, so templates declare toolkits instead
+            assertTrue(Json.strList(conf, "toolkits").size() > 0, id + " has empty toolkits");
             assertEquals(id, Json.str(conf, "role_id", ""), id + " role_id does not match the key");
         }
     }
@@ -79,7 +79,6 @@ class RoleLoaderJsonTest {
         assertEquals("Architecture & Release Group", architect.group);
         assertFalse(architect.isDefault);
         assertTrue(architect.skills.contains("C4 Model"));
-        assertTrue(architect.interestKeywords.contains("architecture"));
 
         AgentRole ceo = RoleLoader.getTemplate("CEO");
         assertEquals("Lin Zong", ceo.name);
