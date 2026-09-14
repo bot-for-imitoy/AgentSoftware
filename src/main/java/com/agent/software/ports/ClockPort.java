@@ -25,6 +25,9 @@ public interface ClockPort {
 
     boolean isShiftEnd();
 
+    /** Human-readable simulated date/time and duty status. */
+    String describe();
+
     /** Next scheduled fire tick after the current one, if any (drives fast-forward). */
     OptionalInt nextEventTick();
 
