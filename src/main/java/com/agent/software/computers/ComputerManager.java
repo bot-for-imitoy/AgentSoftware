@@ -267,6 +267,10 @@ public class ComputerManager {
             merged.putIfAbsent("name", name);
         }
         Computer comp = createComputer(kind, roleId, autoMcp, merged);
+        if (comp instanceof PodmanComputer podman) {
+            // Keep network/image scoped to this registry instead of the process singleton.
+            podman.bindManager(this);
+        }
         register(comp, name);
         return comp;
     }

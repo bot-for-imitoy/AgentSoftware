@@ -53,6 +53,45 @@ public record JsonSchema(String type, Map<String, Property> properties, List<Str
         return new JsonSchema("object", Map.of(), List.of());
     }
 
+    /**
+     * Parse an OpenAI-style schema map, e.g. as produced by {@link #toMap()} or by
+     * an MCP server. Unknown keys are dropped.
+     */
+    public static JsonSchema fromMap(Map<String, Object> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return object();
+        }
+        String type = raw.get("type") == null ? "object" : String.valueOf(raw.get("type"));
+        Map<String, Property> props = new LinkedHashMap<>();
+        if (raw.get("properties") instanceof Map<?, ?> properties) {
+            for (Map.Entry<?, ?> entry : properties.entrySet()) {
+                if (!(entry.getValue() instanceof Map<?, ?> p)) {
+                    continue;
+                }
+                String pType = p.get("type") == null ? "string" : String.valueOf(p.get("type"));
+                String description = p.get("description") == null ? "" : String.valueOf(p.get("description"));
+                List<String> enums = new ArrayList<>();
+                if (p.get("enum") instanceof List<?> values) {
+                    for (Object value : values) {
+                        if (value != null) {
+                            enums.add(String.valueOf(value));
+                        }
+                    }
+                }
+                props.put(String.valueOf(entry.getKey()), new Property(pType, description, enums));
+            }
+        }
+        List<String> required = new ArrayList<>();
+        if (raw.get("required") instanceof List<?> values) {
+            for (Object value : values) {
+                if (value != null) {
+                    required.add(String.valueOf(value));
+                }
+            }
+        }
+        return new JsonSchema(type, props, required);
+    }
+
     /** Fluent builder; preserves insertion order. */
     public static Builder builder() {
         return new Builder();

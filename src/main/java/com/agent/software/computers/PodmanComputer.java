@@ -34,6 +34,18 @@ public class PodmanComputer extends Computer {
 
     private boolean mcpPkgInstalled = false;
 
+    /** Owning registry; when null the process-wide singleton is used (legacy path). */
+    private ComputerManager manager;
+
+    /** Bind this computer to its owning registry so network/image are instance-scoped. */
+    public void bindManager(ComputerManager manager) {
+        this.manager = manager;
+    }
+
+    private ComputerManager manager() {
+        return manager != null ? manager : ComputerManager.getInstance();
+    }
+
     public PodmanComputer(String roleId, String image, boolean autoMcp, String username,
                           int uid, String name) {
         super(roleId, autoMcp);
@@ -89,7 +101,7 @@ public class PodmanComputer extends Computer {
     public String getLanIp() {
         try {
             String fmt = "{{(index .NetworkSettings.Networks \"%s\").IPAddress}}"
-                    .formatted(ComputerManager.getInstance().networkName);
+                    .formatted(manager().networkName);
             ProcessResult r = pod("inspect", containerName, "-f", fmt);
             String ip = (r.stdout == null ? "" : r.stdout).strip();
             return ip.isEmpty() ? "" : ip;
@@ -238,7 +250,7 @@ public class PodmanComputer extends Computer {
         }
 
         // Ensure the base image exists (double-checked locking under concurrency)
-        String imageName = ComputerManager.getInstance().ensureBaseImage();
+        String imageName = manager().ensureBaseImage();
 
         ProcessResult r = pod("ps", "-a", "--format", "{{.Names}}");
         Set<String> names = new HashSet<>();
@@ -250,7 +262,7 @@ public class PodmanComputer extends Computer {
             }
         }
         if (!names.contains(containerName)) {
-            String network = ComputerManager.getInstance().ensureNetwork();
+            String network = manager().ensureNetwork();
             int attempt = 0;
             boolean ok = false;
             while (attempt < 3) {
