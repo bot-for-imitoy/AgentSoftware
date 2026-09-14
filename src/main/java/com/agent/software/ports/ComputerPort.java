@@ -39,6 +39,9 @@ public interface ComputerPort {
 
     String hostDir();
 
+    /** The shared cloud-drive mount root inside this computer (e.g. {@code /mnt/drive}). */
+    String driveRoot();
+
     String describe();
 
     /** Result of a command execution. */

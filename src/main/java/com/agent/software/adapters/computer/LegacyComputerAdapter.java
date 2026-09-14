@@ -111,6 +111,11 @@ public final class LegacyComputerAdapter implements ComputerPort {
     }
 
     @Override
+    public String driveRoot() {
+        return computer.driveRoot();
+    }
+
+    @Override
     public String describe() {
         return computer.describe();
     }

@@ -38,6 +38,8 @@ import com.agent.software.tools.builtin.EmailToolkit;
 import com.agent.software.tools.builtin.MemoryToolkit;
 import com.agent.software.tools.builtin.NoteToolkit;
 import com.agent.software.tools.builtin.PcToolkit;
+import com.agent.software.tools.builtin.TalkToolkit;
+import com.agent.software.tools.builtin.TaskViewToolkit;
 import com.agent.software.tools.builtin.TimeToolkit;
 import com.agent.software.tools.builtin.TodoToolkit;
 import com.agent.software.tools.spi.ToolkitCatalog;
@@ -188,7 +190,11 @@ public final class Application implements AutoCloseable {
                 .register(PcToolkit.create(computerLookup, computers::listLanDevices))
                 .register(EmailToolkit.create(mail,
                         id -> team.find(id).map(AgentRuntime::spec),
-                        () -> team.all().stream().map(AgentRuntime::spec).toList()));
+                        () -> team.all().stream().map(AgentRuntime::spec).toList()))
+                .register(TalkToolkit.create(team, computerLookup, talk -> chatStore.record(
+                        ChatStore.KIND_TALK, talk.group(), talk.fromRole().value(), talk.fromName(),
+                        talk.toRole().value(), talk.toName(), talk.text(), talk.urgency(), Map.of())))
+                .register(TaskViewToolkit.create(team));
         catalogHolder[0] = catalog;
 
         if (llm instanceof OpenAiCompatibleClient client) {

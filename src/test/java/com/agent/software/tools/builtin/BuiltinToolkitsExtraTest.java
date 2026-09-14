@@ -97,6 +97,11 @@ class BuiltinToolkitsExtraTest {
         }
 
         @Override
+        public String driveRoot() {
+            return "/mnt/drive";
+        }
+
+        @Override
         public String describe() {
             return "Computer [CEO]: status=" + (on ? "powered on" : "powered off");
         }
