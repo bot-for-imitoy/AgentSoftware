@@ -30,7 +30,8 @@ class ArchGuardTest {
             "kernel", Set.of("kernel"),
             "config", Set.of("kernel", "config", "utils"),
             "domain", Set.of("kernel", "domain"),
-            "ports", Set.of("kernel", "domain", "ports"));
+            "ports", Set.of("kernel", "domain", "ports"),
+            "runtime", Set.of("kernel", "domain", "ports", "runtime"));
 
     @Test
     void newLayersOnlyDependOnAllowedPackages() throws IOException {
