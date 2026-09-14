@@ -146,6 +146,26 @@ public final class AgentRuntime {
                 current == null ? null : current.description());
     }
 
+    /** Restore queued tasks from a snapshot (assigns them to this role). */
+    public void restorePending(List<Task> tasks) {
+        if (tasks == null) {
+            return;
+        }
+        for (Task task : tasks) {
+            submit(task);
+        }
+    }
+
+    /** Replace the completed-task history from a snapshot. */
+    public void restoreHistory(List<Task> completed) {
+        synchronized (history) {
+            history.clear();
+            if (completed != null) {
+                history.addAll(completed);
+            }
+        }
+    }
+
     /** Wait until the queue is empty, no task is running and the role is not waiting. */
     public boolean awaitIdle(Duration timeout) {
         long deadline = timeout == null ? Long.MAX_VALUE

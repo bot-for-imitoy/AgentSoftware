@@ -6,6 +6,7 @@ import com.agent.software.adapters.llm.ProviderEndpointResolver;
 import com.agent.software.adapters.mail.MailServiceAdapter;
 import com.agent.software.adapters.persistence.JsonNoteRepository;
 import com.agent.software.adapters.persistence.JsonSkillLibrary;
+import com.agent.software.adapters.persistence.JsonStateRepository;
 import com.agent.software.adapters.persistence.JsonTodoRepository;
 import com.agent.software.adapters.trace.ChatTraceAdapter;
 import com.agent.software.computers.ComputerManager;
@@ -18,7 +19,9 @@ import com.agent.software.domain.Payload;
 import com.agent.software.domain.Priority;
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.domain.ShiftCalendar;
+import com.agent.software.domain.Task;
 import com.agent.software.kernel.RoleId;
+import com.agent.software.kernel.TaskId;
 import com.agent.software.llm.RetryArbiter;
 import com.agent.software.ports.ClockPort;
 import com.agent.software.ports.ComputerPort;
@@ -28,6 +31,7 @@ import com.agent.software.ports.LlmPort;
 import com.agent.software.ports.MailPort;
 import com.agent.software.ports.NoteRepository;
 import com.agent.software.ports.SkillRepository;
+import com.agent.software.ports.StateRepository;
 import com.agent.software.ports.TodoRepository;
 import com.agent.software.runtime.AgentRuntime;
 import com.agent.software.runtime.ClockService;
@@ -55,6 +59,7 @@ import com.agent.software.web.ChatStore;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -84,6 +89,7 @@ public final class Application implements AutoCloseable {
     private final TodoRepository todos;
     private final ComputerManager computers;
     private final Map<RoleId, ComputerPort> computerPorts;
+    private final StateRepository stateRepository;
 
     private final ToolService tools;
     private final ToolkitCatalog catalog;
@@ -108,7 +114,8 @@ public final class Application implements AutoCloseable {
     private Application(AppConfig config, AppPaths paths, InputPort input, ChatStore chatStore,
                         MailService mailService, MailServiceAdapter mail, NoteRepository notes,
                         TodoRepository todos, ComputerManager computers,
-                        Map<RoleId, ComputerPort> computerPorts, ToolService tools,
+                        Map<RoleId, ComputerPort> computerPorts, StateRepository stateRepository,
+                        ToolService tools,
                         ToolkitCatalog catalog, TeamRuntime team, DispatchService dispatch,
                         LifecycleCoordinator lifecycle, ClockService clock) {
         this.config = config;
@@ -121,6 +128,7 @@ public final class Application implements AutoCloseable {
         this.todos = todos;
         this.computers = computers;
         this.computerPorts = computerPorts;
+        this.stateRepository = stateRepository;
         this.tools = tools;
         this.catalog = catalog;
         this.team = team;
@@ -156,6 +164,7 @@ public final class Application implements AutoCloseable {
         TodoRepository todos = new JsonTodoRepository(paths.dataFile("todos"));
         ComputerManager computers = new ComputerManager();
         Map<RoleId, ComputerPort> computerPorts = new ConcurrentHashMap<>();
+        StateRepository stateRepository = new JsonStateRepository(paths.dataFile("state.json"));
         ToolService tools = new ToolService();
 
         // The role factory needs the catalog, which needs the clock; the clock
@@ -242,7 +251,7 @@ public final class Application implements AutoCloseable {
         }
 
         Application app = new Application(cfg, paths, effectiveInput, chatStore, mailService, mail, notes,
-                todos, computers, computerPorts, tools, catalog, team, dispatch, lifecycle, clock);
+                todos, computers, computerPorts, stateRepository, tools, catalog, team, dispatch, lifecycle, clock);
         app.wireMailNotifications();
         return app;
     }
@@ -304,11 +313,93 @@ public final class Application implements AutoCloseable {
     public void stop() {
         clock.stop();
         team.stopAll();
+        try {
+            saveState();
+        } catch (RuntimeException ignored) {
+            // persistence must never prevent shutdown
+        }
     }
 
     @Override
     public void close() {
         stop();
+    }
+
+    // ── persistence ────────────────────────────────────────────────────
+
+    /** Write a snapshot of the roles, tasks and clock position. */
+    public void saveState() {
+        List<StateRepository.RoleState> roles = new ArrayList<>();
+        for (AgentRuntime runtime : team.all()) {
+            roles.add(new StateRepository.RoleState(
+                    runtime.spec(),
+                    runtime.state().name(),
+                    runtime.pendingTasks().stream().map(Application::toSnapshot).toList(),
+                    runtime.history(0).stream().map(Application::toSnapshot).toList()));
+        }
+        stateRepository.save(new StateRepository.Snapshot(
+                clock.day(), clock.tickOfDay(), clock.engine().baseDate().toString(), roles));
+    }
+
+    /** Restore roles, tasks and clock from a snapshot; returns the role count. */
+    public int restoreState() {
+        Optional<StateRepository.Snapshot> loaded = stateRepository.load();
+        if (loaded.isEmpty()) {
+            return 0;
+        }
+        StateRepository.Snapshot snapshot = loaded.get();
+        int restored = 0;
+        for (StateRepository.RoleState role : snapshot.roles()) {
+            AgentRuntime runtime = team.find(role.spec().id()).orElseGet(() -> team.hire(role.spec()));
+            runtime.setState(parseState(role.state()));
+            runtime.restorePending(role.pending().stream().map(Application::toTask).toList());
+            runtime.restoreHistory(role.history().stream().map(Application::toTask).toList());
+            restored++;
+        }
+        if (snapshot.day() > 1 || snapshot.tickOfDay() > 0) {
+            clock.resetTo(snapshot.day(), snapshot.tickOfDay());
+        }
+        if (!snapshot.baseDate().isBlank()) {
+            try {
+                clock.engine().setBaseDate(LocalDate.parse(snapshot.baseDate()));
+            } catch (RuntimeException ignored) {
+                // keep the current base date when the stored one is malformed
+            }
+        }
+        return restored;
+    }
+
+    public StateRepository stateRepository() {
+        return stateRepository;
+    }
+
+    private static StateRepository.TaskSnapshot toSnapshot(Task task) {
+        return new StateRepository.TaskSnapshot(
+                task.id().value(), task.urgency(), task.description(), task.source(), task.context(),
+                task.status().wireName(), task.result(), task.tokensConsumed(),
+                task.createdAt().toEpochMilli() / 1000.0);
+    }
+
+    private static Task toTask(StateRepository.TaskSnapshot snapshot) {
+        Task task = new Task(TaskId.of(snapshot.id()), snapshot.urgency(), snapshot.description(),
+                snapshot.source(), snapshot.context(),
+                Instant.ofEpochMilli((long) (snapshot.createdAt() * 1000)));
+        switch (snapshot.status()) {
+            case "done" -> task.markDone(snapshot.result(), snapshot.tokens());
+            case "failed" -> task.markFailed(snapshot.result(), snapshot.tokens());
+            case "running" -> task.markRunning();
+            default -> {
+            }
+        }
+        return task;
+    }
+
+    private static AgentState parseState(String name) {
+        try {
+            return AgentState.valueOf(name);
+        } catch (RuntimeException e) {
+            return AgentState.IDLE;
+        }
     }
 
     public void pause(String reason) {

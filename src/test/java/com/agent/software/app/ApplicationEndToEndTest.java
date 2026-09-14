@@ -4,6 +4,7 @@ import com.agent.software.adapters.input.ConsoleInputAdapter;
 import com.agent.software.config.AppConfig;
 import com.agent.software.config.ConfigLoader;
 import com.agent.software.config.ConfigSource;
+import com.agent.software.domain.AgentState;
 import com.agent.software.domain.Payload;
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.domain.Task;
@@ -151,5 +152,22 @@ class ApplicationEndToEndTest {
         assertEquals("quota exhausted", app.lifecycle().pauseReason());
         app.resume();
         assertFalse(app.lifecycle().isPaused());
+    }
+
+    @Test
+    void savesAndRestoresRolesAndTasks(@TempDir Path dir) throws Exception {
+        Application first = application(dir, new ScriptedLlm());
+        AgentRuntime ceo = first.team().hire(spec("ceo", dir));
+        ceo.submit(Task.create(6, "leftover work", "test", Payload.empty()));
+        first.saveState();
+
+        Application second = application(dir, new ScriptedLlm());
+        assertEquals(1, second.restoreState());
+
+        AgentRuntime restored = second.team().find(RoleId.of("ceo")).orElseThrow();
+        assertEquals(AgentState.IDLE, restored.state());
+        assertEquals(1, restored.pendingTasks().size());
+        assertEquals("leftover work", restored.pendingTasks().get(0).description());
+        assertEquals(6, restored.pendingTasks().get(0).urgency());
     }
 }
