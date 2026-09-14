@@ -1,5 +1,6 @@
 package com.agent.software.app;
 
+import com.agent.software.adapters.computer.ComputerAdapters;
 import com.agent.software.adapters.llm.OpenAiCompatibleClient;
 import com.agent.software.adapters.llm.ProviderEndpointResolver;
 import com.agent.software.adapters.mail.MailServiceAdapter;
@@ -16,8 +17,10 @@ import com.agent.software.domain.Payload;
 import com.agent.software.domain.Priority;
 import com.agent.software.domain.RoleSpec;
 import com.agent.software.domain.ShiftCalendar;
+import com.agent.software.kernel.RoleId;
 import com.agent.software.llm.RetryArbiter;
 import com.agent.software.ports.ClockPort;
+import com.agent.software.ports.ComputerPort;
 import com.agent.software.ports.EventSink;
 import com.agent.software.ports.InputPort;
 import com.agent.software.ports.LlmPort;
@@ -31,7 +34,10 @@ import com.agent.software.runtime.LifecycleCoordinator;
 import com.agent.software.runtime.TeamRuntime;
 import com.agent.software.runtime.ToolLoop;
 import com.agent.software.services.MailService;
+import com.agent.software.tools.builtin.EmailToolkit;
+import com.agent.software.tools.builtin.MemoryToolkit;
 import com.agent.software.tools.builtin.NoteToolkit;
+import com.agent.software.tools.builtin.PcToolkit;
 import com.agent.software.tools.builtin.TimeToolkit;
 import com.agent.software.tools.builtin.TodoToolkit;
 import com.agent.software.tools.spi.ToolkitCatalog;
@@ -42,7 +48,10 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * Composition root: builds one self-contained "company" from configuration.
@@ -64,6 +73,7 @@ public final class Application implements AutoCloseable {
     private final NoteRepository notes;
     private final TodoRepository todos;
     private final ComputerManager computers;
+    private final Map<RoleId, ComputerPort> computerPorts;
 
     private final ToolService tools;
     private final ToolkitCatalog catalog;
@@ -74,7 +84,8 @@ public final class Application implements AutoCloseable {
 
     private Application(AppConfig config, AppPaths paths, InputPort input, ChatStore chatStore,
                         MailService mailService, MailServiceAdapter mail, NoteRepository notes,
-                        TodoRepository todos, ComputerManager computers, ToolService tools,
+                        TodoRepository todos, ComputerManager computers,
+                        Map<RoleId, ComputerPort> computerPorts, ToolService tools,
                         ToolkitCatalog catalog, TeamRuntime team, DispatchService dispatch,
                         LifecycleCoordinator lifecycle, ClockService clock) {
         this.config = config;
@@ -86,6 +97,7 @@ public final class Application implements AutoCloseable {
         this.notes = notes;
         this.todos = todos;
         this.computers = computers;
+        this.computerPorts = computerPorts;
         this.tools = tools;
         this.catalog = catalog;
         this.team = team;
@@ -119,6 +131,7 @@ public final class Application implements AutoCloseable {
         NoteRepository notes = new JsonNoteRepository(paths.dataFile("notes"));
         TodoRepository todos = new JsonTodoRepository(paths.dataFile("todos"));
         ComputerManager computers = new ComputerManager();
+        Map<RoleId, ComputerPort> computerPorts = new ConcurrentHashMap<>();
         ToolService tools = new ToolService();
 
         // The role factory needs the catalog, which needs the clock; the clock
@@ -161,11 +174,21 @@ public final class Application implements AutoCloseable {
         ClockService clock = new ClockService(calendar, LocalDate.now(), sink, lifecycle, clockOptions);
         clockHolder[0] = clock;
 
+        Function<RoleId, Optional<ComputerPort>> computerLookup = id -> team.find(id)
+                .map(runtime -> computerPorts.computeIfAbsent(id,
+                        key -> ComputerAdapters.open(computers, runtime.spec())));
+
         ToolkitCatalog catalog = new ToolkitCatalog()
                 .register(NoteToolkit.create(notes))
                 .register(TodoToolkit.create(todos))
                 .register(TimeToolkit.create(clock,
-                        roleId -> team.find(roleId).ifPresent(r -> r.setState(AgentState.IDLE))));
+                        roleId -> team.find(roleId).ifPresent(r -> r.setState(AgentState.IDLE))))
+                .register(MemoryToolkit.create(notes, clock,
+                        (roleId, day) -> team.find(roleId).ifPresent(r -> r.setState(AgentState.OFF_DUTY))))
+                .register(PcToolkit.create(computerLookup, computers::listLanDevices))
+                .register(EmailToolkit.create(mail,
+                        id -> team.find(id).map(AgentRuntime::spec),
+                        () -> team.all().stream().map(AgentRuntime::spec).toList()));
         catalogHolder[0] = catalog;
 
         if (llm instanceof OpenAiCompatibleClient client) {
@@ -174,7 +197,7 @@ public final class Application implements AutoCloseable {
         }
 
         Application app = new Application(cfg, paths, input, chatStore, mailService, mail, notes,
-                todos, computers, tools, catalog, team, dispatch, lifecycle, clock);
+                todos, computers, computerPorts, tools, catalog, team, dispatch, lifecycle, clock);
         app.wireMailNotifications();
         return app;
     }
@@ -303,6 +326,12 @@ public final class Application implements AutoCloseable {
 
     public ComputerManager computers() {
         return computers;
+    }
+
+    /** The role's computer, allocated lazily on first use. */
+    public Optional<ComputerPort> computerFor(RoleId id) {
+        return team.find(id).map(runtime -> computerPorts.computeIfAbsent(id,
+                key -> ComputerAdapters.open(computers, runtime.spec())));
     }
 
     public ToolService tools() {
