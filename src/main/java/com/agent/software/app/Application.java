@@ -9,6 +9,7 @@ import com.agent.software.adapters.persistence.JsonSkillLibrary;
 import com.agent.software.adapters.persistence.JsonStateRepository;
 import com.agent.software.adapters.persistence.JsonTodoRepository;
 import com.agent.software.adapters.trace.ChatTraceAdapter;
+import com.agent.software.adapters.web.ChatWebAdapter;
 import com.agent.software.computers.ComputerManager;
 import com.agent.software.config.AppConfig;
 import com.agent.software.config.AppPaths;
@@ -57,11 +58,14 @@ import com.agent.software.tools.spi.ToolService;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.web.ChatStore;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -97,6 +101,8 @@ public final class Application implements AutoCloseable {
     private final DispatchService dispatch;
     private final LifecycleCoordinator lifecycle;
     private final ClockService clock;
+
+    private ChatWebAdapter web;
 
     /** Used when no console/web input channel was supplied. */
     private static final InputPort UNAVAILABLE_INPUT = new InputPort() {
@@ -313,11 +319,91 @@ public final class Application implements AutoCloseable {
     public void stop() {
         clock.stop();
         team.stopAll();
+        if (web != null) {
+            web.stop();
+            web = null;
+        }
         try {
             saveState();
         } catch (RuntimeException ignored) {
             // persistence must never prevent shutdown
         }
+    }
+
+    // ── web ────────────────────────────────────────────────────────────
+
+    /** Start the Web UI / HTTP API on the configured host and port. */
+    public ChatWebAdapter startWeb() throws IOException {
+        return startWeb(ChatWebAdapter.DEFAULT_HOST, ChatWebAdapter.DEFAULT_PORT);
+    }
+
+    public ChatWebAdapter startWeb(String host, int port) throws IOException {
+        if (web == null) {
+            web = new ChatWebAdapter(chatStore, this::stateMap, lifecycle::pause, lifecycle::resume, host, port);
+            web.start();
+        }
+        return web;
+    }
+
+    public Optional<ChatWebAdapter> web() {
+        return Optional.ofNullable(web);
+    }
+
+    /** Web input channel bound to this application's chat store. */
+    public InputPort webInput() {
+        return new com.agent.software.adapters.input.WebInputAdapter(chatStore);
+    }
+
+    /** State payload served by {@code GET /api/v1/state} (snake_case). */
+    Map<String, Object> stateMap() {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("ok", true);
+        state.put("day", clock.day());
+        state.put("tick", clock.tick());
+        state.put("tick_of_day", clock.tickOfDay());
+        state.put("date", clock.currentDateString());
+        state.put("time", clock.currentTime());
+        state.put("datetime", clock.currentDateTime());
+        state.put("describe", clock.describe());
+        state.put("paused", lifecycle.isPaused());
+        state.put("pause_reason", lifecycle.isPaused() ? lifecycle.pauseReason() : "");
+        state.put("groups", groups());
+
+        Map<String, Object> clientTalk = new LinkedHashMap<>();
+        boolean active = chatStore.isClientWaitPending();
+        clientTalk.put("active", active);
+        clientTalk.put("holder_name", active ? chatStore.pendingHolderName() : null);
+        clientTalk.put("holder_role_id", active ? chatStore.pendingHolderRoleId() : null);
+        state.put("client_talk", clientTalk);
+        return state;
+    }
+
+    private List<Map<String, Object>> groups() {
+        Map<String, List<RoleSpec>> byGroup = new LinkedHashMap<>();
+        for (AgentRuntime runtime : team.all()) {
+            String key = runtime.spec().hasGroup() ? runtime.spec().group() : "";
+            byGroup.computeIfAbsent(key, k -> new ArrayList<>()).add(runtime.spec());
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map.Entry<String, List<RoleSpec>> entry : byGroup.entrySet()) {
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("key", entry.getKey());
+            group.put("label", entry.getKey().isEmpty() ? "Unassigned" : entry.getKey());
+            List<Map<String, Object>> members = new ArrayList<>();
+            for (RoleSpec spec : entry.getValue()) {
+                Map<String, Object> member = new LinkedHashMap<>();
+                member.put("role_id", spec.id().value());
+                member.put("name", spec.name());
+                member.put("title", spec.title());
+                members.add(member);
+            }
+            group.put("members", members);
+            out.add(group);
+        }
+        out.sort(Comparator
+                .comparingInt((Map<String, Object> g) -> "Leadership Group".equals(g.get("key")) ? 0 : 1)
+                .thenComparing(g -> String.valueOf(g.get("key"))));
+        return out;
     }
 
     @Override
