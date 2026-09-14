@@ -5,6 +5,7 @@ import com.agent.software.adapters.llm.OpenAiCompatibleClient;
 import com.agent.software.adapters.llm.ProviderEndpointResolver;
 import com.agent.software.adapters.mail.MailServiceAdapter;
 import com.agent.software.adapters.persistence.JsonNoteRepository;
+import com.agent.software.adapters.persistence.JsonSkillLibrary;
 import com.agent.software.adapters.persistence.JsonTodoRepository;
 import com.agent.software.adapters.trace.ChatTraceAdapter;
 import com.agent.software.computers.ComputerManager;
@@ -26,6 +27,7 @@ import com.agent.software.ports.InputPort;
 import com.agent.software.ports.LlmPort;
 import com.agent.software.ports.MailPort;
 import com.agent.software.ports.NoteRepository;
+import com.agent.software.ports.SkillRepository;
 import com.agent.software.ports.TodoRepository;
 import com.agent.software.runtime.AgentRuntime;
 import com.agent.software.runtime.ClockService;
@@ -38,14 +40,17 @@ import com.agent.software.tools.builtin.ClientToolkit;
 import com.agent.software.tools.builtin.EmailToolkit;
 import com.agent.software.tools.builtin.HrToolkit;
 import com.agent.software.tools.builtin.MemoryToolkit;
+import com.agent.software.tools.builtin.McpToolkit;
 import com.agent.software.tools.builtin.NoteToolkit;
 import com.agent.software.tools.builtin.PcToolkit;
+import com.agent.software.tools.builtin.SkillToolkit;
 import com.agent.software.tools.builtin.TalkToolkit;
 import com.agent.software.tools.builtin.TaskViewToolkit;
 import com.agent.software.tools.builtin.TimeToolkit;
 import com.agent.software.tools.builtin.TodoToolkit;
 import com.agent.software.tools.spi.ToolkitCatalog;
 import com.agent.software.tools.spi.ToolService;
+import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.web.ChatStore;
 
 import java.nio.file.Path;
@@ -200,6 +205,9 @@ public final class Application implements AutoCloseable {
         RoleSpecFactory roleFactory = new RoleSpecFactory(llm, cfg.toolkits().defaults(),
                 () -> team.all().stream().map(AgentRuntime::spec).toList());
 
+        SkillRepository skills = new JsonSkillLibrary(
+                new SkillManager(paths.dataFile("skills").toString()));
+
         ToolkitCatalog catalog = new ToolkitCatalog()
                 .register(NoteToolkit.create(notes))
                 .register(TodoToolkit.create(todos))
@@ -223,7 +231,9 @@ public final class Application implements AutoCloseable {
                         Duration.ofMillis(cfg.web().replyTimeoutMs())))
                 .register(HrToolkit.create(roleFactory::create,
                         spec -> team.hire(spec),
-                        () -> RoleSpecLoader.fromClasspath(cfg.toolkits().defaults()).all()));
+                        () -> RoleSpecLoader.fromClasspath(cfg.toolkits().defaults()).all()))
+                .register(McpToolkit.create(tools, computerLookup))
+                .register(SkillToolkit.create(tools, skills));
         catalogHolder[0] = catalog;
 
         if (llm instanceof OpenAiCompatibleClient client) {
