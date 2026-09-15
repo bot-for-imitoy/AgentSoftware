@@ -5,6 +5,7 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 .idea/
 *.iml
+*.log
 
 # ── Runtime data (same as the Python version, not committed) ──
 data/journals/
