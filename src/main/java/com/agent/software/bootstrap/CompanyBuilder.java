@@ -1,12 +1,12 @@
 package com.agent.software.bootstrap;
 
-import com.agent.software.adapters.config.AppConfig;
-import com.agent.software.adapters.config.AppPaths;
-import com.agent.software.engine.Company;
-import com.agent.software.ports.ClientChannel;
-import com.agent.software.ports.JsonCodec;
-import com.agent.software.ports.LlmClient;
-import com.agent.software.ports.Transcript;
+import com.agent.software.company.Company;
+import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.infra.json.JsonCodec;
+import com.agent.software.llm.LlmClient;
+import com.agent.software.tool.client.ClientChannel;
+import com.agent.software.transcript.Transcript;
 
 /**
  * 组合根：唯一允许"认识所有东西"的地方。
@@ -16,8 +16,8 @@ import com.agent.software.ports.Transcript;
  * AppPaths / JsonCodec / Transcript.Feed
  *   → Team（无依赖，先建）
  *   → TalkService(Team) / 各 adapter
- *   → ToolCatalog（注入各工具包的共享能力）
- *   → AgentFactory(Team 只读视图 + ShellRegistry + ToolCatalog + Llm + gate)
+ *   → ToolkitCatalog（注入各工具包的共享能力与该角色的每角色能力）
+ *   → AgentFactory(Team 只读视图 + ShellRegistry + ToolboxFactory + Llm + gate)
  *   → Staffing(Team, AgentFactory)
  *   → HiringService / EventRouter / TaskFactory / ScheduleTable / ClockDriver / ShiftDirector
  *   → Company(...)

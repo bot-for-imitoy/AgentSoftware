@@ -1,8 +1,8 @@
 package com.agent.software.bootstrap;
 
-import com.agent.software.adapters.config.AppConfig;
-import com.agent.software.engine.Company;
-import com.agent.software.model.RoleSpec;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.company.Company;
+import com.agent.software.infra.config.AppConfig;
 
 import java.util.List;
 

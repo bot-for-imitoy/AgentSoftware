@@ -97,38 +97,85 @@
 三条不变量（整个设计围绕它们）：
 
 1. **单一所有者（single writer）**：每一份可变状态只有一个对象拥有，其余人只能通过该对象的方法改它。所有依赖**构造期注入**，没有 `bindXxx`/`setXxx` 晚绑定，没有对象环。
-2. **决策与机制分离**：`policy` 包里是**纯函数式决策**（给事实 → 给决定，不碰 I/O、不起线程）；`adapters` 包里是**机制**（HTTP、进程、文件、线程）。`engine` 只做编排：读事实 → 问 policy → 调 port。
-3. **边界有类型**：跨模块只传 `model` 里的值对象/记录；`Map<String,Object>` 只允许出现在 `adapters` 的 JSON 编解码内部。
+2. **决策与机制分离**：决策是**纯函数**（给事实 → 给决定，不碰 I/O、不起线程），机制是**有副作用的编排**（线程、进程、HTTP、文件）。决策类型跟它所属的功能放同一个包，不再单独设一层。
+3. **边界有类型**：跨模块只传不可变值对象/记录；`Map<String,Object>` 只允许出现在 JSON 编解码内部。
+4. **一个包 = 一个功能**：功能内的**接口、实现、领域类型、LLM 工具**放在一起，不按"层次"切包（详见 §4 与 §5.9）。
 
-依赖规则（单向）：
+依赖规则（单向，`→` 即"可以 import"）：
 
 ```
-kernel  ←  model  ←  policy
-   ↑         ↑         ↑
-   └────  ports  ──────┘        （ports 只依赖 kernel/model）
-             ↑
-          engine  ──→ ports, policy, model, kernel
-          tools   ──→ ports, model, kernel
-        adapters  ──→ ports, model, kernel   （+ 第三方库）
-        bootstrap ──→ 全部（唯一允许认识所有东西的地方）
+kernel  ←  所有包                     （Id/Text/Payload/JsonSchema/DomainError，叶子）
+
+tool.spi        → kernel
+llm             → kernel, tool.spi
+transcript      → kernel
+infra.json      → kernel          infra.config → （无）
+tool.<能力>      → kernel, tool.spi, 该能力自身（tool.note → sim.clock + infra.json 等）
+sim.event       → kernel
+sim.clock       → kernel, sim.event
+agent.*         → kernel, tool.spi, llm, transcript, sim.clock, sim.event, agent.*
+company         → kernel, agent.*, sim.*, infra.json, infra.config
+web             → company, transcript, infra.config
+bootstrap       → 全部（唯一允许认识所有东西的地方）
 ```
 
-`engine` **不 import** `adapters` / `tools`；`tools` **不 import** `engine`；`model`/`policy` **不 import** 任何线程、文件、网络。
+关键单向约束：
+- `sim`（时钟）不认识 `agent`：它只对外暴露 `Sensors` / `TickObserver` / `EventSink` 三个端口，实现方在 `agent` / `company`。
+- `tool.spi` 只依赖 `kernel`：工具包不靠"上下文对象"取能力，全部构造期注入。
+- `tool.*` 可以依赖 `agent` 的**定义**（`RoleSpec` / `AgentTasks` / `AgentDirectory`），但 `agent` 不依赖任何 `tool.*` 实现，只依赖 `tool.spi`。
+- 唯一残留的反向三角：`agent` 持有 `tool.computer.Shell`，而 `tool.computer.ShellRegistry` 需要 `agent.role.RoleSpec`（电脑规格定义在角色定义里）。这是领域本身的形状，不再强行拆。
 
 ---
 
 ## 4. 目标架构总览
 
+> **v3.1（按你的 review 重排）**：原来的 `ports` / `adapters` / `model` / `policy` 四个"层次包"
+> 已全部废除。现在**一个包 = 一个功能**，功能内的接口、实现、领域类型、LLM 工具同处一包；
+> 大类再往下细分。`Shell`（原 `ports`）+ `LocalShell/PodmanShell/SshShell`（原 `adapters/computer`）
+> + `PcToolkit`（原 `tools/builtin`）现在都在 `tool.computer`。
+
 ```
 com.agent.software
-├── kernel       身份、文本、错误、坐标基元（无业务知识）
-├── model        纯领域数据 + 不变量（RoleSpec/AgentEvent/Task/Message/快照）
-├── policy       纯决策（投递/显著性/时钟/工具循环/对话压缩）
-├── ports        能力接口（LlmClient/Toolbox/Shell/Mailbox/NoteBook/...）
-├── engine       有状态编排（Companion: SimClock/ClockDriver/Team/Agent/EventRouter/Company）
-├── tools        工具 SPI + 内置工具包（依赖 ports/model，不依赖 engine）
-├── adapters     port 的具体实现（HTTP/进程/MCP/SMTP/文件/HTTP Server/控制台）
-└── bootstrap    配置 + 组合根 + 入口
+├── kernel/                共享值类型：Ids, Text, Payload, JsonSchema, DomainError
+├── infra/                 基础设施
+│   ├── config/            AppConfig, AppPaths, ConfigLoader
+│   └── json/              JsonCodec, JacksonJsonCodec
+├── tool/                  工具与能力（一个能力一个子包：接口 + 实现 + 领域类型 + LLM 工具）
+│   ├── spi/               Tool, Toolkit, Toolbox, ToolSpec, ToolResult
+│   ├── computer/          Shell, ShellRegistry, PodmanShell, LocalShell, SshShell,
+│   │                      PcToolkit, HermesToolkit
+│   ├── note/              Note, NoteBook, JsonNoteBook, NoteToolkit, MemoryToolkit
+│   ├── todo/              Todo, TodoList, JsonTodoList, TodoToolkit
+│   ├── skill/             Skill, SkillLibrary, JsonSkillLibrary, SkillToolkit
+│   ├── mail/              MailMessage, Mailbox, FileMailbox, SmtpSender, EmailToolkit
+│   ├── mcp/               McpBridge, StdioMcpBridge, McpToolkit
+│   ├── talk/              TeamChannel, TalkService, TalkToolkit
+│   ├── client/            ClientChannel, ConsoleClientChannel, WebClientChannel, ClientToolkit
+│   ├── hr/                Recruiter, HiringService, HrToolkit
+│   ├── time/              TimeToolkit
+│   └── task/              TaskViewToolkit
+├── agent/                 角色运行时
+│   ├── （根）              Agent, AgentFactory, AgentMailbox, AgentState, AgentStateMachine,
+│   │                      AgentTasks, AgentControl, AgentDirectory, AgentSnapshot, Team,
+│   │                      Staffing, LifecycleGate, WaitCoordinator, ToolboxFactory
+│   ├── role/              RoleSpec, RoleSnapshot
+│   ├── task/              Task, TaskStatus, TaskRunner, ToolLoop, ToolLoopPolicy
+│   ├── dialog/            ConversationMemory, ConversationPolicy, SystemPrompt
+│   └── dispatch/          EventRouter, TaskFactory
+├── sim/                   模拟时钟与事件
+│   ├── clock/             Clock, SimClock, Tick, DayTick, ShiftCalendar, ClockPolicy,
+│   │                      DefaultClockPolicy, ClockDriver, ScheduleTable, ReminderScheduler,
+│   │                      Sensors, TickObserver
+│   └── event/             AgentEvent, EventKind, Priority, EventSink, DeliveryPolicy,
+│                          DefaultDeliveryPolicy, SaliencePolicy, KeywordSaliencePolicy
+├── company/               公司编排与存档
+│   ├── （根）              Company, CompanyView, CompanyStatus, ShiftDirector
+│   └── store/             CompanySnapshot, SnapshotStore, JsonSnapshotStore
+├── llm/                   LlmClient, Message, ToolCallRequest, OpenAiClient,
+│                          ProviderCatalog, ProviderResolver, RetryArbiter
+├── transcript/            Transcript, ChatFeed
+├── web/                   ChatWebServer
+└── bootstrap/             CompanyBuilder, Main, ToolkitCatalog
 ```
 
 与 master 的对应关系（一句话）：
@@ -137,6 +184,9 @@ com.agent.software
 ---
 
 ## 5. 类与函数清单（本轮的核心产出）
+
+> 下面 §5.1–§5.8 的小节标题沿用 v3.0 的分层包名（`kernel`/`model`/`policy`/`ports`/`engine`/`tools`/`adapters`）。
+> 类清单本身仍然有效，但**包名以 §4 与 §5.9 为准**：这些类现在按功能散在 `tool.*` / `agent.*` / `sim.*` / `company.*` / `llm` / `transcript` / `web` / `infra.*` 里。
 
 > 下面是**签名级**骨架。`{ ... }` 表示"实现留空"。函数后面用 `//` 说明它**做什么**，不说明怎么做。
 
@@ -839,27 +889,62 @@ public final class Main { public static void main(String[] args); }
 
 ---
 
-### 5.9 骨架落地时对方案的调整（`refactor2` 分支，120 个新文件）
+### 5.9 落地记录：骨架的两次调整（`refactor2` 分支，121 个文件）
 
-写骨架时发现方案里有几处会造成环或职责不清，已修正；看代码时以本节为准：
+#### A. 写骨架时对方案本身的修正（v3.0）
 
-1. **`ToolSpec` / `ToolCallRequest` / `ToolResult` 从 `ports` 移到 `model`**：`Message` 需要引用 `ToolCallRequest`，放 `ports` 会形成 `model → ports` 反向依赖。教训与 refactor 分支"ports 里放 DTO"同源。
-2. **`JsonSchema` 放进 `kernel`**（不是 `tools`）：`model.ToolSpec` 需要它，且它本身与工具实现无关。
-3. **新增 `model.AgentSnapshot` / `model.CompanyStatus` + `ports.CompanyView`**：让 `adapters.web` 只依赖窄接口，而不依赖 `engine.Company`。
-4. **`ToolContext` 只承载 per-agent 能力** `(RoleId, Shell, AgentTasks, AgentControl)`；共享能力（`NoteBook`/`TodoList`/`SkillLibrary`/`Mailbox`/`McpBridge`/`Recruiter`/`TeamChannel`/`Clock`/`AgentDirectory`/`Transcript`/`ReminderScheduler`）改成**各 Toolkit 构造期注入**，依赖面更窄。
-5. **`Team` 不再持有 `AgentFactory`，新增 `engine.Staffing`**。原因：原方案会形成构造环
+1. **`ToolSpec` / `ToolCallRequest` / `ToolResult` 不再放端口层**：`Message` 需要引用 `ToolCallRequest`，放接口包会形成反向依赖。今落点：`ToolSpec`/`ToolResult` → `tool.spi`，`ToolCallRequest` → `llm`。
+2. **`JsonSchema` 放进 `kernel`**：`ToolSpec` 需要它，且它本身与工具实现无关。
+3. **新增 `AgentSnapshot` / `CompanyStatus` + `CompanyView`**：让 Web 适配器只依赖窄接口，而不依赖 `Company`。
+4. **`Team` 不再持有 `AgentFactory`，新增 `Staffing`**。原因：原方案会形成构造环
    `Team → AgentFactory → ToolCatalog → TalkToolkit → TeamChannel → Team`。
-   拆分后 `Team` 无依赖即可先建，创建 Agent 的动作归 `Staffing`。这正是 §2 批评 master/refactor 的同一类问题，属于自查修正。
-6. **`ClockPolicy.next` 接收 `Optional<Tick> nextFireTick` 而不是 `ScheduleTable`**：否则 `policy → engine` 反向依赖。
-7. **`AgentMailbox` 拆成 `ready` / `deferred` 两个队列**，让投递策略的 `HOLD` 真正生效（master 的 `DeliveryMode` 是装饰性的）。状态允许时由 `promoteDeferred()` 提升。
-8. **新增窄端口**：`ReminderScheduler`、`TeamChannel`、`AgentTasks`、`AgentControl`、`McpBridge`、`Recruiter`；以及 `engine.SystemPrompt`（从 `AgentRole` 抽出）。
-9. **`ports` 只放行为接口**，所有值类型/DTO 在 `model`/`kernel`。
-10. **`TaskRunner` 由 `Agent.start()` 创建但不被 `Agent` 持有**，避免对象环。
-11. **`AgentControl.closeDayConversation(int day)` 带 day 参数**，避免 `Agent` 依赖 `Clock`。
+   拆分后 `Team` 无依赖即可先建，创建 Agent 的动作归 `Staffing`。
+5. **`ClockPolicy.next` 接收 `Optional<Tick> nextFireTick` 而不是 `ScheduleTable`**：否则决策层反向依赖时钟实现。
+6. **`AgentMailbox` 拆成 `ready` / `deferred` 两个队列**，让投递策略的 `HOLD` 真正生效（master 的 `DeliveryMode` 是装饰性的）。状态允许时由 `promoteDeferred()` 提升。
+7. **新增窄端口**：`ReminderScheduler`、`TeamChannel`、`AgentTasks`、`AgentControl`、`McpBridge`、`Recruiter`；以及 `SystemPrompt`（从 `AgentRole` 抽出）。
+8. **`TaskRunner` 由 `Agent.start()` 创建但不被 `Agent` 持有**，避免对象环。
+9. **`AgentControl.closeDayConversation(int day)` 带 day 参数**，避免 `Agent` 依赖 `Clock`。
 
-分支与范围：`refactor2` 基于 `master` 建立（`refactor` 分支的 `tools`/`kernel`/`ports` 等包会与目标结构撞名）。
-只新增了 9 个包共 120 个 `.java` 文件，**未改动 master 任何旧文件**；旧代码与新骨架一起
-`mvn -o -Dmaven.repo.local=.m2-local compile` 通过。
+#### B. 按功能重排包结构（v3.1，你 review 后的修改）
+
+原则：**一个包 = 一个功能；功能内的接口、实现、领域类型、LLM 工具放在同一个包里**，不再按"层次"切。
+`ports/`、`adapters/`、`model/`、`policy/` 四个包**全部废除**。
+
+1. **带 LLM 工具的能力整体并入 `tool/`**：`tool.computer`、`tool.note`、`tool.todo`、`tool.skill`、
+   `tool.mail`、`tool.mcp`、`tool.talk`、`tool.client`、`tool.hr`、`tool.time`、`tool.task`；
+   工具 SPI 在 `tool.spi`。
+   例：`Shell`（原 `ports`）+ `LocalShell`/`PodmanShell`/`SshShell`（原 `adapters/computer`）
+   + `PcToolkit`（原 `tools/builtin`）现在同属 `tool.computer`。
+2. **`policy` 解散，策略回到各自功能**：`ClockPolicy`/`DefaultClockPolicy` → `sim.clock`；
+   `DeliveryPolicy`/`SaliencePolicy` + 默认实现 → `sim.event`；`ConversationPolicy` → `agent.dialog`；
+   `ToolLoopPolicy` → `agent.task`。
+3. **`model` 解散**：`Task`/`TaskStatus` → `agent.task`；`RoleSpec`/`RoleSnapshot` → `agent.role`；
+   `AgentEvent`/`EventKind`/`Priority` → `sim.event`；`Tick`/`DayTick`/`ShiftCalendar` → `sim.clock`；
+   `Note`/`Todo`/`Skill`/`MailMessage` → 各自 `tool.*`；`Message`/`ToolCallRequest` → `llm`；
+   `ToolSpec`/`ToolResult` → `tool.spi`；`Payload` → `kernel`；`CompanyStatus`/`CompanySnapshot` → `company`。
+4. **`ports` 解散**：接口跟它的实现同包（`SimClock implements Clock`、`JsonTodoList implements TodoList`、
+   `ConsoleClientChannel implements ClientChannel`、`FileMailbox implements Mailbox` …）。
+5. **`adapters` 解散**：实现回到能力包（`tool.computer`/`tool.mail`/`tool.mcp`/…），
+   纯基础设施留在 `infra.config`（配置/路径）与 `infra.json`（JSON 编解码）。
+6. **`ToolContext` 删除**：`tool.spi` 不再依赖 `agent`/`tool.computer`，环被切断。
+   改为**每角色装配**：`Toolkit.instantiate()` 无参，所需能力一律构造期注入
+   （`PcToolkit(Shell)`、`TaskViewToolkit(AgentTasks)`、`MemoryToolkit(NoteBook, Clock, AgentControl)`）。
+   装配入口是 `bootstrap.ToolkitCatalog`；`Agent` 通过 `agent.ToolboxFactory` 在 `start()` 时取自己的
+   `Toolbox`（因为 `AgentTasks`/`AgentControl` 由 `Agent` 自己实现，只能"先有 Agent 再装配工具"）。
+7. **跨包 `implements` 保留（你说可以）**：它们都是消费方定义的 DIP 端口 ——
+   `tool.*.*Toolkit implements tool.spi.Toolkit`、`agent.Team implements sim.clock.Sensors`、
+   `agent.dispatch.EventRouter implements sim.event.EventSink`、
+   `company.ShiftDirector implements sim.clock.TickObserver`（新增，避免 `sim → company`）。
+   除这些之外，其余接口与实现都在同一包内。
+8. **唯一残留的反向依赖**：`tool.computer.ShellRegistry` 需要 `agent.role.RoleSpec`
+   （电脑规格定义在角色定义里），而 `agent` 持有 `tool.computer.Shell`。这是领域本身的三角，不再强行拆。
+
+#### C. 分支与范围
+
+`refactor2` 基于 `master` 建立（`refactor` 分支已有 `kernel`/`ports`/`tools` 等同名包，会撞车）。
+master 的 98 个旧实现与 31 个测试**已在本分支删除**（`master` 仍完整保留，作为"语义不许变"的参照）；
+当前 `src/main/java` 只剩这份骨架的 121 个文件。
+验证：`rm -rf target/classes && mvn -o -q -Dmaven.repo.local=.m2-local -DskipTests compile` 通过（179 个 `.class`）。
 
 ## 6. master → 新架构 映射表
 
@@ -873,39 +958,39 @@ public final class Main { public static void main(String[] args); }
 | `Types.Event` / `Payload` | `AgentEvent` + `EventKind` + `Payload` | 不可变、带类型收件人 |
 | `Types.Priority` / `Urgency` / `int` | `Priority` | 唯一来源 |
 | `Task`（可变 public 字段） | `Task` + `TaskRecord` + `TaskStatus` | 显式迁移方法；持久化形状唯一 |
-| `LLM` / `OpenAICompatLLM` | `ports/LlmClient` / `adapters/llm/OpenAiClient` | 失败用类型而非字符串前缀 |
+| `LLM` / `OpenAICompatLLM` | `llm/LlmClient` / `llm/OpenAiClient` | 失败用类型而非字符串前缀 |
 | `Conversation` + `ConversationManager` | `ConversationMemory` + `ConversationPolicy` | 每 Agent 一份，无全局 manager |
-| `ToolRegistry` + `tools.Toolkit` | `tools/Tool` + `Toolkit` + `ToolCatalog` + `Toolbox` + `JsonSchema` | 消除双份 toolkit |
-| `Store`（State/Note/Todo/Config/PathManager） | `NoteBook`/`TodoList`/`SkillLibrary`/`SnapshotStore` + `adapters/persistence` + `AppPaths` | 领域端口 vs 磁盘实现 |
-| `Computer`/`ComputerManager` | `Shell` + `ShellRegistry` + `adapters/computer` | 去掉 Computer 对 MCP/ToolRegistry 的依赖 |
-| `MCPServer`/`MCPManager` | `adapters/mcp` + `McpToolkit` | MCP 只出现在适配器与工具包 |
-| `MailService` | `Mailbox` + `FileMailbox`/`SmtpSender` | 去掉 per-role store 泄漏与单例 |
-| `ChatStore`/`ChatWebServer` | `TraceFeed`/`ChatFeed` + `ChatWebServer` | Web 只读 feed，不抓 runtime 内部 |
-| `Input`/`StdInput`/`WebInput` | `ClientChannel` + `Console`/`Web` 实现 | 去掉 bind(store,lock) |
-| `RoleLoader`/`RoleFactory` | `RoleSpecLoader`（bootstrap）+ `HiringService` | 静态模板表 → 实例化加载器 |
-| `ClientCommunicationLock` | `ClientToolkit` 内部互斥（或 `Company` 持有的一个小对象） | 不再全局单例 |
+| `ToolRegistry` + `tools.Toolkit` | `tool/spi/Tool` + `Toolkit` + `Toolbox` + `ToolSpec` + `bootstrap/ToolkitCatalog` + `kernel/JsonSchema` | 消除双份 toolkit |
+| `Store`（State/Note/Todo/Config/PathManager） | `tool.note.NoteBook`/`tool.todo.TodoList`/`tool.skill.SkillLibrary`/`company.store.SnapshotStore` + 各自包内的 JSON 实现 + `infra.config.AppPaths` | 能力接口与磁盘实现同包 |
+| `Computer`/`ComputerManager` | `tool.computer.Shell` + `ShellRegistry` + 三种 Shell 实现 | 去掉 Computer 对 MCP/ToolRegistry 的依赖 |
+| `MCPServer`/`MCPManager` | `tool.mcp`（`McpBridge` + `StdioMcpBridge` + `McpToolkit`） | MCP 收在一个能力包里 |
+| `MailService` | `tool.mail`（`Mailbox` + `FileMailbox`/`SmtpSender`） | 去掉 per-role store 泄漏与单例 |
+| `ChatStore`/`ChatWebServer` | `transcript.Transcript`/`transcript.ChatFeed` + `web.ChatWebServer` | Web 只读 feed，不抓 runtime 内部 |
+| `Input`/`StdInput`/`WebInput` | `tool.client`（`ClientChannel` + 控制台/Web 实现） | 去掉 bind(store,lock) |
+| `RoleLoader`/`RoleFactory` | 角色模板加载（bootstrap）+ `tool.hr.HiringService` | 静态模板表 → 实例化加载器 |
+| `ClientCommunicationLock` | `tool.client.ClientToolkit` 内部互斥（或 `Company` 持有的一个小对象） | 不再全局单例 |
 
 ---
 
 ## 7. 关键机制在新架构中的落点
 
 - **时钟 / 班次 / 日循环**：`SimClock`（状态）→ `ClockDriver`（线程，感知 `Sensors`）→ `ClockPolicy`（推进/快进/等待/兜底）→ `ShiftDirector`（边界反应）。master 里"时钟反调 `AgentSystem.allRolesIdle`"变成"驱动读 `Team` 暴露的只读感知"。
-- **事件投递**：外部/时钟/邮件都走 `EventSink.publish` → `EventRouter` 解收件人 → `DeliveryPolicy` 决定 DELIVER/HOLD/DROP → `TaskFactory` 建 `Task` → `Agent.submit`。显著性过滤只在广播事件上生效，且是 `policy` 里的纯函数。
+- **事件投递**：外部/时钟/邮件都走 `sim.event.EventSink.publish` → `agent.dispatch.EventRouter` 解收件人 → `sim.event.DeliveryPolicy` 决定 DELIVER/HOLD/DROP → `agent.dispatch.TaskFactory` 建 `Task` → `Agent.submit`。显著性过滤只在广播事件上生效，且是纯函数。
 - **工具循环**：`TaskRunner` → `ToolLoop.run`，上下文来自 `ConversationMemory.prepare`，工具来自 `Agent.toolbox()`，轨迹写 `Transcript`。上限与失败策略来自 `ToolLoopPolicy`。
 - **talk wait=true**：`TalkToolkit` 通过 `WaitCoordinator` 路由（`Agent.waits()`），不再直接操作对方 `AgentRole`。下班解阻塞由 `ShiftDirector.onShiftEnd` 调 `abort`。
 - **暂停**：`LifecycleGate` 唯一持有；`TaskRunner` 与 `OpenAiClient` 都只读它；解决 master 回调注入暂停的问题。
-- **Web**：`ChatFeed` 实现 `TraceFeed`；`ChatWebServer` 只依赖 `Company.status()` + `TraceFeed`，不再 import runtime。
-- **持久化**：`CompanySnapshot` 由 `Company.save()` 组装 → `SnapshotStore`；notes/todos/skills 走各自端口。`Map` 只在 `JacksonJsonCodec`/adapters 内部出现。
+- **Web**：`transcript.ChatFeed` 实现 `transcript.Transcript.Feed`；`web.ChatWebServer` 只依赖 `company.CompanyView` + `Transcript.Feed`，不再 import 运行时内部。
+- **持久化**：`CompanySnapshot` 由 `Company.save()` 组装 → `company.store.SnapshotStore`；notes/todos/skills 走各自能力包的 JSON 实现。`Map` 只在 `infra.json.JacksonJsonCodec` 内部出现。
 
 ---
 
 ## 8. 迁移路线（每一步都可编译、可回滚）
 
-1. **P0 立骨架**：新增 `kernel/model/policy/ports` 四个包（纯类型，零依赖），不动老代码。加一条 ArchGuard 规则。
+1. **P0 立骨架**：按 §4 建功能包（`kernel`/`tool.*`/`agent.*`/`sim.*`/`company`/`llm`/…），只放签名不放实现。加一条 ArchGuard 规则（按包白名单校验依赖方向）。
 2. **P1 时间线**：`ShiftCalendar`/`SimClock`/`ScheduleTable`/`ClockPolicy` 落地，用 master 的时间测试对拍（differential test）。
 3. **P2 领域事件**：`AgentEvent`/`Task`/`DeliveryPolicy`/`SaliencePolicy` 落地，喂 master 的事件过滤测试。
 4. **P3 角色内核**：`Agent`/`AgentMailbox`/`AgentStateMachine`/`WaitCoordinator`/`ToolLoop`/`ConversationMemory`，用假端口（fakes）跑通工具循环与等待。
-5. **P4 工具与端口**：`Toolbox`/`ToolCatalog` + 12 个内置工具包；先接 `NoteBook`/`TodoList`/`Time`/`Memory` 这类低耦合的。
+5. **P4 工具与能力**：`tool.spi` + `bootstrap.ToolkitCatalog` + 13 个工具包；先接 `tool.note`/`tool.todo`/`tool.time` 这类低耦合的。
 6. **P5 适配器**：LLM/电脑/MCP/邮件/持久化/Web/输入逐个实现端口；每个都保留 master 的对外行为（尤其 `state.json` 与 `/api/*` 契约）。
 7. **P6 组合与切换**：`bootstrap/CompanyBuilder` + 新 `Main`，端到端跑一天；再删旧包。
 8. **P7 收尾**：删 master 遗留类、清理全局单例、把 Web 契约与 `state.json` 版本化。
@@ -916,8 +1001,8 @@ public final class Main { public static void main(String[] args); }
 
 ## 9. 测试策略
 
-- `model`/`policy`：纯函数单测（时间算术、投递决策、压缩阈值、优先级排序）。
-- `engine`：用 fakes（假 LlmClient/假 Toolbox/假 Clock 感知）驱动 `ClockDriver.tickOnce()` 与 `TaskRunner`，不需要真实线程/网络/容器。
+- 纯决策：单测（时间算术、投递决策、压缩阈值、优先级排序）——分别在 `sim.clock`/`sim.event`/`agent.*` 里。
+- 运行时编排：用 fakes（假 LlmClient/假 Toolbox/假 Clock 感知）驱动 `ClockDriver.tickOnce()` 与 `TaskRunner`，不需要真实线程/网络/容器。
 - 行为对拍：master 的关键测试（`TimeManagerTest`、`EventBusTest`、`TalkWaitTest`、`AgentSystemPauseTest`、`ConversationEndToEndTest`…）先原样保留，作为"语义不许变"的护栏。
 - 契约测试：`state.json` 能读 master 的旧档；`/api/state`、`/api/messages` 字段名不许变（master 前端用 camelCase，注意别像上一轮那样改坏）。
 
@@ -925,9 +1010,9 @@ public final class Main { public static void main(String[] args); }
 
 ## 10. 待你拍板的问题
 
-1. **基线**：新骨架是"从 master 重开"，还是在 `refactor` 上继续？（我倾向前者，理由见 §2 与 §8 末。）
-2. **包名/落点**：新代码放 `com.agent.software.*`（最终替换旧树）还是先放 `redesign/` 独立源根？（本文档已在 `redesign/`。）
-3. **`tools` 是否独立成层**：我把它做成"依赖 ports 的并列模块"；你若想更严格，可以并进 `adapters`。
+1. ~~**基线**~~ **已定**：`refactor2` 从 `master` 重开，master 的旧实现与测试在本分支已删除，master 保留作参照。
+2. ~~**包名/落点**~~ **已定**：直接放 `com.agent.software.*`（见 §4）。
+3. ~~**`tools` 是否独立成层**~~ **已定**：带工具的能力全部并入 `tool/`，SPI 在 `tool.spi`（见 §5.9 B）。
 4. **`HOLD` 的语义**：master 对 off-duty 的普通事件是"直接丢/暂存到下一班"混着来。新设计里 `HOLD` 是"放进该角色队列但 worker 不取"，还是"放进一个待下一班重投的 holding area"？我默认前者（更接近 master）。
 5. **`Map` 允许范围**：是否接受"只在 adapters/持久化内部出现 `Map<String,Object>`"，其余全部 typed？
 6. **Web/`state.json` 兼容**：要不要保证与 master 100% 兼容（意味着保留 camelCase 与旧字段）？
@@ -935,11 +1020,12 @@ public final class Main { public static void main(String[] args); }
 
 ---
 
-## 附：本轮未做的事（按你的要求）
+## 附：当前状态
 
-- 没有写任何实现代码；本文档只有包、类型、函数签名与职责。
-- 没有改动 `src/`、`master`、`refactor` 任何一个分支的文件。
-- 下一步（等你确认 §10）才生成 `redesign/src/main/java/...` 的空壳 `.java`，或直接在你选定的分支落地。
+- **只写了骨架**：`refactor2` 上 121 个 `.java` 全部只有包、类型与函数签名，具体实现一律 `throw new UnsupportedOperationException("skeleton")`。
+- 包结构已按 §4 / §5.9-B 的功能分组落地；`mvn -o -Dmaven.repo.local=.m2-local -DskipTests compile` 通过。
+- `master` 的旧实现与测试已从本分支删除，`master` 分支完整保留作为行为参照。
+- 下一步：等你对包结构/类职责拍板后，按 §8 的 P0→P7 逐块填实现（以 master 的 31 个测试作为"语义不许变"的护栏）。
 
 ## 附：审计原始材料
 
