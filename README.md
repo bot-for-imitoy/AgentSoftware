@@ -69,8 +69,8 @@ time, summaries persisted every day), events decide *whether* an agent should wa
 - **0-token event filtering.** Every event passes a per-role 3-layer filter (state mask →
   keyword salience → wake) before it ever costs a token. Irrelevant events are dropped for free,
   which is what keeps a large team affordable.
-- **One employee = one computer.** Each role owns a Podman container (`maf-<role_id>` on the
-  `maf-net` bridge network), built from the project's `Containerfile`. The container's home
+- **One employee = one computer.** Each role owns a Podman container (`agentsoftware-<role_id>` on the
+  `agentsoftware-net` bridge network), built from the project's `Containerfile`. The container's home
   directory is the host folder `data/computers/<role_id>` — the same files, visible both ways.
   Tools, notes, tasks and MCP servers live *inside* that computer, so permissions are naturally
   isolated.
@@ -369,8 +369,8 @@ available for calling a Hermes agent conversationally.
 - `ComputerManager` creates a `Computer` per role: **podman** (default) | `local` | `ssh`.
   Without podman installed, podman computers throw at construction — use `local` for plain
   directory-based simulation.
-- Podman computers run as containers named `maf-<role_id>` on the custom bridge network
-  `maf-net`. The base image `maf-base:latest` is defined by the root `Containerfile`
+- Podman computers run as containers named `agentsoftware-<role_id>` on the custom bridge network
+  `agentsoftware-net`. The base image `agentsoftware-base:latest` is defined by the root `Containerfile`
   (Ubuntu 24.04 with Aliyun mirrors, Node 22 LTS, sudo/git/python, and the MCP servers
   preinstalled: the official filesystem server + Microsoft `@playwright/mcp` browser
   automation with chromium baked in) and is built automatically on first use.

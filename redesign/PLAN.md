@@ -1133,6 +1133,18 @@ master 的 98 个旧实现与 31 个测试**已在本分支删除**（`master` �
 8. **没有进程级 `ConversationManager`**：每个 `Agent` 各持一份 `ConversationMemory`，多实例天然隔离。
 9. **快照格式不兼容 master 旧档**：`state.json` 是新的 record 形状；`JsonSnapshotStore.load()` 解析失败会降级为
    "无档，从第 1 天开始"，不会崩。
+10. **容器基础设施改名**：master 的品牌前缀是 `maf`，现在统一为 `agentsoftware`：
+
+    | 用途 | master | refactor2 |
+    |---|---|---|
+    | 基础镜像 | `maf-base:latest` | `agentsoftware-base:latest`（`PodmanShell.DEFAULT_IMAGE`） |
+    | 容器名 | `maf-<roleId>` | `agentsoftware-<roleId>` |
+    | podman 网络 | `maf-net` | `agentsoftware-net`（`ShellRegistry.DEFAULT_NETWORK`，唯一来源） |
+    | SSH 远端工作目录 | `~/maf-<roleId>` | `~/agentsoftware-<roleId>`（`SshShell`） |
+
+    构建基础镜像时要打新 tag：`podman build -t agentsoftware-base:latest .`（根目录 `Containerfile`）。
+    注意 Maven 坐标 `com.maf:agent-software` **没有**改——它是构件标识，与容器命名无关。
+    `redesign/audit/*.md` 里出现的 `maf-*` 是对 **master 代码**的审计记录，按原样保留。
 
 ### 12.3 已知缺口（明确没做，需要时再补）
 

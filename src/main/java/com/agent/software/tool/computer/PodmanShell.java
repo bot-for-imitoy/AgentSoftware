@@ -25,8 +25,8 @@ import com.agent.software.tool.computer.Shell.CommandResult;
  * Podman 容器形态的个人电脑：每角色一个容器，命令经 podman exec 执行。
  *
  * <p><b>命名与目录布局</b>（对齐 master {@code ComputerManager} / {@code PodmanComputer}）：
- * 容器名默认 {@code maf-<roleId>}，镜像默认 {@code maf-base:latest}，网络默认
- * {@link ShellRegistry#DEFAULT_NETWORK}（{@code maf-net}）。宿主机目录
+ * 容器名默认 {@code agentsoftware-<roleId>}，镜像默认 {@code agentsoftware-base:latest}，网络默认
+ * {@link ShellRegistry#DEFAULT_NETWORK}（{@code agentsoftware-net}）。宿主机目录
  * {@code dataDir()/computers/<roleId>} 挂到容器内工作目录 {@code /home/<username>}，
  * 共享云盘 {@code dataDir()/drive} 挂到 {@code /mnt/drive}，npm 缓存
  * {@code dataDir()/computers/.npm-cache} 挂到 {@code /root/.npm}。容器内以
@@ -35,8 +35,8 @@ import com.agent.software.tool.computer.Shell.CommandResult;
  *
  * <p><b>ComputerSpec.options 键</b>（缺省即用默认值，未知键忽略）：
  * <ul>
- *   <li>{@code container}（别名 {@code container_name}）：容器名，默认 {@code maf-<roleId>}</li>
- *   <li>{@code image}：镜像，默认 {@code maf-base:latest}</li>
+ *   <li>{@code container}（别名 {@code container_name}）：容器名，默认 {@code agentsoftware-<roleId>}</li>
+ *   <li>{@code image}：镜像，默认 {@code agentsoftware-base:latest}</li>
  *   <li>{@code network}：容器网络，默认构造期注入的网络名</li>
  *   <li>{@code username}：容器内用户名，默认 {@code agent}（同时决定云盘个人目录名）</li>
  *   <li>{@code uid}：容器内 uid，默认 {@code 1100}</li>
@@ -55,7 +55,7 @@ public final class PodmanShell implements Shell {
     private static final Logger logger = LoggerFactory.getLogger(PodmanShell.class);
 
     /** 默认镜像（对齐 master {@code Computer.DEFAULT_IMAGE}）。 */
-    public static final String DEFAULT_IMAGE = "maf-base:latest";
+    public static final String DEFAULT_IMAGE = "agentsoftware-base:latest";
 
     /** 容器内共享云盘挂载点（对齐 master）。 */
     public static final String DRIVE_MOUNT = "/mnt/drive";
@@ -85,7 +85,7 @@ public final class PodmanShell implements Shell {
         Map<String, String> options = spec == null || spec.options() == null ? Map.of() : spec.options();
         this.image = ShellSupport.option(options, "image", DEFAULT_IMAGE);
         String container = ShellSupport.firstOption(options, "", "container", "container_name");
-        this.containerName = container.isEmpty() ? "maf-" + roleId.value() : container;
+        this.containerName = container.isEmpty() ? "agentsoftware-" + roleId.value() : container;
         this.username = ShellSupport.option(options, "username", "agent");
         this.uid = ShellSupport.intOption(options, "uid", 1100);
         this.displayName = ShellSupport.option(options, "name", roleId.value());

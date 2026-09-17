@@ -20,7 +20,7 @@ import com.agent.software.tool.computer.Shell.CommandResult;
  * {@code ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=10 [-p port] [-i key] user@host <cmd>}；
  * {@code BatchMode=yes} 保证缺密钥时快速失败而不是阻塞等密码输入。
  *
- * <p>远端工作目录默认 {@code ~/maf-<roleId>}（对齐 master），命令执行前先
+ * <p>远端工作目录默认 {@code ~/agentsoftware-<roleId>}（对齐 master），命令执行前先
  * {@code mkdir -p <workdir> && cd <workdir>}；文件操作读用 {@code base64}（避免二进制/换行问题），
  * 写用 {@code cat >} 从 stdin 灌入，路径经单引号引用后交给远端 shell。
  *
@@ -30,7 +30,7 @@ import com.agent.software.tool.computer.Shell.CommandResult;
  *   <li>{@code port}：SSH 端口，默认 {@code 22}</li>
  *   <li>{@code user}：登录用户，缺省时用 ssh 默认用户</li>
  *   <li>{@code key_path}（别名 {@code key}）：私钥文件路径</li>
- *   <li>{@code workdir}：远端工作目录，默认 {@code ~/maf-<roleId>}</li>
+ *   <li>{@code workdir}：远端工作目录，默认 {@code ~/agentsoftware-<roleId>}</li>
  *   <li>{@code name}：仅用于状态描述</li>
  * </ul>
  */
@@ -60,7 +60,7 @@ public final class SshShell implements Shell {
         this.user = ShellSupport.option(options, "user", "");
         this.keyPath = ShellSupport.firstOption(options, "", "key_path", "key");
         this.port = ShellSupport.intOption(options, "port", 22);
-        this.workdir = ShellSupport.option(options, "workdir", "~/maf-" + roleId.value());
+        this.workdir = ShellSupport.option(options, "workdir", "~/agentsoftware-" + roleId.value());
         this.displayName = ShellSupport.option(options, "name", roleId.value());
     }
 

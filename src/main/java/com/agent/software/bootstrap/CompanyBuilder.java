@@ -101,8 +101,8 @@ public final class CompanyBuilder {
     /** 时钟线程在"全员空闲"时的轮询间隔。 */
     private static final long IDLE_POLL_MILLIS = 1_000L;
 
-    /** 容器共享网络名（podman 形态的个人电脑用它组网）。 */
-    private static final String CONTAINER_NETWORK = "agent-software-net";
+    /** 容器共享网络名（podman 形态的个人电脑用它组网）——直接引用唯一的默认值，避免两处各写一份。 */
+    private static final String CONTAINER_NETWORK = ShellRegistry.DEFAULT_NETWORK;
 
     private final AppConfig config;
     private final AppPaths paths;

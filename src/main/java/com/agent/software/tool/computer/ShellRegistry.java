@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 角色电脑注册表：按 ComputerSpec 创建/销毁 Shell，维护 roleId → Shell 映射。
  *
- * <p>对齐 master {@code ComputerManager}：容器网络名默认 {@code maf-net}（在
+ * <p>对齐 master {@code ComputerManager}：容器网络名默认 {@code agentsoftware-net}（在
  * {@link PodmanShell} 里落地），kind 分支只认 {@code podman} / {@code ssh}，
  * 其余（{@code local}、null、空串、未知值）一律回退本地目录形态。
  *
@@ -26,7 +26,7 @@ public final class ShellRegistry {
     private static final Logger logger = LoggerFactory.getLogger(ShellRegistry.class);
 
     /** 默认容器共享网络名（对齐 master {@code ComputerManager.DEFAULT_NETWORK_NAME}）。 */
-    public static final String DEFAULT_NETWORK = "maf-net";
+    public static final String DEFAULT_NETWORK = "agentsoftware-net";
 
     private final AppPaths paths;
     private final String networkName;

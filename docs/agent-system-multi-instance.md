@@ -129,8 +129,8 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
 - **`RoleLoader.TEMPLATES` / name pool**: role templates are the "company organizational structure definition" on the classpath,
   a process-level shared registry; new templates registered by HR hiring are visible within the process (consistent with single-system semantics). For isolation,
   a per-system template table could be added to `AgentSystem` (not in this iteration).
-- **podman network / base image / container names**: the `maf-net` network, `maf-base:latest` image,
-  and `maf-<role_id>` container names are host-level infrastructure shared across systems (created idempotently).
+- **podman network / base image / container names**: the `agentsoftware-net` network, `agentsoftware-base:latest` image,
+  and `agentsoftware-<role_id>` container names are host-level infrastructure shared across systems (created idempotently).
   **Multi-instance deployment constraint**: if two AgentSystems on the same host use podman computers with the same `role_id`,
   the container names will conflict; multi-instance scenarios should use `local` computers (with per-system
   `base_dir`/`drive_dir`) or non-overlapping role sets.
@@ -158,6 +158,6 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
 
 - If full "multiple companies in one process"-level isolation is needed, `RoleLoader.TEMPLATES` and `ConfigStore`
   could also become `AgentSystem`-owned.
-- podman container names support a per-system prefix (e.g. `maf-<system>-<role_id>`), eliminating container-name conflicts
+- podman container names support a per-system prefix (e.g. `agentsoftware-<system>-<role_id>`), eliminating container-name conflicts
   for multiple instances on the same host.
 - Add `close()`/resource-reclamation semantics to `AgentSystem` so the lifecycles of multiple systems can be managed independently.
