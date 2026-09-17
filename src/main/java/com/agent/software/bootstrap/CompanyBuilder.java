@@ -25,7 +25,6 @@ import com.agent.software.company.store.JsonSnapshotStore;
 import com.agent.software.infra.config.AppConfig;
 import com.agent.software.infra.config.AppPaths;
 import com.agent.software.infra.json.JsonCodec;
-import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Payload;
 import com.agent.software.llm.LlmClient;
 import com.agent.software.llm.OpenAiClient;
@@ -74,7 +73,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * 组合根：唯一允许"认识所有东西"的地方。
@@ -184,7 +182,7 @@ public final class CompanyBuilder {
                 .register("skill", deps -> new SkillToolkit(skills))
                 .register("email", deps -> new EmailToolkit(mail, team))
                 .register("talk", deps -> new TalkToolkit(talk, team, feed))
-                .register("client", deps -> new ClientToolkit(client, feed));
+                .register("client", deps -> new ClientToolkit(client, team, feed));
 
         // 7. 角色的装配工厂：每角色一套队列/状态机/等待/对话/工具箱
         AgentFactory agentFactory = new AgentFactory() {
@@ -254,6 +252,11 @@ public final class CompanyBuilder {
     /** 邮箱落信 → 给收件人投一条 NEW_MAIL 定向事件。 */
     private void wireMailNotifications(FileMailbox mail, Team team, EventRouter router) {
         mail.onDelivery((message, recipientAddress) -> {
+            // 自己发给自己：邮件照常落信，但不产生 NEW_MAIL 通知（对齐 master MailService 语义）
+            if (message.fromEmail() != null && message.fromEmail().equalsIgnoreCase(recipientAddress)) {
+                logger.debug("自寄邮件（{}），只落信不通知", recipientAddress);
+                return;
+            }
             for (RoleSpec spec : team.specs()) {
                 if (mail.addressOf(spec).equalsIgnoreCase(recipientAddress)) {
                     router.publish(AgentEvent.toRole(spec.id(), EventKind.NEW_MAIL, Priority.NORMAL,

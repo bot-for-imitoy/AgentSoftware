@@ -1028,10 +1028,16 @@ master 的 98 个旧实现与 31 个测试**已在本分支删除**（`master` �
 
 ## 附：当前状态
 
-- **只写了骨架**：`refactor2` 上 121 个 `.java` 全部只有包、类型与函数签名，具体实现一律 `throw new UnsupportedOperationException("skeleton")`。
-- 包结构已按 §4 / §5.9-B 的功能分组落地；`mvn -o -Dmaven.repo.local=.m2-local -DskipTests compile` 通过。
-- `master` 的旧实现与测试已从本分支删除，`master` 分支完整保留作为行为参照。
-- 下一步：等你对包结构/类职责拍板后，按 §8 的 P0→P7 逐块填实现（以 master 的 31 个测试作为"语义不许变"的护栏）。
+- **实现已完成**：`refactor2` 上 124 个 `src/main/java` 文件全部有真实实现，**没有一处**
+  `UnsupportedOperationException("skeleton")` 残留。
+- 编译：`mvn -o -q -Dmaven.repo.local=.m2-local -DskipTests compile` 通过；
+  只看主代码的独立校验命令：
+  `javac -encoding UTF-8 -nowarn -d target/check -cp "$(cat redesign/_scratch/cp.txt)" $(find src/main/java -name '*.java')`。
+- 端到端自测：`src/test/java/com/agent/software/company/CompanyDayCycleTest.java` 用假 LLM 单步驱动
+  `ClockDriver.tickOnce()`，跑通"上班 → 派活 → 干活 → 18:00 下课 → 调 summary 工具 → OFF_DUTY →
+  跨天到第 2 天 08:00"，5 个用例全绿。
+- master 的 31 个测试正在按 §9 的策略迁移到新包结构（见 §12 的测试清单）。
+- `master` 分支完整保留作为行为参照。
 
 ## 附：审计原始材料
 
@@ -1074,3 +1080,128 @@ master 的 98 个旧实现与 31 个测试**已在本分支删除**（`master` �
     把 `ToolSpec` 下放到 `kernel` 就能消掉这一条。
 
 这两条要不要继续拆，等你定；图随时可以重跑（`python3 redesign/diagrams/build_all.py`）。
+
+---
+
+## 12. v3.3 实现记录（填完骨架之后）
+
+骨架是设计意图，实现一定会撞上设计没想清楚的地方。下面把**所有偏离骨架的地方**逐条列出，
+以及**与 master 有意的行为差异**和**已知缺口**——这些是 review 时最该看的部分。
+
+### 12.1 骨架 API 的最小调整（都为了"让依赖方向成立"或"让签名自洽"）
+
+| 文件 | 调整 | 理由 |
+|---|---|---|
+| `kernel.JsonSchema` | 去掉 `final`，`Builder extends JsonSchema` | 骨架里 `ToolSpec(name, desc, JsonSchema)` 要一个 `JsonSchema`，但 `object()` 返回的是 `Builder`，两者没有关系 → 没有任何 `JsonSchema` 实例能被构造出来。让 Builder 继承它，`JsonSchema.object().string(...)` 就能直接当 schema 用（正是骨架 javadoc 里写的用法） |
+| `kernel.Payload` | 新增 `ofMap/with/boolOr/has` | `ofMap` 是持久化边界（JSON → Payload）；`boolOr/has` 是工具参数读取的常用形态 |
+| `kernel.Ids` | 全部标识加非空校验；补齐 `generate()` | 骨架注释里写明"留待实现"；`NoteId/TodoId/SkillId` 骨架未声明 `generate()`，工具侧改用 UUID 前 12 位（见 12.3-g） |
+| `sim.event.AgentEvent` | 新增 `target()` | `targeted()` 之后总要取那唯一收件人，避免各处 `recipients().iterator().next()` |
+| `sim.clock.ShiftCalendar` | `nextShiftStart` 语义定为"永远次日 08:00" | 骨架注释是"跨天 08:00"；若 tickOfDay==0 时返回自身，跨天快进会原地打转 |
+| `sim.clock.ScheduleTable` | 新增 `ScheduleTable(ShiftCalendar)`（无参构造保留，默认 1.0/8/18） | 骨架没有构造器，但 `due(Tick)` 必须把 `DayTick` 换算成绝对 tick，没日历算不出来 |
+| `sim.clock.DefaultClockPolicy` | 新增 3 参构造器（旧 1 参委托，1.0/250） | `Advance(simulatedSeconds)` 要把"一次轮询的真实等待"折算成模拟秒，需要 `simSecondsPerRealSecond` 与 `busyPollMillis` |
+| `sim.clock.ClockDriver` | `nextFireTick` 候选里补上"当天 18:00" | master 的 `nextEventTick` 总会把班次结束作为候选；少了它，全员空闲且没有提醒时时钟会 Hold 在班次中间，**日循环直接死锁** |
+| `agent.task.Task` | 新增 `onComplete/notifyComplete/hasReplySink`；`replySink` 标注 `transient`，不进入 `TaskRecord` | talk wait=true 的回复通道。骨架给了 `WaitCoordinator.deliver`，但没有任何人能拿到"发送方的 WaitCoordinator"——目标角色手里只有 task。挂一个进程内回调是最小改动，且它不是数据，所以不持久化 |
+| `agent.AgentTasks` | 新增 `beginTask/finishTask`（default 空实现） | `TaskRunner` 拿到的是 `AgentTasks`，但它需要"开始/结束任务"这两个写操作；用 default 方法对工具侧的只读实现无影响 |
+| **新增** `agent.AgentRuntime` | `extends AgentTasks, AgentControl`，加 `id()/systemPrompt()/conversation()/currentDay()` | 执行一个任务还需要 System Prompt、当日对话与"今天第几天"，这三样只在 `Agent` 内部。塞进 `AgentTasks` 会污染工具可见面（工具也在用这个接口），所以单独开一个**面向执行器**的窄接口 |
+| `agent.task.TaskRunner` | 构造器第二个参数由 `(AgentTasks, AgentControl)` 合并为 `AgentRuntime` | 同上 |
+| `agent.Agent` | 新增 `restore(RoleSnapshot)` | 骨架没有读档入口，但 `Staffing.restore` 必须把状态/队列/历史/对话写回 |
+| `agent.task.ToolLoop` | 新增 `transcript()` | `Agent.start()` 要建 `TaskRunner`，而 `Transcript` 只被 `ToolLoop` 持有 |
+| `agent.dialog.SystemPrompt` | 新增 `clock()` | `Agent.currentDay()` 需要它 |
+| `company.Company` | 新增 `staffing()/router()/driver()` 与 `SNAPSHOT_VERSION` | `Main` 要招人，测试要单步驱动时钟（`driver()`），嵌入方要观察路由（`router()`） |
+| `infra.json.JacksonJsonCodec` | 注册自定义编解码：`Payload` / `LocalDate` / `Instant` | `Payload` 只有私有构造器且 kernel 刻意不认识 Jackson；时间类型不想为了两行代码再引 `jackson-datatype-jsr310` 依赖 |
+| **新增** `bootstrap.RoleTemplates` | 包级类，读 classpath `role_templates.json` → `List<RoleSpec>` | master 的 `RoleLoader`（386 行）里大部分是"名字 → 拼音 → uid"的推导与注册表，新架构只需要"读模板" |
+| **新增** `tool.computer.ShellSupport` | 包内公共类：子进程执行、引号、路径校验、options 读取 | 三种 Shell 形态共用，避免三份复制粘贴 |
+| `bootstrap.CompanyBuilder.DeferredToolbox` | 私有内部类 | `ToolLoop` 在 `Agent` 之前构造，而真正的 `Toolbox` 要等 `Agent.start()` 调 `ToolboxFactory` 才存在。这是一个**只转发、不决策**的延迟代理，接住"先有鸡还是先有蛋"，不构成依赖环 |
+| `transcript.ChatFeed` | 新增 `RoleResolver`/`RoleInfo` + 构造器 + `bindResolver` | 轨迹只带 `RoleId`，Web 要显示姓名/组名。解析器由 `ChatWebServer` 用 `CompanyView.roster()` 兜底绑定 |
+
+### 12.2 与 master 有意的行为差异（都是"改对了"，但要知道）
+
+1. **定向非紧急事件在下班时**：master 直接**丢弃**；新架构 **HOLD**（进暂存队列，次日上班提升）。
+   丢事件没有正当理由。
+2. **`WRAPPING_UP` 真的会被赋值了**：master 定义了这个状态但**从未写过**它。现在 `ShiftDirector.onShiftEnd()`
+   会把在岗角色标成收尾中，收尾期间到达的普通事件只暂存。
+3. **定向上班/下班事件**：master 在 `AgentSystem.onTimeEvent` 里直接改状态、广播事件；
+   新架构由 `ShiftDirector`（`TickObserver`）在班次边界广播 `SHIFT_START`/`SHIFT_END` 事件，
+   角色通过正常投递链路拿到任务。**顺序很重要**：先广播 `SHIFT_END`（此时角色还在岗，任务会被 DELIVER），
+   再把角色标成 `WRAPPING_UP`；反过来的话收尾任务会被 HOLD 掉、永远不写总结（这个坑在实现时踩到了）。
+4. **提示词里的公司邮箱**：`SystemPrompt` 不依赖 `AppConfig`（见 §3 依赖规则），
+   所以没有显式 `email` 时展示的是 `<username>@company.com` 这个示例域名；master 用真实后缀。
+5. **`computer_kind` 默认值改为 `local`**：master 默认 `podman`。新架构里电脑是被注入的 `Shell`，
+   默认走本地目录对开发环境更友好；模板 JSON 里写 `computer_kind` 即可覆盖。
+6. **没有拼音推导**：master 从姓名推拼音用户名；新架构直接用模板里已有的 `username`，缺失时退回 `role_id`。
+7. **没有"角色活动日志"（Journal）**：master 的 `data/journals/*.md` 被 `Transcript`（运行轨迹，Web 可见）取代。
+8. **没有进程级 `ConversationManager`**：每个 `Agent` 各持一份 `ConversationMemory`，多实例天然隔离。
+9. **快照格式不兼容 master 旧档**：`state.json` 是新的 record 形状；`JsonSnapshotStore.load()` 解析失败会降级为
+   "无档，从第 1 天开始"，不会崩。
+
+### 12.3 已知缺口（明确没做，需要时再补）
+
+- **(a) 提醒不持久化**：`ScheduleTable` 是内存表，`NoteToolkit` 用 `owner|title → ScheduleId` 的进程内映射记住它。
+  重启后未被取消的提醒仍留在（同样不存在的）调度表里，且无法 `cancel`。
+  根治要给 `Note` 加一个 `ScheduleId` 字段（跨契约改动，本轮回避免）。
+- **(b) MCP 工具没有真正挂到电脑上**：`StdioMcpBridge` 只做"安装状态 + 落盘"。
+  master 的 `MCPManager.addTool` 会 `computer.ensureMcpServers()` 并把代理 handler 注册进 `ToolRegistry`
+  （stdio JSON-RPC `callTool`）。新架构里 `McpBridge` 端口没有 `Shell`/工具表，所以真正的挂载与调用还没有落点。
+- **(c) `PcToolkit.lan_devices` 退化为单机 best-effort**（`hostname` + `ip addr` + `ip neigh`）：
+  master 从宿主机侧的 `ComputerManager` 注册表读"人名/容器名/网桥 IP"。要恢复语义得给 `PcToolkit` 注入 `ShellRegistry`。
+- **(d) `CompanyStatus` 不含绝对 tick**：Web 的 `/api/state` 保留了 master 的 `tick` 字段名但值为 `null`
+  （`DayTick(day, tickOfDay)` 里推不出绝对 tick）。前端没有使用该字段。
+- **(e) `SmtpSender` 的语义**：只对"非本公司域名"的收件人外发，外发失败只记 warn；
+  master 在 SMTP 模式下是"整封先外发、失败即整封不投"。
+- **(f) 工具参数名与 master 不完全一致**：例如 note 用 `title/content/remind_day/remind_tick`
+  （master 是 `name`/`reminder_*`），`read_mail` 只有 `limit`（master 还有 `unread_only`），
+  `my_tasks` 不再展示 token 数（master 有）。提示词是英文、参数由 schema 声明，不影响行为。
+- **(g) `NoteId/TodoId/SkillId` 没有 `generate()`**：骨架没声明，工具侧用 UUID 前 12 位。
+  要统一的话给 `kernel.Ids` 补三个静态工厂即可。
+- **(h) `ScheduleTable` 不做"提醒时刻必须落在班次内"的校验**：master 的 `taskTickMax` 边界没了
+  （`reschedule(id, at)` 也没有 `now` 参数）。表已经退化为通用内存表；要恢复就在
+  `schedule/reschedule` 里用 `calendar` 校验 `tickOfDay ∈ [0, shiftEndTick]`。
+- **(i) 没有"按角色落盘的持久活动日志"**：master 的 `AgentRole.journal()` 写 `data/journals/*.md`，
+  新架构只有内存轨迹（`ChatFeed`，Web 可见）+ `state.json` 快照。需要审计/追责能力的话要另加文件轨迹实现。
+
+### 12.4 测试迁移中发现并修掉的真实 bug
+
+master 的 31 个测试迁移过来之后，抓出了 8 个实现 bug（都是"看着对、跑起来错"的类型）：
+
+| # | 位置 | 症状 | 修法 |
+|---|---|---|---|
+| 1 | `agent.Agent#finishTask` | `summary` 工具刚把状态设成 `OFF_DUTY`，任务收尾又无条件 `toIdle()` 把它抹掉 → **永远下不了班、跨不了天** | 只在当前状态是 `ON_DUTY_BUSY` 时才回 `IDLE` |
+| 2 | `tool.mail.FileMailbox#addressOf` | 忽略 `RoleSpec.email()`，显式邮箱被覆盖（而 System Prompt 却在用它展示） | 显式 email 优先，其次 `<username\|roleId>@suffix` |
+| 3 | `tool.mail.EmailToolkit` 的 `read_mail` | 列表不返回邮件 id，而 `open_mail` 只认 id → 模型根本打不开邮件 | 每行补 `id=<MailId>` |
+| 4 | `tool.note.JsonNoteBook#delete` | 删最后一条笔记时留一个 `{"notes":[]}` 空壳文件 | 删空即删文件（对齐 master） |
+| 5 | `tool.note.NoteToolkit` 的 `edit_note` | `int : Integer` 条件表达式数值提升导致**自动拆箱 NPE**，没有旧提醒的笔记一编辑就失败 | 显式 `Integer.valueOf(...)` |
+| 6 | `bootstrap.CompanyBuilder#wireMailNotifications` | 给自己发邮件也会给自己投一条 `NEW_MAIL` 任务 | 收件人 == 发件人时只落信、不通知 |
+| 7 | `sim.clock.SimClock` | 日期只算 `baseDate + (day-1)`，**凌晨 00:00–08:00 的日期退回前一天** | 新增 `ShiftCalendar.calendarDayOffset(DayTick)` 做跨午夜补偿 |
+| 8 | `company.Company#baseDate` | 从 `currentDateTime()` 反推第 1 天日期；一旦在 18:00–08:00 收尾窗口落快照，`base_date` 会记晚一天 | 直接读 `SimClock.baseDate()`（新增只读 getter） |
+
+另外补了两条"master 有、实现时漏掉"的行为（都加了测试）：
+
+- **talk 的云盘附件**：System Prompt 明确告诉模型"可以用 `attachment` 参数传云盘相对路径"，
+  但工具没有声明这个参数 → 补上 schema，并做**相对路径校验**（拒绝绝对路径、结尾 `/`、`..` 穿越）；
+  文件是否存在交给对方的电脑去发现（`TalkToolkit` 刻意不依赖 `Shell`）。
+- **talk 的互相等待拆环**：A 等 B 时 B 又在等 A，两边都会永远阻塞（只能等下班被 abort）。
+  现在检测到环路就不进入阻塞，消息照常送达并给发送方一个合成回复（对齐 master 的等待环拆解）。
+
+还有一处小修：`ClientToolkit` 增加可选注入的 `AgentDirectory`，让客户对话里带的是**人名/组名**
+而不是 roleId（旧构造器保留，单测不受影响）。
+
+顺带修了一个健壮性问题：`Team.stopAll()/resign()` 原本**持着花名册锁**去 `join` worker，
+而 worker 可能在工具调用里回头读花名册（talk/邮件解析收件人）——典型的"持锁等 worker、worker 等锁"。
+现在先取快照、释放锁，再逐个停。
+
+### 12.5 测试结果
+
+```
+mvn -o -Dmaven.repo.local=.m2-local test
+→ Tests run: 314, Failures: 0, Errors: 0, Skipped: 0   BUILD SUCCESS
+```
+
+- 38 个测试类；master 的 31 个测试里能对齐的都按新 API 重写，能力被有意移除的
+  （`JournalTest`、`PinyinTest`）不强行造测试。
+- 新增了内核层与基础设施层的测试（`kernel/*Test`、`infra/*Test`），以及 talk 的两条保真性测试。
+- 全部测试确定性：不依赖真实时钟（用 `ClockDriver.tickOnce()` 单步）、不联网
+  （LLM 用 JDK `HttpServer` 起本地 mock 或直接假实现）、不写真实用户目录（一律 `@TempDir`）。
+- 注意：`mvn package` 在离线沙箱里跑不了（`maven-jar-plugin:3.5.0` 不在 `.m2-local`），
+  这是环境限制，`master` 分支同样如此；`compile` / `test` 都正常。
+
+

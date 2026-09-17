@@ -75,6 +75,20 @@ public record ShiftCalendar(double secondsPerTick, int shiftStartHour, int shift
     }
 
     /**
+     * 该日历坐标相对"第 1 天日期"的日历日偏移。
+     *
+     * <p>班次起点 tick 0 显示 08:00，因此 {@code tickOfDay} 跨过真实午夜（08:00 + 16h）
+     * 后，展示用的日历日期要多走一天——master 的 {@code testCalendarDateMath} 正是这么要求的：
+     * 第 1 天 tick 60000 是 {@code 2025-01-07 00:40:00}，但"第几天"仍是 1。
+     * 日期不能只看 {@code day()}，否则凌晨 00:00–08:00 的日期会退回前一天。
+     */
+    public int calendarDayOffset(DayTick at) {
+        long totalSeconds = (long) Math.floor((double) shiftStartHour * 3600.0
+                + (double) at.tickOfDay() * secondsPerTick);
+        return (int) Math.floorDiv(totalSeconds, (long) SIM_SECONDS_PER_DAY);
+    }
+
+    /**
      * 下一个班次起点：永远返回 {@code at(at.day()+1, 0)}，即"次日 08:00"（跨天）。
      *
      * <p>边界语义：即使 {@code at} 本身就是某天的 08:00（tickOfDay==0），返回值仍是次日

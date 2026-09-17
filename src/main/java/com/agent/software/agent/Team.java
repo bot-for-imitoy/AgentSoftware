@@ -56,16 +56,18 @@ public final class Team implements AgentDirectory, Sensors {
     }
 
     /** 离职：停止 worker 并移除。 */
-    public synchronized boolean resign(RoleId id) {
-        Agent agent = byId.remove(id);
+    public boolean resign(RoleId id) {
+        Agent agent;
+        synchronized (this) {
+            agent = byId.remove(id);
+        }
         if (agent == null) {
             return false;
         }
-        try {
-            agent.stop();
-        } catch (RuntimeException e) {
-            logger.warn("停止角色 {} 失败：{}", id.value(), e.getMessage());
-        }
+        // 注意：stop() 会 join worker，而 worker 可能在工具调用里回头读花名册
+        // （talk/邮件解析收件人）。所以必须在**释放花名册锁之后**再停，
+        // 否则就是"持锁等 worker、worker 等锁"。
+        stopQuietly(agent);
         return true;
     }
 
@@ -87,13 +89,19 @@ public final class Team implements AgentDirectory, Sensors {
         }
     }
 
-    public synchronized void stopAll() {
-        for (Agent agent : byId.values()) {
-            try {
-                agent.stop();
-            } catch (RuntimeException e) {
-                logger.warn("停止角色 {} 失败", agent.id().value(), e.getMessage());
-            }
+    public void stopAll() {
+        List<Agent> all = agents();
+        for (Agent agent : all) {
+            stopQuietly(agent);
+        }
+    }
+
+    /** 停一个角色，异常只记日志：停机路径不能因为单个角色出问题而中断。 */
+    private void stopQuietly(Agent agent) {
+        try {
+            agent.stop();
+        } catch (RuntimeException e) {
+            logger.warn("停止角色 {} 失败：{}", agent.id().value(), e.getMessage());
         }
     }
 

@@ -4,6 +4,7 @@ import com.agent.software.agent.Agent;
 import com.agent.software.agent.Team;
 import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.agent.task.Task;
+import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Payload;
 import com.agent.software.kernel.Text;
 import com.agent.software.sim.event.AgentEvent;
@@ -106,12 +107,26 @@ public final class TalkService implements TeamChannel {
         record(message);
 
         Agent sender = from.get();
+        Agent receiver = to.get();
+        Task task = delegated != null ? delegated : task(message, TALK_DELEGATE);
+
+        // 互相等待会死锁：A 等 B、B 又在等 A，两边都永远等不到（只能等下班被 abort）。
+        // 对齐 master 的"等待环拆解"——不进入阻塞，照常把消息送达，并给发送方一个合成回复。
+        Optional<RoleId> receiverWaitingFor = receiver.waits().waitingFor();
+        if (receiverWaitingFor.isPresent() && receiverWaitingFor.get().equals(message.from())) {
+            logger.info("检测到互相等待（{} ↔ {}），拆解等待环：消息照常送达，不阻塞",
+                    message.from().value(), message.to().value());
+            receiver.submit(task, false);
+            return Optional.of("[System: " + Text.orEmpty(message.toName())
+                    + " 也在等你的回复，互相等待会把你们俩一起卡住。消息已经送达，"
+                    + "请先完成手上的任务并给对方一个回复，不要继续等待。]");
+        }
+
         sender.waits().begin(message.to());
         try {
-            Task task = delegated != null ? delegated : task(message, TALK_DELEGATE);
             // 回复接缝：任务执行方 finishTask → notifyComplete(result) → 唤醒发送方。
             task.onComplete(sender.waits()::deliver);
-            to.get().submit(task, false);
+            receiver.submit(task, false);
             return sender.waits().await(timeout);
         } finally {
             sender.waits().end();

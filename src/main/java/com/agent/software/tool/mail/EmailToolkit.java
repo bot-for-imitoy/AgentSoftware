@@ -128,7 +128,9 @@ public final class EmailToolkit implements Toolkit {
             lines.add("read_mail：收件箱 " + address + "（" + unread + " 封未读）：");
             int index = 1;
             for (MailMessage message : messages) {
-                lines.add("  " + index + ". " + message.preview());
+                // 必须带上邮件 id：open_mail 只认 id，read_mail 不给出 id 就无法打开全文
+                // （对齐 master 的 "id=..."，也是本工具 spec 里承诺返回的内容）。
+                lines.add("  " + index + ". id=" + message.id().value() + " " + message.preview());
                 index++;
             }
             return ToolResult.ok(String.join("\n", lines));

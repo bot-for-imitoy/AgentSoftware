@@ -1,5 +1,27 @@
 # AgentSoftware — Shift & Event-Driven Agent Scheduler
 
+> **⚠️ 分支状态（`refactor2`）**：本分支把整个项目按"按能力分包 + 依赖倒置接缝"重写了一遍，
+> 现在跑的是新架构，**类名与包名与下面文档里的（`AgentRole`/`RolePool`/`AgentSystem`/
+> `TimeEventBus`/`EventDispatcher`/`ToolRegistry` …）已经不同**。文档正文描述的是 `master`
+> 分支的实现（行为基线），保留作为语义参照。
+>
+> 新架构的设计、包树、依赖规则与逐类职责见 **`redesign/PLAN.md`**；
+> 图（包依赖 / UML / DFD / 时序）由脚本生成，见 **`redesign/diagrams/README.md`**
+> 与 `redesign/diagrams/out/*.png`。新架构的对应关系速查：
+>
+> | master | refactor2 |
+> |---|---|
+> | `AgentRole`（1173 行） | `agent.Agent`（门面）+ `agent.role.RoleSpec`（定义）+ `agent.AgentStateMachine` + `agent.AgentMailbox` + `agent.WaitCoordinator` + `agent.dialog.ConversationMemory` + `agent.dialog.SystemPrompt` + `agent.task.ToolLoop` |
+> | `RolePool` | `agent.Team`（花名册）+ `agent.Staffing`（人事）+ `agent.task.TaskRunner`（线程体） |
+> | `AgentSystem` | `company.Company`（编排门面）+ `bootstrap.CompanyBuilder`（唯一组合根） |
+> | `TimeEventBus`（920 行） | `sim.clock.ShiftCalendar` + `SimClock` + `ScheduleTable` + `DefaultClockPolicy` + `ClockDriver` + `company.ShiftDirector` |
+> | `EventDispatcher` + `AgentRole.evaluateEvent` | `agent.dispatch.EventRouter` + `DeliveryPolicy` + `SaliencePolicy` + `TaskFactory` |
+> | `Types.Event` / `Types.Priority` / `Urgency` | `sim.event.AgentEvent` / `Priority` |
+> | `ToolRegistry` + `Tool` | `tool.spi.Toolbox` / `Tool` / `ToolSpec` / `ToolResult` |
+> | `Toolkits` + `tools/toolkits/*` | `tool.<capability>.*`（13 个工具包）+ `bootstrap.ToolkitCatalog` |
+> | `Conversation` + `ConversationManager` | `agent.dialog.ConversationMemory`（每角色一份，无进程级单例） |
+> | `StateStore` | `company.store.SnapshotStore` / `JsonSnapshotStore` / `CompanySnapshot` |
+
 A **multi-role AI agent "software company" simulator** written in Java (Maven, JUnit 5).
 A team of LLM-powered employees — CEO, COO, HR, team leads, developers, testers, security
 engineers, … — runs like a real company: it works on a **corporate shift clock**, reacts to

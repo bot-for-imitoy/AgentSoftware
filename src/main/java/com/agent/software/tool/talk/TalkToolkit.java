@@ -65,6 +65,8 @@ public final class TalkToolkit implements Toolkit {
                             .bool("wait", "（可选，默认 false）是否等待对方回复：true = 同步等待，拿到回复再继续。")
                             .enumeration("urgency", "（可选）紧急度，默认 NORMAL。",
                                     List.of("LOW", "NORMAL", "HIGH", "EMERGENCY"))
+                            .string("attachment",
+                                    "（可选）公司云盘的相对路径（例如 Public/proposal.md），随消息一起带给对方。")
                             .required("person", "message"));
         }
 
@@ -103,6 +105,18 @@ public final class TalkToolkit implements Toolkit {
             Priority urgency = Priority.parse(arguments.stringOr("urgency", "NORMAL"));
             boolean wait = arguments.boolOr("wait", false);
             String group = !callerGroup.isEmpty() ? callerGroup : targetGroup;
+
+            // 云盘附件（对齐 master TalkTo 的 attachment）：只接受**相对**云盘路径，
+            // 拒绝绝对路径与 ".." 穿越。正文里附上路径，对方用电脑的文件命令即可打开。
+            String attachment = arguments.stringOr("attachment", "").trim();
+            if (!attachment.isEmpty()) {
+                String invalid = validateAttachment(attachment);
+                if (invalid != null) {
+                    return ToolResult.error("talk：" + invalid);
+                }
+                message = message + "\n[云盘附件] /mnt/drive/" + attachment;
+            }
+
             TalkMessage talkMessage = new TalkMessage(caller.id(), caller.name(),
                     target.id(), target.name(), group, message, urgency.name());
 
@@ -120,8 +134,30 @@ public final class TalkToolkit implements Toolkit {
         }
     }
 
-    // ── list_roles ─────────────────────────────────────────────
+    /**
+     * 校验云盘附件路径，返回错误说明；合法返回 null。
+     *
+     * <p>只允许相对路径（对齐 master {@code TalkTo}）：拒绝绝对路径、结尾斜杠与
+     * {@code ..} 穿越。**不做**文件存在性检查——那需要发送方的 {@code Shell}，
+     * 而 {@code TalkToolkit} 刻意只依赖通信/花名册/轨迹三个端口（见 PLAN §3）；
+     * 路径合成后由对方在自己的电脑上打开，读不到会自然报错。
+     */
+    private static String validateAttachment(String attachment) {
+        if (attachment.startsWith("/")) {
+            return "附件必须是云盘**相对**路径（例如 Public/proposal.md），不能是绝对路径：" + attachment;
+        }
+        if (attachment.endsWith("/")) {
+            return "附件路径不能以 / 结尾：" + attachment;
+        }
+        for (String segment : attachment.split("/")) {
+            if (segment.equals("..")) {
+                return "附件路径不能包含 ..：" + attachment;
+            }
+        }
+        return null;
+    }
 
+    // ── list_roles ─────────────────────────────────────────────
     private final class ListRolesTool implements Tool {
         @Override
         public ToolSpec spec() {

@@ -80,6 +80,10 @@ public final class FileMailbox implements Mailbox {
         if (spec == null) {
             throw new DomainError("mail.role.null", "角色为空，无法推导邮箱地址");
         }
+        // 显式 email 字段优先（对齐 master MailService.emailFor）；否则由用户名 + 后缀推导。
+        if (!Text.isBlank(spec.email())) {
+            return spec.email().trim();
+        }
         String username = Text.isBlank(spec.username()) ? spec.id().value() : spec.username().trim();
         return username + "@" + suffix;
     }

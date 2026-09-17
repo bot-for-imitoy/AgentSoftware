@@ -119,7 +119,13 @@ public final class JsonNoteBook implements NoteBook, DailySummary {
             List<Note> notes = load(owner);
             boolean removed = notes.removeIf(n -> title.equals(n.title()));
             if (removed) {
-                save(owner, notes);
+                // 最后一条被删掉时直接移除文件（对齐 master NoteStore.deleteNote），
+                // 不在磁盘上留下 {"notes":[]} 这种空壳。
+                if (notes.isEmpty()) {
+                    removeFile(owner);
+                } else {
+                    save(owner, notes);
+                }
             }
             return removed;
         } finally {
@@ -228,6 +234,16 @@ public final class JsonNoteBook implements NoteBook, DailySummary {
             Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
             Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** 删除角色的笔记文件（已不存在时视为成功）。 */
+    private void removeFile(RoleId owner) {
+        Path file = file(owner);
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            throw new DomainError("note.delete.failed", "笔记文件删除失败: " + file, e);
         }
     }
 

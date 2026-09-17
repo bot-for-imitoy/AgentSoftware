@@ -150,6 +150,11 @@ public final class Company implements CompanyView {
         return driver;
     }
 
+    /** 班次反应（测试可观察/触发收尾兜底 {@code forceWrapUp()}）。 */
+    public ShiftDirector director() {
+        return director;
+    }
+
     // ── CompanyView ────────────────────────────────────────────
 
     @Override
@@ -195,9 +200,8 @@ public final class Company implements CompanyView {
                 baseDate(), roles);
     }
 
-    /** 第 1 天对应的真实日历日期（时钟只暴露"今天"，所以按天数回推）。 */
+    /** 第 1 天对应的真实日历日期（直接读时钟的基准日，不做任何反推）。 */
     private LocalDate baseDate() {
-        LocalDate today = LocalDate.parse(clock.currentDateTime().substring(0, 10));
-        return today.minusDays(Math.max(0, clock.nowDay().day() - 1));
+        return clock.baseDate();
     }
 }

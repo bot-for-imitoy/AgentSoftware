@@ -53,3 +53,6 @@ __pycache__/
 
 # ── redesign/diagrams 的位图产物：脚本可随时重画，.dot/.svg 仍然入库 ──
 redesign/diagrams/out/*.png
+
+# ── redesign 下的临时工作目录（master 参照文件、javac classpath、子任务简报等） ──
+redesign/_scratch/

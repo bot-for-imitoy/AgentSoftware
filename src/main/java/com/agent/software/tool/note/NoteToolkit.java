@@ -147,10 +147,12 @@ public final class NoteToolkit implements Toolkit {
             try {
                 Optional<Note> existing = notes.read(agent, title);
                 // 未显式给新时间时沿用原提醒（对应 master 的"省略即保持"）。
-                Integer newDay = day.isPresent() ? day.getAsInt()
+                // 注意：必须显式装箱，否则 `int : Integer` 的条件表达式会被数值提升成 int，
+                // 在没有旧 remindDay 时对 null 拆箱抛 NPE（edit_note 永远失败）。
+                Integer newDay = day.isPresent() ? Integer.valueOf(day.getAsInt())
                         : existing.map(Note::remindDay).orElse(null);
                 Integer newTick = newDay == null ? null
-                        : (day.isPresent() ? tick.orElse(0)
+                        : Integer.valueOf(day.isPresent() ? tick.orElse(0)
                         : existing.map(Note::remindTick).orElse(0));
                 NoteId id = existing.map(Note::id).orElseGet(NoteToolkit::newNoteId);
                 notes.edit(new Note(id, agent, title, content, newDay, newTick, Instant.now()));

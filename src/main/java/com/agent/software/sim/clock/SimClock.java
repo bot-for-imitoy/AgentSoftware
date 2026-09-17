@@ -75,16 +75,37 @@ public final class SimClock implements Clock {
         return calendar;
     }
 
+    /**
+     * 第 1 天对应的真实日历日期（只读）。
+     *
+     * <p>读档/落快照要用它算出 {@code CompanySnapshot.baseDate}。
+     * **不要**从 {@link #currentDateTime()} 反推：班次结束到次日 08:00 之间显示的日期
+     * 已经跨过午夜（见 {@code calendarDayOffset}），反推会把基准日记晚一天。
+     */
+    public synchronized LocalDate baseDate() {
+        return baseDate;
+    }
+
     @Override
     public synchronized String currentDateTime() {
         DayTick today = calendar.locate(new Tick(tick));
-        return baseDate.plusDays((long) today.day() - 1) + " " + calendar.clockTime(today);
+        return calendarDate(today) + " " + calendar.clockTime(today);
     }
 
     @Override
     public synchronized String describe() {
         DayTick today = calendar.locate(new Tick(tick));
         // 日期 + "Day N HH:MM:SS（在岗/已下班…）"，对齐 master describe() 的信息量。
-        return baseDate.plusDays((long) today.day() - 1) + " " + calendar.describe(new Tick(tick));
+        return calendarDate(today) + " " + calendar.describe(new Tick(tick));
+    }
+
+    /**
+     * 展示用的日历日期：{@code baseDate + (day-1) + 跨午夜补偿}。
+     *
+     * <p>班次起点 tick 0 是当天 08:00，tickOfDay 越过 16h（真实午夜）后日历日要 +1，
+     * 否则凌晨时段会显示成前一天。补偿量来自 {@link ShiftCalendar#calendarDayOffset}。
+     */
+    private LocalDate calendarDate(DayTick at) {
+        return baseDate.plusDays((long) (at.day() - 1) + calendar.calendarDayOffset(at));
     }
 }
