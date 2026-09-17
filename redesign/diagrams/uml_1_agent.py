@@ -109,9 +109,14 @@ def build():
                              methods=["+ shouldCompact(long) : boolean",
                                       "+ keepMessages() : int"]))
     d.node("Prompts", uml("SystemPrompt", kind="dialog", tag="agent.dialog",
-                          attrs=["- clock : Clock    ◀ sim.clock",
-                                 "- notes : NoteBook ◀ tool.note"],
+                          attrs=["- clock : Clock          ◀ sim.clock",
+                                 "- summaries : DailySummary ◀ 本包窄端口",
+                                 "  （实现是 tool.note.JsonNoteBook）"],
                           methods=["+ build(RoleSpec) : String"]))
+    d.node("DailySummary", uml("DailySummary", "interface", kind="iface",
+                               tag="agent.dialog · 只声明要用的那一个方法",
+                               methods=["+ latestSummary(RoleId, int)",
+                                        "    : Optional<String>"]))
     d.node("ToolLoop", uml("ToolLoop", kind="task", tag="agent.task",
                            attrs=["- llm        : LlmClient",
                                   "- toolbox    : Toolbox",
@@ -125,9 +130,12 @@ def build():
                              methods=["+ roundBudgetExceeded(int)",
                                       "+ tokenBudgetExceeded(int)"]))
     d.node("Runner", uml("TaskRunner", kind="task", tag="agent.task · Runnable",
-                         attrs=["- agent / -toolLoop",
-                                "- transcript / -gate"],
-                         methods=["+ run()", "+ requestStop()"]))
+                         attrs=["- mailbox : AgentMailbox",
+                                "- tasks   : AgentTasks",
+                                "- control : AgentControl",
+                                "- toolLoop / -transcript / -gate"],
+                         methods=["+ run()", "+ requestStop()",
+                                  "（不认识 agent.Agent）"]))
     d.node("Task", uml("Task", kind="domain", tag="agent.task",
                        attrs=["id / urgency / description",
                               "source / context / createdAt",
@@ -186,7 +194,8 @@ def build():
     assoc(d, "Runner", "Task", "从队列取")
     assoc(d, "Waits", "Task", "代理出去的任务")
     depend(d, "Prompts", "Clock", "读当前时间")
-    depend(d, "Prompts", "NoteBook", "读昨日总结")
+    comp(d, "Prompts", "DailySummary", "读昨天")
+    realize(d, "NoteBook", "DailySummary", "tool.note.JsonNoteBook 实现")
     depend(d, "Prompts", "RoleSpec", "build(spec)")
     depend(d, "Memory", "LlmClient", "压缩时 summarize")
     depend(d, "ToolboxFactory", "RoleSpec", "按 spec.toolkits 装配")
@@ -197,6 +206,7 @@ def build():
                            "青 = agent.dialog   黄 = 值对象 / record",
                            "蓝 = tool.spi、跨包接口",
                            "灰 = tool.*        橙 = llm",
+                           "（NoteBook 在 tool.note，仅作对照）",
                            "紫 = sim.clock",
                            "◆ 组合   ◇ 聚合   ▶ 关联",
                            "┄▷ 实现   ┄▶ 依赖"],

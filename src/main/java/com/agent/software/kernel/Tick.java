@@ -1,4 +1,4 @@
-package com.agent.software.sim.clock;
+package com.agent.software.kernel;
 
 /** 绝对 tick（从第 1 天 08:00 起累计）。 */
 public record Tick(long value) {

@@ -1,6 +1,7 @@
-package com.agent.software.sim.event;
+package com.agent.software.agent.dispatch;
 
 import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
 
 /**
  * 内容相关性打分（master {@code AgentRole.evaluateEvent} 的 Layer 2）。

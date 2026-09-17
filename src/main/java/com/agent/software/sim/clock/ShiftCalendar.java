@@ -1,5 +1,7 @@
 package com.agent.software.sim.clock;
 
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
 /**
  * 纯日历换算：tick ↔ 时钟文本、班次边界、下一班次起点。
  *

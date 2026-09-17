@@ -1,17 +1,16 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.dialog.ConversationMemory;
-import com.agent.software.agent.dialog.SystemPrompt;
-import com.agent.software.agent.role.RoleSpec;
-import com.agent.software.agent.task.Task;
-import com.agent.software.agent.task.TaskRunner;
-import com.agent.software.agent.task.ToolLoop;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.tool.computer.Shell;
 import com.agent.software.tool.spi.Toolbox;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.agent.dialog.ConversationMemory;
+import com.agent.software.agent.dialog.SystemPrompt;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.agent.task.ToolLoop;
 
 /**
  * 一个角色的门面：只做组合，不含业务实现。

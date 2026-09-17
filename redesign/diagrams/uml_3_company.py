@@ -95,7 +95,7 @@ def build():
                                   "toolkits : Set<String>"],
                            methods=["+ builder() : Builder",
                                     "+ hasGroup() : boolean"]))
-    d.node("RoleSnapshot", uml("RoleSnapshot", kind="domain", stereotype="record",
+    d.node("RoleSnapshot", uml("RoleSnapshot", kind="domain", stereotype="record", tag="agent",
                                attrs=["spec : RoleSpec",
                                       "state : AgentState",
                                       "ready / deferred 队列",

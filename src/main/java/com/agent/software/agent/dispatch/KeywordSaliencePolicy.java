@@ -1,6 +1,8 @@
-package com.agent.software.sim.event;
+package com.agent.software.agent.dispatch;
 
 import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.agent.dispatch.SaliencePolicy.SalienceDecision;
 
 /**
  * 关键词显著性策略（master {@code AgentRole.evaluateEvent} Layer 2 的等价物）。

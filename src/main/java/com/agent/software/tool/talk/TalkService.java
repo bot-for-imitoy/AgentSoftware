@@ -1,7 +1,6 @@
 package com.agent.software.tool.talk;
 
 import com.agent.software.agent.Team;
-import com.agent.software.agent.WaitCoordinator;
 import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.agent.task.Task;
 import com.agent.software.transcript.Transcript;
@@ -9,6 +8,7 @@ import com.agent.software.transcript.Transcript;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.tool.talk.TeamChannel.TalkMessage;
 
 /**
  * {@link TeamChannel} 的 engine 实现：talk 工具的运行时后端。

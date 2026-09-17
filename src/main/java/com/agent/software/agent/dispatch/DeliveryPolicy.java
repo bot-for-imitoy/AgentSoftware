@@ -1,7 +1,8 @@
-package com.agent.software.sim.event;
+package com.agent.software.agent.dispatch;
 
 import com.agent.software.agent.AgentState;
 import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
 
 /**
  * 投递决策：一个事件现在能不能进入某个角色的队列。

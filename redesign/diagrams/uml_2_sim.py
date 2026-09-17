@@ -32,10 +32,10 @@ def build():
                                          "+ ticksUntilShiftEnd(DayTick)",
                                          "+ nextShiftStart(DayTick)",
                                          "+ clockTime(DayTick) / describe(Tick)"]))
-    d.node("Tick", uml("Tick", kind="domain", stereotype="record",
+    d.node("Tick", uml("Tick", kind="domain", stereotype="record", tag="已下放到 kernel",
                        attrs=["value : long"],
                        methods=["+ plus(long) / before(Tick) / after(Tick)"]))
-    d.node("DayTick", uml("DayTick", kind="domain", stereotype="record",
+    d.node("DayTick", uml("DayTick", kind="domain", stereotype="record", tag="已下放到 kernel",
                           attrs=["day / tickOfDay : int"]))
 
     d.node("ClockDriver", uml("ClockDriver", kind="sim", tag="sim.clock",
@@ -113,15 +113,15 @@ def build():
     d.node("Priority", uml("Priority", kind="domain", stereotype="enum",
                            methods=["LOW · NORMAL · HIGH · EMERGENCY",
                                     "+ weight() / ofWeight(int)"]))
-    d.node("DeliveryPolicy", uml("DeliveryPolicy", "interface", kind="event",
+    d.node("DeliveryPolicy", uml("DeliveryPolicy", "interface", kind="task", tag="agent.dispatch",
                                  methods=["+ decide(DeliveryContext) : DeliveryDecision",
                                           "record DeliveryContext(event, spec, state,",
                                           "                        scheduledReminder)",
                                           "enum DeliveryVerdict = DELIVER|HOLD|DROP",
                                           "record DeliveryDecision(verdict, reason)"]))
-    d.node("DefaultDeliveryPolicy", uml("DefaultDeliveryPolicy", kind="event",
+    d.node("DefaultDeliveryPolicy", uml("DefaultDeliveryPolicy", kind="task", tag="agent.dispatch",
                                         attrs=["- salience : SaliencePolicy"]))
-    d.node("SaliencePolicy", uml("SaliencePolicy", "interface", kind="event",
+    d.node("SaliencePolicy", uml("SaliencePolicy", "interface", kind="task", tag="agent.dispatch",
                                  methods=["+ score(RoleSpec, AgentEvent)",
                                           "    : SalienceDecision(pass, score, relevance, reason)"]))
     d.node("KeywordSaliencePolicy", uml("KeywordSaliencePolicy", kind="event"))
@@ -166,7 +166,9 @@ def build():
                            "┄▷ 实现  ┄▶ 依赖",
                            "",
                            "sim ⇢ agent 的边全部消失：",
-                           "sim 只认识 5 个接口，不认识 Agent"],
+                           "sim 只认识 5 个接口，不认识 Agent；",
+                           "投递策略已移到 agent.dispatch，",
+                           "Tick / DayTick 已下放到 kernel。"],
                           kind="neutral"))
 
     require_dot()

@@ -6,6 +6,8 @@ import com.agent.software.kernel.Ids.RoleId;
 
 import java.time.Duration;
 import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
 
 /**
  * 本地目录形态的个人电脑：直接以宿主文件系统为工作目录，命令经子进程执行。

@@ -4,11 +4,11 @@ import com.agent.software.agent.Team;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Ids.TaskId;
 import com.agent.software.sim.event.AgentEvent;
-import com.agent.software.sim.event.DeliveryPolicy;
 import com.agent.software.sim.event.EventSink;
 import com.agent.software.transcript.Transcript;
 
 import java.util.Map;
+import com.agent.software.agent.dispatch.DeliveryPolicy.DeliveryVerdict;
 
 /**
  * 事件唯一入口与投递器。

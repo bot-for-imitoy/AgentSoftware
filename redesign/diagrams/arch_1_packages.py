@@ -21,7 +21,7 @@ LAYER = [
     ("tool.spi", "#e6eef8", 1), ("transcript", "#e6eef8", 1),
     ("llm", "#fbeee0", 2), ("sim.event", "#fbe4e8", 2),
     ("sim.clock", "#e9e4f7", 3), ("agent.role", "#e6f4e8", 3),
-    ("agent.dialog", "#e6f4e8", 3), ("agent.task", "#e6f4e8", 3),
+    ("agent.dialog", "#e6f4e8", 3), ("agent.task", "#eceffc", 3),
     ("agent.dispatch", "#e6f4e8", 3),
     ("tool", "#eef0f4", 3),
     ("agent", "#dcefdf", 4),
@@ -187,28 +187,53 @@ def build():
             kw.update(color="#d13438", penwidth="2.4")
         d.edge(s, t, kw)
 
+    # feature 粒度（把 agent.task 折回 agent）再算一次
+    feat = lambda p: p.split(".")[0]                                   # noqa: E731
+    feat_nodes = sorted({feat(p) for p in all_pkgs})
+    feat_edges = {(feat(s), feat(t)) for s, t in edges if feat(s) != feat(t)}
+    feat_sccs = find_sccs(feat_nodes, feat_edges)
+    feat_pairs = sorted({(s, t) for s, t in feat_edges
+                         if any(s in c and t in c for c in feat_sccs)})
+
     d.node("legend", note("图例 · 这张图应该是 DAG", [
         "实线 = import 方向（被依赖方通常在下）",
         "线粗 ∝ import 次数",
         "紫色虚线 = 跨包 implements（SPI 接缝，正常）",
         "红色 + ⚠ = 处在同一个强连通分量里",
         "",
-        f"检测到 {len(sccs)} 个环，共 {len(in_cycle)} 个包、"
-        f"{len(cyclic_edges)} 条边：",
-        *[f"环 #{i + 1}（{len(c)} 个包，" +
-          f"{sum(1 for e in cyclic_edges if e[0] in c and e[1] in c)} 条边）：" +
-          "、".join(c) for i, c in enumerate(sccs)],
+        f"包粒度：{len(sccs)} 个环，{len(in_cycle)} 个包、{len(cyclic_edges)} 条边",
+        *[f"  环 #{i + 1}（{len(c)} 包）：" + "、".join(c) for i, c in enumerate(sccs)],
         "",
-        "★ 四处根因（都可拆）：",
-        "① sim.event→agent：DeliveryContext 里放了",
-        "   AgentState + RoleSpec → 投递策略应归",
-        "   agent.dispatch，sim.event 只留事件数据",
-        "② sim.clock↔sim.event：AgentEvent.fireAt 用了",
-        "   sim.clock.Tick → Tick / DayTick 应下放到 kernel",
-        "③ agent↔agent.task：TaskRunner 直接持有 Agent",
-        "   → 改成只依赖 AgentTasks + AgentControl 两个端口",
-        "④ agent↔agent.role：RoleSnapshot 放在 role 包里，",
-        "   却引用了 Task → 它其实是 Agent 的快照，应搬到 agent",
+        f"feature 粒度：{len(feat_sccs)} 个环",
+        *[f"  " + "、".join(c) for c in feat_sccs],
+        *[f"    · {s} → {t}" for s, t in feat_pairs],
+        "",
+        "★ 这一轮已经拆掉的 5 处：",
+        "① sim.event→agent：投递策略（DeliveryPolicy /",
+        "   SaliencePolicy 家族）已移到 agent.dispatch，",
+        "   sim.event 只剩 AgentEvent / EventKind /",
+        "   Priority / EventSink，只依赖 kernel",
+        "② sim.clock↔sim.event：Tick、DayTick 下放到 kernel",
+        "③ agent↔agent.task：TaskRunner 不再持有 Agent，",
+        "   改持 AgentMailbox + AgentTasks + AgentControl",
+        "④ agent↔agent.role：RoleSnapshot 由 agent.role",
+        "   搬到 agent（它本来就是 Agent 的快照）",
+        "⑤ agent↔tool.note：新增 agent.dialog.DailySummary，",
+        "   由 tool.note.JsonNoteBook 实现，",
+        "   agent.dialog 不再 import 具体工具包",
+        "",
+        "★ 还剩两个环，都不是手滑，是选择题：",
+        "· agent ↔ agent.task：端口（AgentTasks /",
+        "  AgentControl / AgentMailbox / LifecycleGate）",
+        "  住在父包 agent 里，而 agent.task 要用它们。",
+        "  要拆就把这些端口下沉到 agent.task（或再开",
+        "  agent 的 contract 子包）；不拆则是标准的",
+        "  “父包持契约、子包实现”形态。",
+        "· agent ↔ tool（feature 粒度）：agent 持有",
+        "  Shell，而 tool.computer 需要 RoleSpec.ComputerSpec",
+        "  → 即 PLAN §5.9-B.8 那条已知反向边。",
+        "  另一条 tool ↔ llm 来自 ToolSpec 放在 tool.spi；",
+        "  把 ToolSpec 下放到 kernel 即可消掉。",
     ], kind="neutral"))
 
     require_dot()

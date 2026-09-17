@@ -1,6 +1,9 @@
 package com.agent.software.tool.mail;
 
 import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppConfig.Mail;
+import com.agent.software.tool.mail.Mailbox.OutgoingMail;
+import com.agent.software.infra.config.AppConfig.Mail.Smtp;
 
 /**
  * 可选的真实 SMTP 发送器：把公司邮箱的对外邮件经 jakarta.mail 投递。

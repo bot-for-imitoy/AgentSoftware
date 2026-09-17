@@ -3,6 +3,11 @@ package com.agent.software.transcript;
 import com.agent.software.kernel.Ids.RoleId;
 
 import java.util.List;
+import com.agent.software.transcript.Transcript.Client;
+import com.agent.software.transcript.Transcript.Entry;
+import com.agent.software.transcript.Transcript.Feed;
+import com.agent.software.transcript.Transcript.Talk;
+import com.agent.software.transcript.Transcript.TraceMeta;
 
 /**
  * 内存环形缓冲的轨迹流 + 客户回复会合点：Web 端按 watermark 增量拉取，客户输入阻塞式等待。

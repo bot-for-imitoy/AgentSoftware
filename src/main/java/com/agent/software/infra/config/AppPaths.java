@@ -1,6 +1,7 @@
 package com.agent.software.infra.config;
 
 import java.nio.file.Path;
+import com.agent.software.infra.config.AppConfig.Storage;
 
 /**
  * 所有磁盘路径的唯一来源：解析数据/配置目录并按需创建父目录（XDG/Windows/macOS）。

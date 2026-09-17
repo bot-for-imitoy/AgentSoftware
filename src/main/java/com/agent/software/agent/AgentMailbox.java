@@ -1,9 +1,9 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.task.Task;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.agent.task.Task;
 
 /**
  * 每角色优先队列（唯一写者 = 所属 {@link Agent}）。

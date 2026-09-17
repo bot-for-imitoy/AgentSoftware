@@ -1,7 +1,7 @@
 package com.agent.software.company.store;
 
-import com.agent.software.agent.role.RoleSnapshot;
-import com.agent.software.sim.clock.DayTick;
+import com.agent.software.agent.RoleSnapshot;
+import com.agent.software.kernel.DayTick;
 
 import java.time.LocalDate;
 import java.util.List;

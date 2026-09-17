@@ -3,7 +3,7 @@ package com.agent.software.company;
 import com.agent.software.agent.LifecycleGate;
 import com.agent.software.agent.Team;
 import com.agent.software.sim.clock.Clock;
-import com.agent.software.sim.clock.Tick;
+import com.agent.software.kernel.Tick;
 import com.agent.software.sim.clock.TickObserver;
 
 /**

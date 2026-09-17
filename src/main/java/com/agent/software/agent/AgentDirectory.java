@@ -1,10 +1,10 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.kernel.Ids.RoleId;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.agent.role.RoleSpec;
 
 /**
  * 花名册只读视图。

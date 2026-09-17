@@ -1,5 +1,7 @@
 package com.agent.software.sim.clock;
 
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
 /**
  * 只读时钟视图。
  *

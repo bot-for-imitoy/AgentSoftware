@@ -6,6 +6,8 @@ import com.agent.software.kernel.Ids.RoleId;
 
 import java.time.Duration;
 import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
 
 /**
  * Podman 容器形态的个人电脑：每角色一个容器，命令经 podman exec 执行。

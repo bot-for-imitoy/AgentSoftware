@@ -104,14 +104,14 @@
 依赖规则（单向，`→` 即"可以 import"）：
 
 ```
-kernel  ←  所有包                     （Id/Text/Payload/JsonSchema/DomainError，叶子）
+kernel  ←  所有包                     （Id/Text/Payload/JsonSchema/DomainError/Tick/DayTick，叶子）
 
 tool.spi        → kernel
-llm             → kernel, tool.spi
+llm             → kernel, infra.config, tool.spi
 transcript      → kernel
 infra.json      → kernel          infra.config → （无）
-tool.<能力>      → kernel, tool.spi, 该能力自身（tool.note → sim.clock + infra.json 等）
-sim.event       → kernel
+tool.<能力>      → kernel, tool.spi, agent.* 的接口定义, sim.clock / sim.event
+sim.event       → kernel            （只剩事件数据 + EventSink）
 sim.clock       → kernel, sim.event
 agent.*         → kernel, tool.spi, llm, transcript, sim.clock, sim.event, agent.*
 company         → kernel, agent.*, sim.*, infra.json, infra.config
@@ -120,10 +120,12 @@ bootstrap       → 全部（唯一允许认识所有东西的地方）
 ```
 
 关键单向约束：
-- `sim`（时钟）不认识 `agent`：它只对外暴露 `Sensors` / `TickObserver` / `EventSink` 三个端口，实现方在 `agent` / `company`。
+- `sim`（时钟与事件）不认识 `agent`：它只对外暴露 `Sensors` / `TickObserver` / `EventSink` 三个端口，实现方在 `agent` / `company`。
+  （v3.2 之前不是这样：`DeliveryContext` 里塞了 `AgentState`+`RoleSpec`，把投递决策留在了 `sim.event`，形成 `agent ↔ sim` 环。现在投递策略归 `agent.dispatch`。）
 - `tool.spi` 只依赖 `kernel`：工具包不靠"上下文对象"取能力，全部构造期注入。
-- `tool.*` 可以依赖 `agent` 的**定义**（`RoleSpec` / `AgentTasks` / `AgentDirectory`），但 `agent` 不依赖任何 `tool.*` 实现，只依赖 `tool.spi`。
+- `tool.*` 可以依赖 `agent` 的**定义**（`RoleSpec` / `AgentTasks` / `AgentControl` / `AgentDirectory` / `agent.dialog.DailySummary`），但 `agent` 不依赖任何 `tool.*` 实现，只依赖 `tool.spi`。
 - 唯一残留的反向三角：`agent` 持有 `tool.computer.Shell`，而 `tool.computer.ShellRegistry` 需要 `agent.role.RoleSpec`（电脑规格定义在角色定义里）。这是领域本身的形状，不再强行拆。
+- 还有一处同 feature 内的父子环：`agent ↔ agent.task`（端口 `AgentTasks`/`AgentControl`/`AgentMailbox`/`LifecycleGate` 住在父包）。要么接受，要么把端口下沉到 `agent.task`，见 §11。
 
 ---
 
@@ -136,7 +138,8 @@ bootstrap       → 全部（唯一允许认识所有东西的地方）
 
 ```
 com.agent.software
-├── kernel/                共享值类型：Ids, Text, Payload, JsonSchema, DomainError
+├── kernel/                共享值类型：Ids, Text, Payload, JsonSchema, DomainError,
+│                          Tick, DayTick                ← v3.2：Tick/DayTick 从 sim.clock 下放
 ├── infra/                 基础设施
 │   ├── config/            AppConfig, AppPaths, ConfigLoader
 │   └── json/              JsonCodec, JacksonJsonCodec
@@ -156,18 +159,21 @@ com.agent.software
 │   └── task/              TaskViewToolkit
 ├── agent/                 角色运行时
 │   ├── （根）              Agent, AgentFactory, AgentMailbox, AgentState, AgentStateMachine,
-│   │                      AgentTasks, AgentControl, AgentDirectory, AgentSnapshot, Team,
+│   │                      AgentTasks, AgentControl, AgentDirectory, AgentSnapshot,
+│   │                      RoleSnapshot←v3.2 从 role/ 搬来, Team,
 │   │                      Staffing, LifecycleGate, WaitCoordinator, ToolboxFactory
-│   ├── role/              RoleSpec, RoleSnapshot
+│   ├── role/              RoleSpec
 │   ├── task/              Task, TaskStatus, TaskRunner, ToolLoop, ToolLoopPolicy
-│   ├── dialog/            ConversationMemory, ConversationPolicy, SystemPrompt
-│   └── dispatch/          EventRouter, TaskFactory
+│   ├── dialog/            ConversationMemory, ConversationPolicy, SystemPrompt,
+│   │                      DailySummary   ← v3.2 新增：提示词侧只需要这一个方法
+│   └── dispatch/          EventRouter, TaskFactory, DeliveryPolicy,
+│                          DefaultDeliveryPolicy, SaliencePolicy, KeywordSaliencePolicy
+│                                                   ← v3.2：投递策略从 sim.event 搬来
 ├── sim/                   模拟时钟与事件
-│   ├── clock/             Clock, SimClock, Tick, DayTick, ShiftCalendar, ClockPolicy,
+│   ├── clock/             Clock, SimClock, ShiftCalendar, ClockPolicy,
 │   │                      DefaultClockPolicy, ClockDriver, ScheduleTable, ReminderScheduler,
 │   │                      Sensors, TickObserver
-│   └── event/             AgentEvent, EventKind, Priority, EventSink, DeliveryPolicy,
-│                          DefaultDeliveryPolicy, SaliencePolicy, KeywordSaliencePolicy
+│   └── event/             AgentEvent, EventKind, Priority, EventSink
 ├── company/               公司编排与存档
 │   ├── （根）              Company, CompanyView, CompanyStatus, ShiftDirector
 │   └── store/             CompanySnapshot, SnapshotStore, JsonSnapshotStore
@@ -302,7 +308,7 @@ public record AgentEvent(EventId id, EventKind kind, Priority priority,
     public AgentEvent rescheduledTo(Tick at);
 }
 
-// model/Tick.java, model/DayTick.java
+// kernel/Tick.java, kernel/DayTick.java   ← v3.2 从 sim.clock 下放
 /** 绝对 tick 与 (day, tickOfDay) 坐标；把时间算术从 TimeEventBus 里抽出来。 */
 public record Tick(long value) { public Tick plus(long ticks); public boolean before(Tick o); }
 public record DayTick(int day, int tickOfDay) { }
@@ -380,7 +386,7 @@ public record RoleSnapshot(RoleSpec spec, AgentState state,
 ### 5.3 `policy` —— 纯决策（可单测，无 I/O、无线程）
 
 ```java
-// policy/DeliveryPolicy.java
+// agent/dispatch/DeliveryPolicy.java   ← v3.2 从 sim.event 搬来
 /** 统一"事件该不该现在进这个角色的队列"这一个决定（master 里散在 Dispatcher+AgentRole+RolePool 三处）。 */
 public interface DeliveryPolicy {
     DeliveryDecision decide(DeliveryContext context);
@@ -397,7 +403,7 @@ public final class DefaultDeliveryPolicy implements DeliveryPolicy {
     public DeliveryDecision decide(DeliveryContext context);
 }
 
-// policy/SaliencePolicy.java
+// agent/dispatch/SaliencePolicy.java   ← v3.2 从 sim.event 搬来
 /** 内容相关性打分（master AgentRole.evaluateEvent 的 Layer 2）。只对广播事件生效。 */
 public interface SaliencePolicy { SalienceDecision score(RoleSpec spec, AgentEvent event); }
 public record SalienceDecision(boolean pass, double score, double relevance, String reason) { }
@@ -1035,3 +1041,36 @@ master 的 98 个旧实现与 31 个测试**已在本分支删除**（`master` �
 - `redesign/audit/master-tools-llm-role.md` —— master 的 `llm/role/tools` 全量清单 + 38 个工具的行为表 + 12 条耦合问题。
 - `redesign/audit/refactor-critique.md` —— `refactor` 分支的设计批判（按严重度排序，附 top-10）。
 
+
+---
+
+## 11. v3.2 变更记录（由依赖图扫出来之后改的）
+
+起因：`redesign/diagrams/arch_1_packages.py` 直接从源码 import 生成包依赖图，
+并用 Tarjan 算了强连通分量 —— 第一次跑出来 **8 个包处在同一个环里**
+（`agent`、`agent.dialog`、`agent.role`、`agent.task`、`sim.clock`、`sim.event`、
+`tool.computer`、`tool.note`）。逐条查了根因后改了 5 处：
+
+| # | 原来 | 现在 | 为什么 |
+|---|---|---|---|
+| ① | `sim.event` 里有 `DeliveryPolicy` / `SaliencePolicy` 家族 | 移到 `agent.dispatch` | `DeliveryContext` 里塞了 `AgentState` + `RoleSpec`，造成 `sim.event → agent`；投递裁决本来就是 agent 侧的策略，`sim.event` 只该留事件数据 |
+| ② | `Tick` / `DayTick` 在 `sim.clock` | 下放到 `kernel` | `AgentEvent.fireAt` 要用 `Tick`，造成 `sim.event → sim.clock`，而 `sim.clock` 又要 `EventSink`，两个子包互指 |
+| ③ | `TaskRunner(Agent agent, …)` | `TaskRunner(AgentMailbox, AgentTasks, AgentControl, ToolLoop, Transcript, LifecycleGate)` | 执行器不该拿到整个角色对象；master 的 `RolePool` 就是因为拿到整个角色才能顺手改状态 |
+| ④ | `RoleSnapshot` 在 `agent.role` | 搬到 `agent` | 它是 **Agent** 的快照（含队列/历史/对话），放在 role 包里却引用 `Task`，造成 `agent.role → agent.task` |
+| ⑤ | `SystemPrompt(Clock, NoteBook)` | `SystemPrompt(Clock, DailySummary)`，`tool.note.JsonNoteBook implements DailySummary` | 原来 `agent.dialog → tool.note`，而 `tool.note → agent`（`MemoryToolkit` 要 `AgentControl`），变成两个 feature 互指；这是"agent 不依赖具体工具包"规则的例外，补上窄端口即可 |
+
+顺带清掉了 5 行 javadoc-only 的残留 import（`ToolSpec→llm.*`、`ConversationMemory`/`SystemPrompt→agent.Agent`、`Shell→tool.mcp.McpBridge`），
+它们之前制造了 `tool.spi ↔ llm`、`agent ↔ agent.dialog`、`tool.computer → tool.mcp` 三条**假环**。
+
+改完之后：
+
+- **包粒度只剩 1 个环**：`agent ↔ agent.task`。原因是端口接口
+  （`AgentTasks` / `AgentControl` / `AgentMailbox` / `LifecycleGate`）住在父包 `agent`，
+  而 `agent.task` 要用它们。两条路：接受（"父包持契约、子包实现"是常见形态），
+  或把端口下沉到 `agent.task`。
+- **feature 粒度还有 1 个环**：`{agent, llm, tool}`。两条边：
+  - `agent → tool.computer`（`Shell`）↔ `tool.computer → agent.role`（`ComputerSpec`）—— 即 §3 里那条已知反向边；
+  - `tool → llm`（`HiringService` 用 LLM 起草岗位）↔ `llm → tool.spi`（`ToolChatRequest` 带 `ToolSpec`）。
+    把 `ToolSpec` 下放到 `kernel` 就能消掉这一条。
+
+这两条要不要继续拆，等你定；图随时可以重跑（`python3 redesign/diagrams/build_all.py`）。

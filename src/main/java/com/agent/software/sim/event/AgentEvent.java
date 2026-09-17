@@ -3,7 +3,7 @@ package com.agent.software.sim.event;
 import com.agent.software.kernel.Ids.EventId;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Payload;
-import com.agent.software.sim.clock.Tick;
+import com.agent.software.kernel.Tick;
 
 import java.time.Instant;
 import java.util.Optional;

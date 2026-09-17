@@ -1,6 +1,7 @@
 package com.agent.software.sim.clock;
 
 import java.util.Optional;
+import com.agent.software.kernel.Tick;
 
 /**
  * 时钟决策：时钟线程下一步该做什么。

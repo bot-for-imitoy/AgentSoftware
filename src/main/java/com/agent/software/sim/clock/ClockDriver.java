@@ -3,6 +3,7 @@ package com.agent.software.sim.clock;
 import com.agent.software.sim.event.EventSink;
 
 import java.util.Optional;
+import com.agent.software.kernel.Tick;
 
 /**
  * 时钟线程的唯一所有者。

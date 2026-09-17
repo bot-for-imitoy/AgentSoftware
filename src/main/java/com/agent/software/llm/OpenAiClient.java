@@ -4,6 +4,13 @@ import com.agent.software.infra.config.AppConfig;
 
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import com.agent.software.infra.config.AppConfig.Llm;
+import com.agent.software.llm.LlmClient.ChatReply;
+import com.agent.software.llm.LlmClient.ChatRequest;
+import com.agent.software.llm.LlmClient.ToolChatRequest;
+import com.agent.software.llm.LlmClient.ToolReply;
+import com.agent.software.llm.ProviderResolver.Endpoint;
+import com.agent.software.infra.config.AppConfig.Llm.Retry;
 
 /**
  * 唯一 LLM 实现：OpenAI 兼容 chat/completions，内置重试、限流排队与余额不足处理。

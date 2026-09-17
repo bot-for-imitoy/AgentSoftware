@@ -1,7 +1,7 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.tool.spi.Toolbox;
+import com.agent.software.agent.role.RoleSpec;
 
 /**
  * 为一个角色装配 {@link Toolbox} 的工厂（实现放在 bootstrap）。

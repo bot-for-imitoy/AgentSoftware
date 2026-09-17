@@ -1,6 +1,5 @@
 package com.agent.software.tool.talk;
 
-import com.agent.software.agent.WaitCoordinator;
 import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.agent.task.Task;
 import com.agent.software.kernel.Ids.RoleId;

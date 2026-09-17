@@ -1,6 +1,7 @@
 package com.agent.software.llm;
 
 import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppConfig.Llm;
 
 /**
  * 供应商解析：把 providerId + model + apiKey 组合成可直接调用的 Endpoint。

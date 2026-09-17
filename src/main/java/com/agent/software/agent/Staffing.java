@@ -1,10 +1,9 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.role.RoleSnapshot;
-import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.kernel.Ids.RoleId;
 
 import java.util.List;
+import com.agent.software.agent.role.RoleSpec;
 
 /**
  * 人员进出动作（"创建 Agent 并登记"这件事的唯一所有者）。

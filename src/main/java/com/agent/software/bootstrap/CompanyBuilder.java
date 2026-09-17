@@ -7,6 +7,7 @@ import com.agent.software.infra.json.JsonCodec;
 import com.agent.software.llm.LlmClient;
 import com.agent.software.tool.client.ClientChannel;
 import com.agent.software.transcript.Transcript;
+import com.agent.software.transcript.Transcript.Feed;
 
 /**
  * 组合根：唯一允许"认识所有东西"的地方。

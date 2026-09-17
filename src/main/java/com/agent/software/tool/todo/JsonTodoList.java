@@ -4,10 +4,10 @@ import com.agent.software.infra.config.AppPaths;
 import com.agent.software.infra.json.JsonCodec;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Ids.TodoId;
-import com.agent.software.tool.todo.Todo.TodoStatus;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.tool.todo.Todo.TodoStatus;
 
 /**
  * JSON 文件形态的待办清单：按角色存放，状态迁移显式落盘。

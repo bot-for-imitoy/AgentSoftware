@@ -5,6 +5,8 @@ import com.agent.software.kernel.Ids.RoleId;
 
 import java.time.Duration;
 import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
 
 /**
  * SSH 远程主机形态的个人电脑：命令与文件操作都经 SSH 通道完成。

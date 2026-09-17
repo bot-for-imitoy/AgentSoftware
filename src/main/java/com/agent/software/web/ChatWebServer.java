@@ -2,6 +2,7 @@ package com.agent.software.web;
 
 import com.agent.software.company.CompanyView;
 import com.agent.software.transcript.Transcript;
+import com.agent.software.transcript.Transcript.Feed;
 
 /**
  * JDK HttpServer，路由 /api/state /api/messages /api/reply /api/pause /api/resume /api/attach + 静态资源。

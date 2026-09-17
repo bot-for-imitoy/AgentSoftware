@@ -7,6 +7,9 @@ import com.agent.software.kernel.Ids.MailId;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.infra.config.AppConfig.Mail;
+import com.agent.software.tool.mail.Mailbox.DeliveryListener;
+import com.agent.software.tool.mail.Mailbox.OutgoingMail;
 
 /**
  * 落盘的公司虚拟邮箱：地址由配置后缀推导，邮件按收件人存放于数据目录。

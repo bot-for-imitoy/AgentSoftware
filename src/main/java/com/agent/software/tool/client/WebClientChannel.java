@@ -3,6 +3,8 @@ package com.agent.software.tool.client;
 import com.agent.software.transcript.ChatFeed;
 
 import java.time.Duration;
+import com.agent.software.tool.client.ClientChannel.ClientQuestion;
+import com.agent.software.tool.client.ClientChannel.ClientReply;
 
 /**
  * Web 客户通道：经 ChatFeed 的等待/回复会合点与浏览器交换客户消息。

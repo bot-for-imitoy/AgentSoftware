@@ -1,11 +1,11 @@
 package com.agent.software.agent;
 
-import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.sim.clock.Sensors;
 
 import java.util.List;
 import java.util.Optional;
+import com.agent.software.agent.role.RoleSpec;
 
 /**
  * 花名册唯一所有者：只保管 {@link Agent} 集合、批量启停、只读快照。

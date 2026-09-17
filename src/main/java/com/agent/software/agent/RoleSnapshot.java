@@ -1,10 +1,11 @@
-package com.agent.software.agent.role;
+package com.agent.software.agent;
 
-import com.agent.software.agent.AgentState;
-import com.agent.software.agent.task.Task;
 import com.agent.software.llm.Message;
 
 import java.util.List;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.agent.task.Task.TaskRecord;
 
 /**
  * 单个角色的快照：定义 + 生命周期状态 + 队列/历史 + 当日对话。

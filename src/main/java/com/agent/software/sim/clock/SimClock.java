@@ -1,6 +1,8 @@
 package com.agent.software.sim.clock;
 
 import java.time.LocalDate;
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
 
 /**
  * 模拟时钟状态的唯一所有者（纯内存、无线程）。

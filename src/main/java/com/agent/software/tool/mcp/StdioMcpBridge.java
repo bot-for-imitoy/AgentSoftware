@@ -4,6 +4,7 @@ import com.agent.software.infra.config.AppPaths;
 import com.agent.software.kernel.Ids.RoleId;
 
 import java.util.List;
+import com.agent.software.tool.mcp.McpBridge.McpToolInfo;
 
 /**
  * stdio JSON-RPC 形态的 MCP 工具桥：按角色安装/卸载工具并转发调用。

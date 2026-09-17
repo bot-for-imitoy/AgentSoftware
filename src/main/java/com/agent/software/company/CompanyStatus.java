@@ -1,7 +1,7 @@
 package com.agent.software.company;
 
 import com.agent.software.agent.AgentSnapshot;
-import com.agent.software.sim.clock.DayTick;
+import com.agent.software.kernel.DayTick;
 
 import java.util.List;
 

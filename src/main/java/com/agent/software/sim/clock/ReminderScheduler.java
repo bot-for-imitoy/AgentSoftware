@@ -3,6 +3,7 @@ package com.agent.software.sim.clock;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Ids.ScheduleId;
 import com.agent.software.kernel.Payload;
+import com.agent.software.kernel.DayTick;
 
 /**
  * 定时提醒能力（笔记提醒等）。
