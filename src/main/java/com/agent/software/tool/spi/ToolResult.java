@@ -4,10 +4,10 @@ package com.agent.software.tool.spi;
 public record ToolResult(String text, boolean error) {
 
     public static ToolResult ok(String text) {
-        throw new UnsupportedOperationException("skeleton");
+        return new ToolResult(text == null ? "" : text, false);
     }
 
     public static ToolResult error(String text) {
-        throw new UnsupportedOperationException("skeleton");
+        return new ToolResult(text == null ? "" : text, true);
     }
 }

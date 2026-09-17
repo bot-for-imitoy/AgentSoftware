@@ -8,16 +8,17 @@ package com.agent.software.agent.dialog;
  */
 public record ConversationPolicy(int maxHistoryChars, int maxSummaryChars, int toolRecapLimit) {
 
+    /** master {@code Conversation} 的默认值。 */
     public static ConversationPolicy defaults() {
-        throw new UnsupportedOperationException("skeleton");
+        return new ConversationPolicy(24_000, 12_000, 6);
     }
 
     public boolean shouldCompact(long totalChars) {
-        throw new UnsupportedOperationException("skeleton");
+        return maxHistoryChars > 0 && totalChars > maxHistoryChars;
     }
 
     /** 压缩失败时至少保留的最近消息条数。 */
     public int keepMessages() {
-        throw new UnsupportedOperationException("skeleton");
+        return toolRecapLimit <= 0 ? 1 : Math.max(2, toolRecapLimit);
     }
 }

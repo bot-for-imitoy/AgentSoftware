@@ -13,6 +13,18 @@ public final class Ids {
     private Ids() {
     }
 
+    /** 12 位十六进制随机标识（对齐 master 的 {@code UUID.randomUUID().replace("-","").substring(0,12)}）。 */
+    static String random() {
+        return java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    static String require(String value, String kind) {
+        if (value == null || value.isBlank()) {
+            throw new DomainError("id." + kind + ".blank", kind + " 标识不能为空");
+        }
+        return value;
+    }
+
     /** 所有标识的公共只读视图。 */
     public interface Id {
         String value();
@@ -20,46 +32,74 @@ public final class Ids {
 
     /** 角色标识（对应 master 的 role_id，也是容器/目录/uid 的派生源）。 */
     public record RoleId(String value) implements Id {
+        public RoleId {
+            value = require(value, "role");
+        }
     }
 
     /** 任务标识。 */
     public record TaskId(String value) implements Id {
+        public TaskId {
+            value = require(value, "task");
+        }
+
         /** 生成一个新的随机任务标识。 */
         public static TaskId generate() {
-            throw new UnsupportedOperationException("skeleton");
+            return new TaskId(random());
         }
     }
 
     /** 事件标识。 */
     public record EventId(String value) implements Id {
+        public EventId {
+            value = require(value, "event");
+        }
+
         public static EventId generate() {
-            throw new UnsupportedOperationException("skeleton");
+            return new EventId(random());
         }
     }
 
     /** 定时表条目标识。 */
     public record ScheduleId(String value) implements Id {
+        public ScheduleId {
+            value = require(value, "schedule");
+        }
+
         public static ScheduleId generate() {
-            throw new UnsupportedOperationException("skeleton");
+            return new ScheduleId(random());
         }
     }
 
     /** 邮件标识。 */
     public record MailId(String value) implements Id {
+        public MailId {
+            value = require(value, "mail");
+        }
+
         public static MailId generate() {
-            throw new UnsupportedOperationException("skeleton");
+            return new MailId(random());
         }
     }
 
     /** 待办标识。 */
     public record TodoId(String value) implements Id {
+        public TodoId {
+            value = require(value, "todo");
+        }
     }
 
     /** 技能标识。 */
     public record SkillId(String value) implements Id {
+        public SkillId {
+            value = require(value, "skill");
+        }
     }
 
     /** 笔记标识（标题即业务主键，id 仅用于持久化）。 */
     public record NoteId(String value) implements Id {
+        public NoteId {
+            value = require(value, "note");
+        }
     }
 }

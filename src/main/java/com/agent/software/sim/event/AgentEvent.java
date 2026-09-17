@@ -24,31 +24,52 @@ public record AgentEvent(
         Optional<Tick> fireAt,
         Instant occurredAt) {
 
+    public AgentEvent {
+        recipients = recipients == null ? Set.of() : Set.copyOf(recipients);
+        payload = payload == null ? Payload.empty() : payload;
+        fireAt = fireAt == null ? Optional.empty() : fireAt;
+        occurredAt = occurredAt == null ? Instant.now() : occurredAt;
+    }
+
     /** 广播事件（所有角色参与投递决策）。 */
     public static AgentEvent broadcast(EventKind kind, Priority priority, Payload payload) {
-        throw new UnsupportedOperationException("skeleton");
+        return new AgentEvent(EventId.generate(), kind, priority, Set.of(), payload,
+                Optional.empty(), Instant.now());
     }
 
     /** 定向事件（只投递给一个角色）。 */
     public static AgentEvent toRole(RoleId target, EventKind kind, Priority priority, Payload payload) {
-        throw new UnsupportedOperationException("skeleton");
+        return new AgentEvent(EventId.generate(), kind, priority, Set.of(target), payload,
+                Optional.empty(), Instant.now());
     }
 
     /** 定时事件（到点后由调度表弹出）。 */
     public static AgentEvent scheduled(EventKind kind, Priority priority, Payload payload, Tick at) {
-        throw new UnsupportedOperationException("skeleton");
+        return new AgentEvent(EventId.generate(), kind, priority, Set.of(), payload,
+                Optional.of(at), Instant.now());
     }
 
     public boolean targeted() {
-        throw new UnsupportedOperationException("skeleton");
+        return recipients.size() == 1;
     }
 
     public boolean broadcast() {
-        throw new UnsupportedOperationException("skeleton");
+        return recipients.isEmpty();
+    }
+
+    /** 唯一收件人（仅当 {@link #targeted()} 为真时有意义）。 */
+    public Optional<RoleId> target() {
+        return targeted() ? Optional.of(recipients.iterator().next()) : Optional.empty();
     }
 
     /** 返回一个"改到指定时刻触发"的副本（编辑定时任务时使用）。 */
     public AgentEvent rescheduledTo(Tick at) {
-        throw new UnsupportedOperationException("skeleton");
+        return new AgentEvent(id, kind, priority, recipients, payload, Optional.ofNullable(at), occurredAt);
+    }
+
+    @Override
+    public String toString() {
+        return "AgentEvent(" + id.value() + ", " + kind.wire() + ", " + priority
+                + (targeted() ? ", target=" + recipients.iterator().next().value() : ", broadcast") + ")";
     }
 }

@@ -45,11 +45,22 @@ public interface Shell {
     record CommandResult(int exitCode, String stdout, String stderr) {
 
         public boolean ok() {
-            throw new UnsupportedOperationException("skeleton");
+            return exitCode == 0;
         }
 
+        /**
+         * 合并 stdout 与 stderr 供 LLM 阅读：两者都非空时以换行拼接，否则取非空的那个。
+         *
+         * <p>退出码由 {@link #exitCode()} 单独表达，因此这里**不**再拼 {@code "[exit N]"} 前缀
+         * （那正是 master 需要字符串嗅探的根源）。
+         */
         public String combined() {
-            throw new UnsupportedOperationException("skeleton");
+            String out = stdout == null ? "" : stdout;
+            String err = stderr == null ? "" : stderr;
+            if (!out.isEmpty() && !err.isEmpty()) {
+                return out + "\n" + err;
+            }
+            return out.isEmpty() ? err : out;
         }
     }
 }

@@ -17,20 +17,23 @@ public record Message(Role role, String content, List<ToolCallRequest> toolCalls
         TOOL
     }
 
+    /** 系统提示词：没有工具调用，也不关联 tool_call_id。 */
     public static Message system(String text) {
-        throw new UnsupportedOperationException("skeleton");
+        return new Message(Role.SYSTEM, text, List.of(), null);
     }
 
+    /** 用户消息：没有工具调用，也不关联 tool_call_id。 */
     public static Message user(String text) {
-        throw new UnsupportedOperationException("skeleton");
+        return new Message(Role.USER, text, List.of(), null);
     }
 
+    /** 助手回复；{@code toolCalls} 为 null 时归一为空列表，调用方无需判空。 */
     public static Message assistant(String text, List<ToolCallRequest> toolCalls) {
-        throw new UnsupportedOperationException("skeleton");
+        return new Message(Role.ASSISTANT, text, toolCalls == null ? List.of() : toolCalls, null);
     }
 
     /** 工具执行结果，通过 toolCallId 与请求关联。 */
     public static Message tool(String toolCallId, String content) {
-        throw new UnsupportedOperationException("skeleton");
+        return new Message(Role.TOOL, content, List.of(), toolCallId);
     }
 }

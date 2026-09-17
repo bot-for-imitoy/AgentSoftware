@@ -1,17 +1,27 @@
 package com.agent.software.company;
 
+import com.agent.software.agent.Agent;
 import com.agent.software.agent.LifecycleGate;
+import com.agent.software.agent.RoleSnapshot;
 import com.agent.software.agent.Staffing;
 import com.agent.software.agent.Team;
 import com.agent.software.agent.dispatch.EventRouter;
+import com.agent.software.agent.dialog.ConversationMemory;
 import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.company.store.CompanySnapshot;
+import com.agent.software.company.store.SnapshotStore;
 import com.agent.software.sim.clock.ClockDriver;
 import com.agent.software.sim.clock.ScheduleTable;
 import com.agent.software.sim.clock.SimClock;
 import com.agent.software.sim.event.AgentEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
-import com.agent.software.company.store.SnapshotStore;
 
 /**
  * 顶层编排门面（薄）。
@@ -26,6 +36,11 @@ import com.agent.software.company.store.SnapshotStore;
  * master 的 {@code AgentSystem} 在同样位置混入了通知、邮件、暂停细节与数据目录。
  */
 public final class Company implements CompanyView {
+
+    private static final Logger logger = LoggerFactory.getLogger(Company.class);
+
+    /** 快照格式版本（读档时用它判断兼容性）。 */
+    public static final int SNAPSHOT_VERSION = 1;
 
     private final Team team;
     private final SimClock clock;
@@ -52,34 +67,60 @@ public final class Company implements CompanyView {
     }
 
     public void start() {
-        throw new UnsupportedOperationException("skeleton");
+        // 先起 worker 再起时钟：否则 SHIFT_START 广播出来没人消费
+        team.startAll();
+        driver.start();
+        logger.info("公司已启动：{}", status().describe());
     }
 
     public void stop() {
-        throw new UnsupportedOperationException("skeleton");
+        driver.stop();
+        team.stopAll();
+        try {
+            save();
+        } catch (RuntimeException e) {
+            logger.error("退出前落快照失败", e);
+        }
     }
 
     /** 外部事件入口（客户消息、邮件通知、测试注入）。 */
     public void publish(AgentEvent event) {
-        throw new UnsupportedOperationException("skeleton");
+        router.publish(event);
     }
 
     /** 落快照。 */
     public void save() {
-        throw new UnsupportedOperationException("skeleton");
+        snapshots.save(snapshot());
+        logger.info("快照已保存（{} 个角色）", team.agents().size());
     }
 
     /** 读快照；返回恢复的角色数。 */
     public int restore() {
-        throw new UnsupportedOperationException("skeleton");
+        return snapshots.load().map(snapshot -> {
+            if (snapshot.version() != SNAPSHOT_VERSION) {
+                logger.warn("快照版本 {} 与当前版本 {} 不一致，跳过读档",
+                        snapshot.version(), SNAPSHOT_VERSION);
+                return 0;
+            }
+            if (snapshot.baseDate() != null) {
+                clock.setBaseDate(snapshot.baseDate());
+            }
+            if (snapshot.clock() != null) {
+                clock.resetTo(snapshot.clock());
+            }
+            int restored = staffing.restore(snapshot.roles());
+            logger.info("读档完成：{} 个角色，第 {} 天 {}", restored,
+                    snapshot.clock() == null ? 1 : snapshot.clock().day(), clock.currentDateTime());
+            return restored;
+        }).orElse(0);
     }
 
     public boolean paused() {
-        throw new UnsupportedOperationException("skeleton");
+        return gate.paused();
     }
 
     public String pauseReason() {
-        throw new UnsupportedOperationException("skeleton");
+        return gate.reason();
     }
 
     public SimClock clock() {
@@ -94,25 +135,69 @@ public final class Company implements CompanyView {
         return schedule;
     }
 
+    /** 人员进出（Main 用它招默认团队，HR 工具用它动态上岗）。 */
+    public Staffing staffing() {
+        return staffing;
+    }
+
+    /** 事件投递器（测试/嵌入方观察路由结果用）。 */
+    public EventRouter router() {
+        return router;
+    }
+
+    /** 时钟线程/单步驱动器（测试可绕开线程直接 {@code tickOnce()}）。 */
+    public ClockDriver driver() {
+        return driver;
+    }
+
     // ── CompanyView ────────────────────────────────────────────
 
     @Override
     public CompanyStatus status() {
-        throw new UnsupportedOperationException("skeleton");
+        return new CompanyStatus(clock.nowDay(), clock.currentDateTime(), clock.describe(),
+                gate.paused(), gate.reason(), team.snapshots());
     }
 
     @Override
     public List<RoleSpec> roster() {
-        throw new UnsupportedOperationException("skeleton");
+        return team.specs();
     }
 
     @Override
     public void pause(String reason) {
-        throw new UnsupportedOperationException("skeleton");
+        gate.pause(reason);
+        driver.pause();
+        logger.warn("公司已暂停：{}", reason);
     }
 
     @Override
     public void resume() {
-        throw new UnsupportedOperationException("skeleton");
+        gate.resume();
+        driver.resume();
+        logger.info("公司已恢复");
+    }
+
+    // ── 快照组装 ───────────────────────────────────────────────
+
+    private CompanySnapshot snapshot() {
+        List<RoleSnapshot> roles = new ArrayList<>();
+        for (Agent agent : team.agents()) {
+            ConversationMemory.State conversation = agent.conversation().snapshot();
+            roles.add(new RoleSnapshot(
+                    agent.spec(),
+                    agent.state(),
+                    agent.pendingTasks().stream().map(Task::toRecord).toList(),
+                    agent.history(0).stream().map(Task::toRecord).toList(),
+                    conversation.day(),
+                    conversation.messages()));
+        }
+        return new CompanySnapshot(SNAPSHOT_VERSION, Instant.now(), clock.nowDay(),
+                baseDate(), roles);
+    }
+
+    /** 第 1 天对应的真实日历日期（时钟只暴露"今天"，所以按天数回推）。 */
+    private LocalDate baseDate() {
+        LocalDate today = LocalDate.parse(clock.currentDateTime().substring(0, 10));
+        return today.minusDays(Math.max(0, clock.nowDay().day() - 1));
     }
 }

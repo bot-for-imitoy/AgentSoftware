@@ -1,9 +1,12 @@
 package com.agent.software.agent;
 
+import com.agent.software.agent.task.Task;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import com.agent.software.agent.task.Task;
+import java.util.PriorityQueue;
 
 /**
  * 每角色优先队列（唯一写者 = 所属 {@link Agent}）。
@@ -18,36 +21,70 @@ import com.agent.software.agent.task.Task;
  */
 public final class AgentMailbox {
 
+    /** 队列元素：任务 + 入队序号，保证同紧急度 FIFO。 */
+    private record Entry(long seq, Task task) {
+    }
+
+    /** urgency 降序、同 urgency 按 seq 升序（FIFO）。 */
+    private static final Comparator<Entry> ORDER =
+            Comparator.comparingInt((Entry e) -> e.task().urgency().weight()).reversed()
+                    .thenComparingLong(Entry::seq);
+
+    private final PriorityQueue<Entry> ready = new PriorityQueue<>(ORDER);
+    private final PriorityQueue<Entry> deferred = new PriorityQueue<>(ORDER);
+    private long seqCounter;
+
     /** 入队；deferred=true 表示进入暂存队列。 */
-    public void push(Task task, boolean deferred) {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized void push(Task task, boolean deferred) {
+        if (task == null) {
+            return;
+        }
+        Entry entry = new Entry(++seqCounter, task);
+        (deferred ? this.deferred : this.ready).add(entry);
     }
 
     /** 查看可执行队首（不弹出）。 */
-    public Optional<Task> peek() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized Optional<Task> peek() {
+        Entry head = ready.peek();
+        return head == null ? Optional.empty() : Optional.of(head.task());
     }
 
     /** 弹出可执行队首。 */
-    public Optional<Task> pop() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized Optional<Task> pop() {
+        Entry head = ready.poll();
+        return head == null ? Optional.empty() : Optional.of(head.task());
     }
 
     /** 上班 / 状态允许时，把暂存任务全部提升为可执行。 */
-    public void promoteDeferred() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized void promoteDeferred() {
+        while (!deferred.isEmpty()) {
+            ready.add(deferred.poll());
+        }
     }
 
-    public int readyDepth() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized int readyDepth() {
+        return ready.size();
     }
 
-    public int deferredDepth() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized int deferredDepth() {
+        return deferred.size();
     }
 
     /** 加锁快照（ready + deferred）。 */
-    public List<Task> snapshot() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized List<Task> snapshot() {
+        List<Entry> all = new ArrayList<>(ready);
+        all.addAll(deferred);
+        all.sort(ORDER);
+        List<Task> out = new ArrayList<>(all.size());
+        for (Entry e : all) {
+            out.add(e.task());
+        }
+        return out;
+    }
+
+    /** 清空两个队列（读档前使用）。 */
+    public synchronized void clear() {
+        ready.clear();
+        deferred.clear();
     }
 }

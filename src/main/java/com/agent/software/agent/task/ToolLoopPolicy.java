@@ -8,15 +8,16 @@ package com.agent.software.agent.task;
  */
 public record ToolLoopPolicy(int maxRounds, int maxTotalTokens, boolean failOnLlmError) {
 
+    /** master {@code AgentRole} 的默认上限：12 轮工具调用、60000 token 总预算。 */
     public static ToolLoopPolicy defaults() {
-        throw new UnsupportedOperationException("skeleton");
+        return new ToolLoopPolicy(12, 60_000, false);
     }
 
     public boolean roundBudgetExceeded(int round) {
-        throw new UnsupportedOperationException("skeleton");
+        return maxRounds > 0 && round > maxRounds;
     }
 
     public boolean tokenBudgetExceeded(int tokens) {
-        throw new UnsupportedOperationException("skeleton");
+        return maxTotalTokens > 0 && tokens > maxTotalTokens;
     }
 }

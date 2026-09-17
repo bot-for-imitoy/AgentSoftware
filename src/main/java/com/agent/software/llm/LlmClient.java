@@ -23,8 +23,9 @@ public interface LlmClient {
 
     record ChatReply(String text, String reasoning, int tokens) {
 
+        /** 失败判定：没有可用文本即失败（不再嗅探 {@code "[API error:"} 前缀）。 */
         public boolean failed() {
-            throw new UnsupportedOperationException("skeleton");
+            return text == null || text.isBlank();
         }
     }
 

@@ -10,6 +10,6 @@ public enum TaskStatus {
 
     /** 是否已结束（DONE / FAILED）。 */
     public boolean terminal() {
-        throw new UnsupportedOperationException("skeleton");
+        return this == DONE || this == FAILED;
     }
 }

@@ -4,14 +4,14 @@ package com.agent.software.kernel;
 public record Tick(long value) {
 
     public Tick plus(long ticks) {
-        throw new UnsupportedOperationException("skeleton");
+        return new Tick(value + ticks);
     }
 
     public boolean before(Tick other) {
-        throw new UnsupportedOperationException("skeleton");
+        return value < other.value;
     }
 
     public boolean after(Tick other) {
-        throw new UnsupportedOperationException("skeleton");
+        return value > other.value;
     }
 }

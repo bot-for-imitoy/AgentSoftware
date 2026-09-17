@@ -26,16 +26,32 @@ public enum AgentState {
 
     /** 是否在岗（非 OFF_DUTY）。 */
     public boolean onDuty() {
-        throw new UnsupportedOperationException("skeleton");
+        return this != OFF_DUTY;
     }
 
     /** 普通（非 EMERGENCY）事件是否应暂存而不是立即执行。 */
     public boolean holdsOrdinaryWork() {
-        throw new UnsupportedOperationException("skeleton");
+        return this == OFF_DUTY || this == WRAPPING_UP || this == WAITING;
     }
 
     /** EMERGENCY 是否永远穿透。 */
     public boolean acceptsEmergency() {
-        throw new UnsupportedOperationException("skeleton");
+        return true;
+    }
+
+    /** 由名字还原（大小写不敏感，兼容 master 的 WAIT 旧名）；未知回退 ON_DUTY_IDLE。 */
+    public static AgentState parse(String name) {
+        if (name != null) {
+            String n = name.trim().toUpperCase(java.util.Locale.ROOT);
+            if (n.equals("WAIT")) {
+                return WAITING;
+            }
+            for (AgentState s : values()) {
+                if (s.name().equals(n)) {
+                    return s;
+                }
+            }
+        }
+        return ON_DUTY_IDLE;
     }
 }

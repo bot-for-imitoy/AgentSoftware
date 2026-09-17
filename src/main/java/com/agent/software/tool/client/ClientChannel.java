@@ -22,12 +22,14 @@ public interface ClientChannel {
 
     record ClientReply(boolean delivered, String text, String reason) {
 
+        /** 客户已回复。 */
         public static ClientReply of(String text) {
-            throw new UnsupportedOperationException("skeleton");
+            return new ClientReply(true, text == null ? "" : text, "");
         }
 
+        /** 客户通道不可用（未附着/超时/已被占用），reason 为可读中文原因。 */
         public static ClientReply unavailable(String reason) {
-            throw new UnsupportedOperationException("skeleton");
+            return new ClientReply(false, "", reason == null ? "" : reason);
         }
     }
 }

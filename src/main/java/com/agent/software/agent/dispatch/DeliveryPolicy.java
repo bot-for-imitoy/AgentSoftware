@@ -32,15 +32,15 @@ public interface DeliveryPolicy {
     record DeliveryDecision(DeliveryVerdict verdict, String reason) {
 
         public static DeliveryDecision deliver(String why) {
-            throw new UnsupportedOperationException("skeleton");
+            return new DeliveryDecision(DeliveryVerdict.DELIVER, why == null ? "" : why);
         }
 
         public static DeliveryDecision hold(String why) {
-            throw new UnsupportedOperationException("skeleton");
+            return new DeliveryDecision(DeliveryVerdict.HOLD, why == null ? "" : why);
         }
 
         public static DeliveryDecision drop(String why) {
-            throw new UnsupportedOperationException("skeleton");
+            return new DeliveryDecision(DeliveryVerdict.DROP, why == null ? "" : why);
         }
     }
 }

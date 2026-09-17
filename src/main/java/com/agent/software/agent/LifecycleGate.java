@@ -1,6 +1,5 @@
 package com.agent.software.agent;
 
-
 import java.time.Duration;
 
 /**
@@ -12,25 +11,50 @@ import java.time.Duration;
  */
 public final class LifecycleGate {
 
+    private final Object lock = new Object();
+    private volatile boolean paused;
+    private volatile String reason = "";
+
     /** 暂停整个系统；重复调用只刷新原因。 */
     public void pause(String reason) {
-        throw new UnsupportedOperationException("skeleton");
+        synchronized (lock) {
+            this.paused = true;
+            this.reason = reason == null ? "" : reason;
+            lock.notifyAll();
+        }
     }
 
     public void resume() {
-        throw new UnsupportedOperationException("skeleton");
+        synchronized (lock) {
+            this.paused = false;
+            this.reason = "";
+            lock.notifyAll();
+        }
     }
 
     public boolean paused() {
-        throw new UnsupportedOperationException("skeleton");
+        return paused;
     }
 
     public String reason() {
-        throw new UnsupportedOperationException("skeleton");
+        return reason;
     }
 
     /** 被暂停时挂起调用线程，直到恢复。 */
     public void awaitRunning(Duration poll) {
-        throw new UnsupportedOperationException("skeleton");
+        long millis = poll == null ? 200L : Math.max(10L, poll.toMillis());
+        while (paused && !Thread.currentThread().isInterrupted()) {
+            synchronized (lock) {
+                if (!paused) {
+                    return;
+                }
+                try {
+                    lock.wait(millis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
     }
 }

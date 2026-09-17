@@ -18,42 +18,56 @@ public final class SimClock implements Clock {
 
     public SimClock(ShiftCalendar calendar, LocalDate baseDate) {
         this.calendar = calendar;
-        this.baseDate = baseDate;
+        this.baseDate = baseDate != null ? baseDate : LocalDate.now();
         this.tick = 0;
     }
 
     // ── 推进（仅 ClockDriver 调用） ─────────────────────────────
 
-    /** 前进若干 tick。 */
-    public void advanceTicks(long ticks) {
-        throw new UnsupportedOperationException("skeleton");
+    /**
+     * 前进若干 tick。只允许 {@link ClockDriver} 调用：其他组件拿到的都是只读的
+     * {@link Clock} 视图，从类型上就没有推进能力。
+     */
+    public synchronized void advanceTicks(long ticks) {
+        if (ticks <= 0) {
+            return;
+        }
+        this.tick += ticks;
     }
 
-    /** 跳到指定绝对 tick（快进 / 跨天）。 */
-    public void jumpTo(Tick target) {
-        throw new UnsupportedOperationException("skeleton");
+    /** 跳到指定绝对 tick（快进 / 跨天）。同样只允许 {@link ClockDriver} 调用。 */
+    public synchronized void jumpTo(Tick target) {
+        if (target == null) {
+            return;
+        }
+        this.tick = Math.max(0L, target.value());
     }
 
     /** 恢复到某个日历坐标（读档）。 */
-    public void resetTo(DayTick position) {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized void resetTo(DayTick position) {
+        if (position == null) {
+            return;
+        }
+        this.tick = Math.max(0L, calendar.at(position.day(), position.tickOfDay()).value());
     }
 
     /** 设置第 1 天的日历基准日。 */
-    public void setBaseDate(LocalDate date) {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized void setBaseDate(LocalDate date) {
+        if (date != null) {
+            this.baseDate = date;
+        }
     }
 
     // ── Clock 只读视图 ─────────────────────────────────────────
 
     @Override
-    public Tick now() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized Tick now() {
+        return new Tick(tick);
     }
 
     @Override
-    public DayTick nowDay() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized DayTick nowDay() {
+        return calendar.locate(now());
     }
 
     @Override
@@ -62,12 +76,15 @@ public final class SimClock implements Clock {
     }
 
     @Override
-    public String currentDateTime() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized String currentDateTime() {
+        DayTick today = calendar.locate(new Tick(tick));
+        return baseDate.plusDays((long) today.day() - 1) + " " + calendar.clockTime(today);
     }
 
     @Override
-    public String describe() {
-        throw new UnsupportedOperationException("skeleton");
+    public synchronized String describe() {
+        DayTick today = calendar.locate(new Tick(tick));
+        // 日期 + "Day N HH:MM:SS（在岗/已下班…）"，对齐 master describe() 的信息量。
+        return baseDate.plusDays((long) today.day() - 1) + " " + calendar.describe(new Tick(tick));
     }
 }
