@@ -50,3 +50,6 @@ __pycache__/
 .m2w/
 .m2local/
 .m2-local/
+
+# ── redesign/diagrams 的位图产物：脚本可随时重画，.dot/.svg 仍然入库 ──
+redesign/diagrams/out/*.png

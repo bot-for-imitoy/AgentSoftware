@@ -1,6 +1,5 @@
 package com.agent.software.agent.dialog;
 
-import com.agent.software.agent.Agent;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.llm.LlmClient;
 import com.agent.software.llm.Message;
@@ -12,7 +11,7 @@ import java.util.List;
  *
  * <p>职责：跨任务连续性（历史 + 新任务）、超预算压缩、下班关闭当日上下文、随快照持久化。
  * 对应 master 的 {@code Conversation} + {@code ConversationManager}；但不再有进程级
- * 默认 manager，每个 {@link Agent} 各持一份。
+ * 默认 manager，每个角色（{@code agent.Agent}）各持一份。
  */
 public final class ConversationMemory {
 

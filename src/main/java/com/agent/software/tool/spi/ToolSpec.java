@@ -1,14 +1,12 @@
 package com.agent.software.tool.spi;
 
 import com.agent.software.kernel.JsonSchema;
-import com.agent.software.llm.Message;
-import com.agent.software.llm.ToolCallRequest;
 
 /**
  * 工具的对外声明（名字、描述、参数 schema）。
  *
- * <p>放在 model 而非 ports：它是领域数据，且 {@link Message} 需要引用 {@link ToolCallRequest}，
- * 若放在 ports 会造成 model → ports 的反向依赖。
+ * <p>工具描述归工具层所有：{@code llm.LlmClient.ToolChatRequest} 会引用它，
+ * 因此依赖方向是 llm → tool.spi，反过来不成立。
  */
 public record ToolSpec(String name, String description, JsonSchema schema) {
 }

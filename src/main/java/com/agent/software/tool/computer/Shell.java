@@ -1,7 +1,5 @@
 package com.agent.software.tool.computer;
 
-import com.agent.software.tool.mcp.McpBridge;
-
 import java.time.Duration;
 import java.util.List;
 
@@ -10,7 +8,7 @@ import java.util.List;
  *
  * <p>注意：这里不再出现 MCP。master 的 {@code Computer} 直接持有
  * {@code MCPServer} 与 {@code ToolRegistry.ToolDef}，使"电脑"这个基础设施概念
- * 反向依赖了工具系统；MCP 已移到 {@link McpBridge}。
+ * 反向依赖了工具系统；MCP 已移到 {@code tool.mcp} 包，两边互不认识。
  */
 public interface Shell {
 

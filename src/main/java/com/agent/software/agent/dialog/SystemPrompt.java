@@ -1,6 +1,5 @@
 package com.agent.software.agent.dialog;
 
-import com.agent.software.agent.Agent;
 import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.sim.clock.Clock;
 import com.agent.software.tool.note.NoteBook;
@@ -9,7 +8,7 @@ import com.agent.software.tool.note.NoteBook;
  * System Prompt 组装器。
  *
  * <p>从 master {@code AgentRole.buildSystemPrompt()}（约 55 行、混在角色对象里）抽出：
- * 只依赖只读的时钟与笔记，因此可单测，也不让 {@link Agent} 变胖。
+ * 只依赖只读的时钟与笔记，因此可单测，也不让 {@code agent.Agent} 继续变胖。
  */
 public final class SystemPrompt {
 
