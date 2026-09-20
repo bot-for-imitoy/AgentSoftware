@@ -541,9 +541,15 @@ each. Tests: `conversation/ConversationTest`, `conversation/ConversationEndToEnd
 
 All of these can be provided as environment variables **or** as Java args
 (`-D<same name>`, which win over env vars). LLM values can additionally be placed in the
-ConfigStore file (`<config dir>/config.json`, dot keys `llm.api_key` / `llm.base_url` /
-`llm.model`); precedence: constructor args > `-D` system properties > env vars > config file >
+ConfigStore file (`<config dir>/config.json`, including `llm.api_key`, `llm.base_url`,
+`llm.model`, `llm.embedding_model`, and `llm.max_context_messages`); precedence: constructor args > `-D` system properties > env vars > config file >
 defaults.
+
+`llm.embedding_model` defaults to `text-embedding-3-small`. Each committed conversation message
+stores an embedding. Once the active message count exceeds `llm.max_context_messages` (default
+`40`), the active message with the greatest cosine distance from the new message is marked as
+forgotten and omitted from later LLM requests. Set `embedding_model` to an empty string to disable
+embedding calls; failed calls fall back to forgetting the oldest active message.
 
 | Variable (env / `-D`) | Default | Description |
 |---|---|---|

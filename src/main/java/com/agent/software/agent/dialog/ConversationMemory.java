@@ -2,6 +2,7 @@ package com.agent.software.agent.dialog;
 
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Text;
+import com.agent.software.llm.EmbeddingModel;
 import com.agent.software.llm.LlmClient;
 import com.agent.software.llm.Message;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ public final class ConversationMemory {
 
     private final RoleId agent;
     private final ConversationPolicy policy;
+    private final EmbeddingModel embeddings;
 
     private final List<Message> history = new ArrayList<>();
     private long totalChars;
@@ -36,8 +38,13 @@ public final class ConversationMemory {
     private int closedDay = -1;
 
     public ConversationMemory(RoleId agent, ConversationPolicy policy) {
+        this(agent, policy, null);
+    }
+
+    public ConversationMemory(RoleId agent, ConversationPolicy policy, EmbeddingModel embeddings) {
         this.agent = agent;
         this.policy = policy == null ? ConversationPolicy.defaults() : policy;
+        this.embeddings = embeddings;
     }
 
     /** 组装本次任务请求：[system prompt, ...历史, 当前任务]。 */
@@ -52,11 +59,15 @@ public final class ConversationMemory {
             totalChars = 0;
             closedDay = -1;
         }
-        List<Message> messages = new ArrayList<>(history.size() + 2);
+        List<Message> messages = new ArrayList<>(activeHistorySize() + 2);
         if (!Text.isBlank(systemPrompt)) {
             messages.add(Message.system(systemPrompt));
         }
-        messages.addAll(history);
+        for (Message message : history) {
+            if (!message.forgotten()) {
+                messages.add(message);
+            }
+        }
         messages.add(Message.user(Text.orEmpty(taskDescription)));
         return messages;
     }
@@ -74,10 +85,10 @@ public final class ConversationMemory {
             return;
         }
         if (!u.isEmpty()) {
-            add(Message.user(u));
+            append(Message.user(u));
         }
         if (!a.isEmpty()) {
-            add(Message.assistant(a, List.of()));
+            append(Message.assistant(a, List.of()));
         }
         if (policy.shouldCompact(totalChars)) {
             compact(llm);
@@ -98,11 +109,22 @@ public final class ConversationMemory {
     }
 
     public synchronized boolean isEmpty() {
-        return history.isEmpty();
+        return activeHistorySize() == 0;
     }
 
     public synchronized int historySize() {
         return history.size();
+    }
+
+    /** Number of messages that will currently be included in an LLM request. */
+    public synchronized int activeHistorySize() {
+        int count = 0;
+        for (Message message : history) {
+            if (!message.forgotten()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public synchronized State snapshot() {
@@ -143,7 +165,89 @@ public final class ConversationMemory {
 
     private void add(Message message) {
         history.add(message);
-        totalChars += Text.orEmpty(message.content()).length();
+        if (!message.forgotten()) {
+            totalChars += Text.orEmpty(message.content()).length();
+        }
+    }
+
+    /** Embed a newly committed message, then evict the least related active message if needed. */
+    private void append(Message message) {
+        List<Double> vector = embed(message.content());
+        Message current = message.withContext(vector, false);
+        add(current);
+        forgetFarthestFrom(current);
+    }
+
+    private List<Double> embed(String text) {
+        if (embeddings == null || Text.isBlank(text)) {
+            return List.of();
+        }
+        try {
+            List<Double> vector = embeddings.embed(text);
+            return vector == null ? List.of() : List.copyOf(vector);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("[{}] 消息向量生成被中断，使用最旧消息遗忘策略", agent.value());
+        } catch (Exception e) {
+            logger.warn("[{}] 消息向量生成失败，使用最旧消息遗忘策略: {}", agent.value(), e.getMessage());
+        }
+        return List.of();
+    }
+
+    private void forgetFarthestFrom(Message current) {
+        int limit = policy.maxContextMessages();
+        if (limit <= 0 || activeHistorySize() <= limit) {
+            return;
+        }
+        int currentIndex = history.size() - 1;
+        int selected = -1;
+        double greatestDistance = -1.0;
+        for (int i = 0; i < history.size(); i++) {
+            Message candidate = history.get(i);
+            if (i == currentIndex || candidate.forgotten()) {
+                continue;
+            }
+            double distance = cosineDistance(current.embedding(), candidate.embedding());
+            if (selected < 0 || distance > greatestDistance) {
+                selected = i;
+                greatestDistance = distance;
+            }
+        }
+        if (selected >= 0) {
+            Message forgotten = history.get(selected);
+            markForgotten(selected);
+            logger.debug("[{}] 上下文超过 {} 条，遗忘距离当前消息最远的 {} 消息（distance={}）",
+                    agent.value(), limit, forgotten.role(), greatestDistance);
+        }
+    }
+
+    private void markForgotten(int index) {
+        Message message = history.get(index);
+        if (message.forgotten()) {
+            return;
+        }
+        history.set(index, message.withContext(message.embedding(), true));
+        totalChars -= Text.orEmpty(message.content()).length();
+    }
+
+    private static double cosineDistance(List<Double> left, List<Double> right) {
+        if (left == null || right == null || left.isEmpty() || left.size() != right.size()) {
+            return Double.POSITIVE_INFINITY;
+        }
+        double dot = 0.0;
+        double leftNorm = 0.0;
+        double rightNorm = 0.0;
+        for (int i = 0; i < left.size(); i++) {
+            double a = left.get(i);
+            double b = right.get(i);
+            dot += a * b;
+            leftNorm += a * a;
+            rightNorm += b * b;
+        }
+        if (leftNorm == 0.0 || rightNorm == 0.0) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return 1.0 - dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
     }
 
     /**
@@ -168,30 +272,39 @@ public final class ConversationMemory {
             }
         }
         if (summary != null && !summary.isEmpty()) {
-            history.clear();
-            totalChars = 0;
+            for (int i = 0; i < history.size(); i++) {
+                if (!history.get(i).forgotten()) {
+                    markForgotten(i);
+                }
+            }
             String compacted = "[Earlier dialogue summary (compacted from " + count + " messages)]\n"
                     + Text.truncate(summary, policy.maxSummaryChars());
-            add(Message.user(compacted));
+            append(Message.user(compacted));
             logger.info("[{}] 对话已压缩：{} → {} 字符（{} 条合并为一条摘要）",
                     agent.value(), before, totalChars, count);
             return;
         }
-        while (totalChars > policy.maxHistoryChars() && history.size() > policy.keepMessages()) {
-            Message removed = history.remove(0);
-            totalChars -= Text.orEmpty(removed.content()).length();
+        while (totalChars > policy.maxHistoryChars() && activeHistorySize() > policy.keepMessages()) {
+            int oldestActive = firstActiveIndex();
+            if (oldestActive < 0) {
+                break;
+            }
+            markForgotten(oldestActive);
         }
         // 兜底：仍然超预算就从最新往回硬截断
         for (int i = history.size() - 1; i >= 0 && totalChars > policy.maxHistoryChars(); i--) {
             Message m = history.get(i);
+            if (m.forgotten()) {
+                continue;
+            }
             String c = Text.orEmpty(m.content());
             long need = totalChars - policy.maxHistoryChars();
             if (need >= c.length()) {
-                history.remove(i);
-                totalChars -= c.length();
+                markForgotten(i);
             } else {
-                history.set(i, new Message(m.role(), c.substring(0, (int) (c.length() - need)),
-                        m.toolCalls(), m.toolCallId()));
+                String truncated = c.substring(0, (int) (c.length() - need));
+                history.set(i, new Message(m.role(), truncated, m.toolCalls(), m.toolCallId(),
+                        embed(truncated), false));
                 totalChars -= need;
             }
         }
@@ -202,10 +315,22 @@ public final class ConversationMemory {
     private String dump() {
         StringBuilder sb = new StringBuilder();
         for (Message m : history) {
+            if (m.forgotten()) {
+                continue;
+            }
             sb.append(m.role().name().toLowerCase(java.util.Locale.ROOT)).append("> ")
                     .append(Text.orEmpty(m.content())).append('\n');
         }
         return sb.toString();
+    }
+
+    private int firstActiveIndex() {
+        for (int i = 0; i < history.size(); i++) {
+            if (!history.get(i).forgotten()) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** 便于提示词侧/测试观察的摘要提示词。 */

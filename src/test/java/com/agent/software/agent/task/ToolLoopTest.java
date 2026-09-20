@@ -156,6 +156,9 @@ class ToolLoopTest {
             if (toolError != null) {
                 throw toolError;
             }
+            if (toolReplies.isEmpty()) {
+                return new ToolReply(chatReply.text(), chatReply.reasoning(), List.of(), chatReply.tokens());
+            }
             return toolReplies.get(Math.min(toolCalls - 1, toolReplies.size() - 1));
         }
 
@@ -282,9 +285,9 @@ class ToolLoopTest {
     }
 
     @Test
-    void 无工具时退回单轮chat() {
+    void 无工具时也携带对话上下文() {
         FakeToolbox box = new FakeToolbox();
-        ScriptedLlm llm = new ScriptedLlm();
+        ScriptedLlm llm = new ScriptedLlm(new LlmClient.ToolReply("直接回答", "先想一想", List.of(), 3));
         RecordingTranscript tx = new RecordingTranscript();
         ConversationMemory memory = new ConversationMemory(ROLE, ConversationPolicy.defaults());
         ToolLoop loop = new ToolLoop(llm, box, tx, ToolLoopPolicy.defaults());
@@ -295,8 +298,9 @@ class ToolLoopTest {
         assertFalse(out.failed());
         assertEquals("直接回答", out.answer());
         assertEquals(3, out.tokens());
-        assertEquals(0, llm.toolCalls, "没有工具时不应走 chatWithTools");
-        assertEquals(1, llm.chats);
+        assertEquals(1, llm.toolCalls);
+        assertEquals(0, llm.chats);
+        assertTrue(llm.toolRequests.get(0).tools().isEmpty());
         assertEquals(List.of("先想一想"), tx.reasons);
         assertTrue(tx.notes.isEmpty());
         assertTrue(tx.toolNames.isEmpty());
@@ -306,8 +310,7 @@ class ToolLoopTest {
     @Test
     void 无工具且LLM空回复视为失败() {
         FakeToolbox box = new FakeToolbox();
-        ScriptedLlm llm = new ScriptedLlm();
-        llm.chatReply = new LlmClient.ChatReply("", null, 2);
+        ScriptedLlm llm = new ScriptedLlm(new LlmClient.ToolReply("", null, List.of(), 2));
         RecordingTranscript tx = new RecordingTranscript();
         ConversationMemory memory = new ConversationMemory(ROLE, ConversationPolicy.defaults());
         ToolLoop loop = new ToolLoop(llm, box, tx, ToolLoopPolicy.defaults());

@@ -54,22 +54,6 @@ public final class ToolLoop {
         List<ToolSpec> specs = toolbox == null ? List.of() : toolbox.specs();
         int totalTokens = 0;
         try {
-            // 没有任何工具：退回单轮 chat（对齐 master RolePool 的无工具分支）
-            if (specs.isEmpty()) {
-                LlmClient.ChatReply reply = llm.chat(new LlmClient.ChatRequest(
-                        systemPrompt, task.description(), 0.7, 512));
-                totalTokens += reply.tokens();
-                if (reply.reasoning() != null && !reply.reasoning().isBlank()
-                        && !reply.reasoning().equals(reply.text())) {
-                    transcript.reasoning(agent, reply.reasoning(), meta(task, null));
-                }
-                if (reply.failed()) {
-                    return new Outcome(reply.text(), totalTokens, true);
-                }
-                memory.commit(day, task.description(), reply.text(), llm);
-                return new Outcome(reply.text(), totalTokens, false);
-            }
-
             List<Message> messages = memory.prepare(systemPrompt, task.description(), day);
             List<String> recaps = new ArrayList<>();
             int round = 0;

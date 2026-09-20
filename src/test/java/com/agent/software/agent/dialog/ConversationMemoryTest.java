@@ -64,7 +64,9 @@ class ConversationMemoryTest {
     private static long chars(ConversationMemory memory) {
         long total = 0;
         for (Message message : memory.snapshot().messages()) {
-            total += message.content() == null ? 0 : message.content().length();
+            if (!message.forgotten()) {
+                total += message.content() == null ? 0 : message.content().length();
+            }
         }
         return total;
     }
@@ -194,8 +196,9 @@ class ConversationMemoryTest {
         memory.commit(1, "Big task " + big, "Big answer " + big, llm);
 
         assertEquals(1, llm.summarizeCalls);
-        assertEquals(1, memory.historySize());
-        Message only = memory.snapshot().messages().get(0);
+        assertEquals(1, memory.activeHistorySize());
+        Message only = memory.snapshot().messages().stream()
+                .filter(message -> !message.forgotten()).findFirst().orElseThrow();
         assertEquals(Message.Role.USER, only.role());
         assertTrue(only.content().startsWith("[Earlier dialogue summary"), only.content());
         assertTrue(only.content().contains("MERGED: everything earlier."));
@@ -263,5 +266,42 @@ class ConversationMemoryTest {
 
         assertTrue(memory.isEmpty());
         assertEquals(0, memory.historySize());
+    }
+
+    @Test
+    void 超过消息上限时遗忘与当前消息距离最远的一条() {
+        ConversationPolicy policy = new ConversationPolicy(24_000, 12_000, 6, 3);
+        ConversationMemory memory = new ConversationMemory(new RoleId("ceo"), policy, text -> switch (text) {
+            case "old-related", "old-related-answer" -> List.of(1.0, 0.0);
+            case "current", "current-answer" -> List.of(0.0, 1.0);
+            default -> List.of(0.5, 0.5);
+        });
+
+        memory.commit(1, "old-related", "old-related-answer", null);
+        memory.commit(1, "current", "current-answer", null);
+
+        assertEquals(4, memory.historySize(), "遗忘消息仍应保存在状态中");
+        assertEquals(3, memory.activeHistorySize());
+        Message forgotten = memory.snapshot().messages().get(0);
+        assertTrue(forgotten.forgotten());
+        assertEquals(List.of(1.0, 0.0), forgotten.embedding());
+
+        List<Message> prompt = memory.prepare("sys", "next", 1);
+        assertFalse(prompt.stream().anyMatch(message -> "old-related".equals(message.content())));
+        assertTrue(prompt.stream().anyMatch(message -> "old-related-answer".equals(message.content())));
+        assertTrue(prompt.stream().anyMatch(message -> "current".equals(message.content())));
+    }
+
+    @Test
+    void 向量失败时遗忘最旧的活动消息() {
+        ConversationPolicy policy = new ConversationPolicy(24_000, 12_000, 6, 2);
+        ConversationMemory memory = new ConversationMemory(new RoleId("ceo"), policy,
+                text -> { throw new java.io.IOException("offline"); });
+
+        memory.commit(1, "one", "two", null);
+        memory.commit(1, "three", "", null);
+
+        assertTrue(memory.snapshot().messages().get(0).forgotten());
+        assertEquals(2, memory.activeHistorySize());
     }
 }

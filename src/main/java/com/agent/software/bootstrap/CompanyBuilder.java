@@ -27,6 +27,8 @@ import com.agent.software.infra.config.AppPaths;
 import com.agent.software.infra.json.JsonCodec;
 import com.agent.software.kernel.Payload;
 import com.agent.software.llm.LlmClient;
+import com.agent.software.llm.EmbeddingClient;
+import com.agent.software.llm.EmbeddingModel;
 import com.agent.software.llm.OpenAiClient;
 import com.agent.software.llm.ProviderCatalog;
 import com.agent.software.llm.ProviderResolver;
@@ -72,6 +74,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -147,6 +150,7 @@ public final class CompanyBuilder {
 
         // 2. LLM 适配器：解析 endpoint → 共享限流仲裁器 → 客户端
         LlmClient llm = buildLlm(gate);
+        EmbeddingModel embeddings = buildEmbeddings();
 
         // 3. 花名册与共享能力（这些都是"进程一份"的适配器）
         Team team = new Team(clock);
@@ -191,7 +195,11 @@ public final class CompanyBuilder {
                 AgentStateMachine stateMachine = new AgentStateMachine();
                 AgentMailbox mailbox = new AgentMailbox();
                 WaitCoordinator waits = new WaitCoordinator(stateMachine);
-                ConversationMemory memory = new ConversationMemory(spec.id(), ConversationPolicy.defaults());
+                ConversationPolicy defaults = ConversationPolicy.defaults();
+                ConversationPolicy conversationPolicy = new ConversationPolicy(
+                        defaults.maxHistoryChars(), defaults.maxSummaryChars(), defaults.toolRecapLimit(),
+                        config.llm().maxContextMessages());
+                ConversationMemory memory = new ConversationMemory(spec.id(), conversationPolicy, embeddings);
                 SystemPrompt prompts = new SystemPrompt(clock, notes);
                 Shell shell = shells.create(spec);
 
@@ -247,6 +255,19 @@ public final class CompanyBuilder {
             }
         });
         return client;
+    }
+
+    /** Build the optional embedding adapter used by conversation forgetting. */
+    private EmbeddingModel buildEmbeddings() {
+        String model = config.llm().embeddingModel();
+        if (llmOverride != null || model == null || model.isBlank()) {
+            return null;
+        }
+        ProviderResolver.Endpoint chat = ProviderResolver.resolve(config.llm(), new ProviderCatalog());
+        ProviderResolver.Endpoint endpoint = new ProviderResolver.Endpoint(
+                chat.baseUrl(), chat.apiKey(), model.trim());
+        return new EmbeddingClient(endpoint,
+                Duration.ofSeconds(Math.max(1, config.llm().retry().timeoutSeconds())));
     }
 
     /** 邮箱落信 → 给收件人投一条 NEW_MAIL 定向事件。 */

@@ -10,7 +10,8 @@ public record AppConfig(Llm llm, Schedule schedule, Storage storage, Web web, Ma
     /** 代码内置默认配置（env 与 config.json 均未提供时的兜底）。 */
     public static AppConfig defaults() {
         return new AppConfig(
-                new Llm("openai", "gpt-4o-mini", "", "", new Llm.Retry(200, 10.0, 120)),
+                new Llm("openai", "gpt-4o-mini", "text-embedding-3-small", "", "", 40,
+                        new Llm.Retry(200, 10.0, 120)),
                 new Schedule(1.0, 8, 18, 60_000L, 1.0, 600_000L),
                 new Storage(""),
                 new Web("0.0.0.0", 8787, 20 * 60 * 1000L),
@@ -20,7 +21,13 @@ public record AppConfig(Llm llm, Schedule schedule, Storage storage, Web web, Ma
     }
 
     /** LLM 接入配置。 */
-    public record Llm(String providerId, String model, String apiKey, String baseUrl, Retry retry) {
+    public record Llm(String providerId, String model, String embeddingModel, String apiKey,
+                      String baseUrl, int maxContextMessages, Retry retry) {
+
+        /** Compatibility constructor for callers that do not configure context forgetting. */
+        public Llm(String providerId, String model, String apiKey, String baseUrl, Retry retry) {
+            this(providerId, model, "", apiKey, baseUrl, 40, retry);
+        }
 
         /** LLM 调用重试与超时配置。 */
         public record Retry(int maxAttempts, double delaySeconds, int timeoutSeconds) {

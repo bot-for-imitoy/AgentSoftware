@@ -33,8 +33,10 @@ public final class ConfigLoader {
         AppConfig.Llm llm = new AppConfig.Llm(
                 str(file, "llm.provider", str(file, "llm.provider_id", base.llm().providerId())),
                 str(file, "llm.model", base.llm().model()),
+                str(file, "llm.embedding_model", base.llm().embeddingModel()),
                 str(file, "llm.api_key", str(file, "llm.apiKey", base.llm().apiKey())),
                 str(file, "llm.base_url", str(file, "llm.baseUrl", base.llm().baseUrl())),
+                intVal(file, "llm.max_context_messages", base.llm().maxContextMessages()),
                 new AppConfig.Llm.Retry(
                         intVal(file, "llm.retry.max_attempts", base.llm().retry().maxAttempts()),
                         doubleVal(file, "llm.retry.delay_seconds", base.llm().retry().delaySeconds()),

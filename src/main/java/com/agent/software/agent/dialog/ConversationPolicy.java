@@ -6,11 +6,16 @@ package com.agent.software.agent.dialog;
  * <p>master 把这些魔数写在 {@code Conversation} 里（24000 字符预算 / 12000 摘要上限 /
  * 6 条工具回执）。抽出来后与状态分离，可单测、可配置。
  */
-public record ConversationPolicy(int maxHistoryChars, int maxSummaryChars, int toolRecapLimit) {
+public record ConversationPolicy(int maxHistoryChars, int maxSummaryChars, int toolRecapLimit,
+                                 int maxContextMessages) {
+
+    public ConversationPolicy(int maxHistoryChars, int maxSummaryChars, int toolRecapLimit) {
+        this(maxHistoryChars, maxSummaryChars, toolRecapLimit, 40);
+    }
 
     /** master {@code Conversation} 的默认值。 */
     public static ConversationPolicy defaults() {
-        return new ConversationPolicy(24_000, 12_000, 6);
+        return new ConversationPolicy(24_000, 12_000, 6, 40);
     }
 
     public boolean shouldCompact(long totalChars) {

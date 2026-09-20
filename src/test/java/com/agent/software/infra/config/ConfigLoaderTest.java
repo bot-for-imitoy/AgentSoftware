@@ -40,6 +40,8 @@ class ConfigLoaderTest {
         System.setProperty("AGENTSOFTWARE_CONFIG_DIR", configDir.toString());
         AppConfig config = new ConfigLoader().load();
         assertEquals("openai", config.llm().providerId());
+        assertEquals("text-embedding-3-small", config.llm().embeddingModel());
+        assertEquals(40, config.llm().maxContextMessages());
         assertEquals(1.0, config.schedule().secondsPerTick());
         assertEquals(8, config.schedule().shiftStartHour());
         assertEquals(18, config.schedule().shiftEndHour());
@@ -52,7 +54,8 @@ class ConfigLoaderTest {
         System.setProperty("AGENTSOFTWARE_CONFIG_DIR", configDir.toString());
         writeConfig("""
                 {
-                  "llm": {"provider": "deepseek", "model": "deepseek-chat", "api_key": "sk-x",
+                  "llm": {"provider": "deepseek", "model": "deepseek-chat",
+                          "embedding_model": "embedding-v1", "max_context_messages": 12, "api_key": "sk-x",
                           "base_url": "https://api.deepseek.com/v1",
                           "retry": {"max_attempts": 5, "delay_seconds": 0.5, "timeout_seconds": 30}},
                   "schedule": {"seconds_per_tick": 2.0, "shift_end_hour": 20,
@@ -69,6 +72,8 @@ class ConfigLoaderTest {
         AppConfig config = new ConfigLoader().load();
         assertEquals("deepseek", config.llm().providerId());
         assertEquals("deepseek-chat", config.llm().model());
+        assertEquals("embedding-v1", config.llm().embeddingModel());
+        assertEquals(12, config.llm().maxContextMessages());
         assertEquals("sk-x", config.llm().apiKey());
         assertEquals(5, config.llm().retry().maxAttempts());
         assertEquals(30, config.llm().retry().timeoutSeconds());
