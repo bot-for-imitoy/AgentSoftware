@@ -133,8 +133,11 @@ class CompanyDayCycleTest {
         // ── 1. 第 1 天 tick 0：SHIFT_START 广播 → 角色收到任务并执行 ──────────
         company.driver().tickOnce();
         assertEquals(1, company.clock().nowDay().day());
+        await("SHIFT_START 任务执行完成", 5_000,
+                () -> agent.history(0).size() >= 1
+                        && agent.state() == AgentState.ON_DUTY_IDLE
+                        && agent.queueDepth() == 0);
         assertEquals(AgentState.ON_DUTY_IDLE, agent.state());
-        await("SHIFT_START 任务执行完成", 5_000, () -> agent.history(0).size() >= 1);
         assertTrue(agent.history(1).get(0).description().contains("SHIFT_START"),
                 "第一个任务应当来自 SHIFT_START 广播");
         assertEquals(0, agent.queueDepth(), "任务执行完队列应当为空");
@@ -155,6 +158,10 @@ class CompanyDayCycleTest {
         company.driver().tickOnce();
         company.driver().tickOnce();
         assertEquals(2, company.clock().nowDay().day(), "全员 OFF_DUTY 后应跨天到第 2 天");
+        await("第 2 天 SHIFT_START 任务执行完成", 5_000,
+                () -> agent.history(0).size() >= 3
+                        && agent.state() == AgentState.ON_DUTY_IDLE
+                        && agent.queueDepth() == 0);
         assertEquals(AgentState.ON_DUTY_IDLE, agent.state(), "新班次开始应重新上岗");
 
         company.stop();
