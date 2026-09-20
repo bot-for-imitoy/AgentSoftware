@@ -1,0 +1,7 @@
+# Branch bug review
+
+The refactor improves the package boundaries, but its synchronous talk path still had two lifecycle hazards. First, `WaitCoordinator.end()` always restored the state captured before waiting. A shift-end callback can move a waiting agent to `OFF_DUTY` or `WRAPPING_UP`; when the caller later returns, unconditional restoration changes that authoritative lifecycle decision back to the earlier on-duty state. The failure is timing-dependent and can make an agent accept work after the shift has ended. The fix restores the prior state only while the coordinator is still in `WAITING`; an external lifecycle transition therefore wins.
+
+Second, `TalkService.sendAndWait()` allowed the sender and receiver to be the same agent. When called by that agent's worker, it enqueues a task and blocks waiting for completion, but the only worker capable of completing the task is now blocked. With an infinite timeout this is a permanent deadlock; with a finite timeout it needlessly loses the request. The fix rejects self-delegation before entering the wait protocol and returns the same empty result used for missing participants.
+
+These are concurrency and lifecycle bugs rather than cosmetic issues: they can strand workers or violate shift boundaries under normal races. Maven could not be run because the Apache Maven mirror returned 404 in this environment; the JDK itself was installed temporarily and the changes were kept deliberately small and type-local.

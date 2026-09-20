@@ -108,6 +108,10 @@ public final class TalkService implements TeamChannel {
 
         Agent sender = from.get();
         Agent receiver = to.get();
+        if (sender == receiver) {
+            logger.warn("talk wait=true 不能把任务委派给自己：{}", sender.id().value());
+            return Optional.empty();
+        }
         Task task = delegated != null ? delegated : task(message, TALK_DELEGATE);
 
         // 互相等待会死锁：A 等 B、B 又在等 A，两边都永远等不到（只能等下班被 abort）。

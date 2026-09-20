@@ -116,7 +116,7 @@ public final class WaitCoordinator {
         try {
             waitingFor = null;
             replyBox = null;
-            if (state != null && stateBeforeWait != null) {
+            if (state != null && stateBeforeWait != null && state.state() == AgentState.WAITING) {
                 try {
                     state.to(stateBeforeWait);
                 } catch (RuntimeException e) {
