@@ -1,6 +1,7 @@
 package com.agent.software.company;
 
 import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.kernel.Ids.RoleId;
 
 import java.util.List;
 
@@ -20,4 +21,7 @@ public interface CompanyView {
     void pause(String reason);
 
     void resume();
+
+    /** Submit a client-authored email to a role through the normal event queue. */
+    void sendEmail(RoleId recipient, String subject, String body);
 }

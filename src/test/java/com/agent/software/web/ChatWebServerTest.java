@@ -9,6 +9,8 @@ import com.agent.software.infra.json.JacksonJsonCodec;
 import com.agent.software.kernel.DayTick;
 import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Payload;
+import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.sim.event.EventKind;
 import com.agent.software.transcript.ChatFeed;
 import com.agent.software.transcript.Transcript;
 import org.junit.jupiter.api.AfterEach;
@@ -68,11 +70,13 @@ class ChatWebServerTest {
         HttpResponse<String> index = get("/");
         assertEquals(200, index.statusCode());
         assertTrue(index.body().contains("AgentSoftware"));
+        assertTrue(index.body().contains("emailBtn"));
         assertTrue(index.headers().firstValue("Content-Type").orElse("").contains("text/html"));
 
         HttpResponse<String> js = get("/app.js");
         assertEquals(200, js.statusCode());
         assertTrue(js.body().contains("pollState"));
+        assertTrue(js.body().contains("/api/email"));
         assertTrue(js.headers().firstValue("Content-Type").orElse("").contains("javascript"));
     }
 
@@ -229,6 +233,34 @@ class ChatWebServerTest {
         assertEquals(413, response.statusCode());
     }
 
+    // ── /api/email ─────────────────────────────────────────────────
+
+    @Test
+    void email作为普通新邮件事件投递给目标角色() throws Exception {
+        HttpResponse<String> response = post("/api/email",
+                "{\"roleId\":\"CTO\",\"subject\":\"Architecture review\",\"content\":\"Please review the proposal.\"}");
+        assertEquals(200, response.statusCode());
+        assertTrue((Boolean) json(response).get("ok"));
+        assertEquals("Gao Yuan", json(response).get("roleName"));
+
+        AgentEvent event = view.lastEmail.get();
+        assertNotNull(event);
+        assertEquals(EventKind.NEW_MAIL, event.kind());
+        assertEquals("CTO", event.target().orElseThrow().value());
+        assertEquals("Client A", event.payload().stringOr("from_name", ""));
+        assertEquals("client@external", event.payload().stringOr("from", ""));
+        assertEquals("Architecture review", event.payload().subject());
+        assertEquals("Please review the proposal.", event.payload().text());
+    }
+
+    @Test
+    void email参数与角色校验() throws Exception {
+        assertEquals(405, get("/api/email").statusCode());
+        assertEquals(400, post("/api/email", "not-json").statusCode());
+        assertEquals(400, post("/api/email", "{\"roleId\":\"CEO\",\"subject\":\"\",\"content\":\"Hi\"}").statusCode());
+        assertEquals(404, post("/api/email", "{\"roleId\":\"ghost\",\"subject\":\"Hi\",\"content\":\"Hi\"}").statusCode());
+    }
+
     // ── /api/pause | /api/resume ──────────────────────────────
 
     @Test
@@ -301,6 +333,7 @@ class ChatWebServerTest {
         private final List<RoleSpec> roster;
         private boolean paused;
         private String reason = "";
+        private final AtomicReference<AgentEvent> lastEmail = new AtomicReference<>();
 
         FakeView(List<RoleSpec> roster) {
             this.roster = roster;
@@ -337,6 +370,16 @@ class ChatWebServerTest {
         public void resume() {
             this.paused = false;
             this.reason = "";
+        }
+
+        @Override
+        public void sendEmail(RoleId recipient, String subject, String body) {
+            lastEmail.set(AgentEvent.toRole(recipient, EventKind.NEW_MAIL,
+                    com.agent.software.sim.event.Priority.NORMAL,
+                    Payload.of("from", "client@external")
+                            .with("from_name", "Client A")
+                            .with("subject", subject)
+                            .with("text", body)));
         }
     }
 

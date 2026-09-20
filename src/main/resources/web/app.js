@@ -62,6 +62,51 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
 }
 
+function openEmailComposer() {
+  const select = $("emailRole");
+  select.innerHTML = "";
+  for (const group of state.groups) {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.label || "Unassigned";
+    for (const member of group.members) {
+      const option = document.createElement("option");
+      option.value = member.roleId;
+      option.textContent = `${member.name} (${member.title || member.roleId})`;
+      optgroup.appendChild(option);
+    }
+    select.appendChild(optgroup);
+  }
+  $("emailModal").classList.remove("hidden");
+  (select.value ? $("emailSubject") : select).focus();
+}
+
+function closeEmailComposer() {
+  $("emailModal").classList.add("hidden");
+}
+
+async function sendEmail(event) {
+  event.preventDefault();
+  const button = $("emailSendBtn");
+  button.disabled = true;
+  const { status, body } = await fetchJson("/api/email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      roleId: $("emailRole").value,
+      subject: $("emailSubject").value.trim(),
+      content: $("emailContent").value.trim(),
+    }),
+  });
+  button.disabled = false;
+  if (status === 200 && body.ok) {
+    $("emailForm").reset();
+    closeEmailComposer();
+    toast(`Email sent to ${body.roleName || body.roleId}`);
+  } else {
+    toast(body.reason || "Failed to send email");
+  }
+}
+
 // ── Pause / resume control ───────────────────────
 
 /** Top-bar status line, with a visible PAUSED marker while the system is paused. */
@@ -624,6 +669,16 @@ async function sendReply() {
 function init() {
   $("sendBtn").addEventListener("click", sendReply);
   $("pauseBtn").addEventListener("click", togglePause);
+  $("emailBtn").addEventListener("click", openEmailComposer);
+  $("emailCloseBtn").addEventListener("click", closeEmailComposer);
+  $("emailCancelBtn").addEventListener("click", closeEmailComposer);
+  $("emailForm").addEventListener("submit", sendEmail);
+  $("emailModal").addEventListener("click", (e) => {
+    if (e.target === $("emailModal")) closeEmailComposer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeEmailComposer();
+  });
   $("replyInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

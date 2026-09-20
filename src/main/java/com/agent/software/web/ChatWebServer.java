@@ -8,6 +8,7 @@ import com.agent.software.infra.json.JacksonJsonCodec;
 import com.agent.software.infra.json.JsonCodec;
 import com.agent.software.kernel.DayTick;
 import com.agent.software.kernel.DomainError;
+import com.agent.software.kernel.Ids.RoleId;
 import com.agent.software.kernel.Text;
 import com.agent.software.transcript.ChatFeed;
 import com.agent.software.transcript.Transcript.Entry;
@@ -158,6 +159,7 @@ public final class ChatWebServer {
             case "/api/state" -> sendJson(ex, 200, apiState());
             case "/api/messages" -> sendJson(ex, 200, apiMessages(ex));
             case "/api/reply" -> handleReply(ex);
+            case "/api/email" -> handleEmail(ex);
             case "/api/pause" -> handlePause(ex, true);
             case "/api/resume" -> handlePause(ex, false);
             case "/api/attach" -> {
@@ -406,6 +408,58 @@ public final class ChatWebServer {
             }
         }
         return found;
+    }
+
+    // ── POST /api/email ─────────────────────────────────────────────────
+
+    private void handleEmail(HttpExchange ex) throws IOException {
+        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, error("method not allowed"));
+            return;
+        }
+        if (view == null) {
+            sendJson(ex, 500, error("company view unavailable"));
+            return;
+        }
+        String bodyText = readBody(ex);
+        if (bodyText == null) {
+            sendJson(ex, 413, error("request body too large"));
+            return;
+        }
+        String roleId;
+        String subject;
+        String content;
+        try {
+            Map<String, Object> body = JSON.readMap(bodyText);
+            roleId = field(body, "roleId");
+            subject = field(body, "subject");
+            content = field(body, "content");
+        } catch (RuntimeException e) {
+            sendJson(ex, 400, error("invalid json body"));
+            return;
+        }
+        if (roleId.isEmpty() || subject.isEmpty() || content.isEmpty()) {
+            sendJson(ex, 400, error("role, subject, and content are required"));
+            return;
+        }
+        RoleSpec recipient = view.roster().stream()
+                .filter(spec -> spec != null && spec.id() != null && roleId.equals(spec.id().value()))
+                .findFirst().orElse(null);
+        if (recipient == null) {
+            sendJson(ex, 404, error("target role not found"));
+            return;
+        }
+        view.sendEmail(new RoleId(roleId), subject, content);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("roleId", roleId);
+        resp.put("roleName", Text.orEmpty(recipient.name()));
+        sendJson(ex, 200, resp);
+    }
+
+    private static String field(Map<String, Object> body, String name) {
+        Object value = body.get(name);
+        return value == null ? "" : String.valueOf(value).strip();
     }
 
     // ── POST /api/pause | /api/resume ───────────────────────────

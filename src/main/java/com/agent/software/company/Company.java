@@ -11,10 +11,14 @@ import com.agent.software.agent.role.RoleSpec;
 import com.agent.software.agent.task.Task;
 import com.agent.software.company.store.CompanySnapshot;
 import com.agent.software.company.store.SnapshotStore;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Payload;
 import com.agent.software.sim.clock.ClockDriver;
 import com.agent.software.sim.clock.ScheduleTable;
 import com.agent.software.sim.clock.SimClock;
 import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.sim.event.EventKind;
+import com.agent.software.sim.event.Priority;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +90,15 @@ public final class Company implements CompanyView {
     /** 外部事件入口（客户消息、邮件通知、测试注入）。 */
     public void publish(AgentEvent event) {
         router.publish(event);
+    }
+
+    @Override
+    public void sendEmail(RoleId recipient, String subject, String body) {
+        router.publish(AgentEvent.toRole(recipient, EventKind.NEW_MAIL, Priority.NORMAL,
+                Payload.of("from", "client@external")
+                        .with("from_name", "Client A")
+                        .with("subject", subject)
+                        .with("text", body)));
     }
 
     /** 落快照。 */

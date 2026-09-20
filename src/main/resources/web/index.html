@@ -18,6 +18,7 @@
       </div>
       <div class="top-actions">
         <span id="pauseChip" class="pause-chip hidden" title="">Paused</span>
+        <button id="emailBtn" class="top-btn" title="Compose an email to a role">Email</button>
         <button id="pauseBtn" class="pause-btn" title="Pause the whole simulation — the clock freezes and every role holds its work">⏸ Pause</button>
       </div>
     </header>
@@ -54,6 +55,27 @@
           </div>
         </div>
       </section>
+    </div>
+  </div>
+
+  <div id="emailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="emailTitle">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="emailTitle">New email</h2>
+        <button id="emailCloseBtn" class="icon-btn" type="button" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <form id="emailForm">
+        <label for="emailRole">To</label>
+        <select id="emailRole" required></select>
+        <label for="emailSubject">Subject</label>
+        <input id="emailSubject" type="text" maxlength="200" required>
+        <label for="emailContent">Message</label>
+        <textarea id="emailContent" rows="8" maxlength="10000" required></textarea>
+        <div class="modal-actions">
+          <button id="emailCancelBtn" class="secondary-btn" type="button">Cancel</button>
+          <button id="emailSendBtn" class="primary-btn" type="submit">Send email</button>
+        </div>
+      </form>
     </div>
   </div>
 
