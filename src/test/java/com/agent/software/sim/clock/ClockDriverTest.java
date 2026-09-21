@@ -117,6 +117,18 @@ class ClockDriverTest {
         assertEquals(0, observer.seen.get(0).value(), "观察者应先看到推进前的 tick");
     }
 
+    @Test
+    void 忙碌时时钟应用配置的加速倍率() {
+        ClockDriver driver = newDriver(new DefaultClockPolicy(60_000L, 20.0, 250L),
+                new ClockDriver.ClockOptions(250L, 1_000L, 600_000L));
+        sensors.busy = true;
+        sensors.idle = false;
+
+        driver.tickOnce();
+
+        assertEquals(5, clock.now().value(), "20 倍速下每个 250ms 轮询应推进 5 模拟秒");
+    }
+
     // ── 全员空闲：快进到下一个触发点 ────────────────────────────
 
     @Test

@@ -225,7 +225,10 @@ public final class CompanyBuilder {
 
         // 9. 班次反应与时钟线程
         ShiftDirector director = new ShiftDirector(team, clock, gate, schedule, router, feed);
-        ClockPolicy policy = new DefaultClockPolicy(config.schedule().fastForwardIdleMillis());
+        ClockPolicy policy = new DefaultClockPolicy(
+                config.schedule().fastForwardIdleMillis(),
+                config.schedule().simSecondsPerRealSecond(),
+                BUSY_POLL_MILLIS);
         ClockDriver driver = new ClockDriver(clock, schedule, policy, router, team, director,
                 new ClockDriver.ClockOptions(BUSY_POLL_MILLIS, IDLE_POLL_MILLIS,
                         config.schedule().wrapUpGraceMillis()));
