@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.mcp;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 
 /**
@@ -12,21 +12,21 @@ import com.agent.software.tools.Toolkit;
  */
 public class McpManager extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MCPManager manager;
 
-    public McpManager(AgentRole agentRole, MCPManager manager) {
-        this.agentRole = agentRole;
+    public McpManager(Role role, MCPManager manager) {
+        this.role = role;
         this.manager = manager;
-        addTool(new McpSearch(agentRole));
-        addTool(new McpList(agentRole));
-        addTool(new McpAdd(agentRole, manager));
-        addTool(new McpRemove(agentRole, manager));
-        addTool(new McpMyTools(agentRole, manager));
+        addTool(new McpSearch(role));
+        addTool(new McpList(role));
+        addTool(new McpAdd(role, manager));
+        addTool(new McpRemove(role, manager));
+        addTool(new McpMyTools(role, manager));
     }
 
-    public McpManager(AgentRole agentRole) {
-        this(agentRole, new MCPManager());
+    public McpManager(Role role) {
+        this(role, new MCPManager());
     }
 
     @Override

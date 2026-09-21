@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.taskview;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 
 /**
@@ -8,11 +8,11 @@ import com.agent.software.tools.Toolkit;
  */
 public class TaskView extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public TaskView(AgentRole agentRole) {
-        this.agentRole = agentRole;
-        addTool(new MyTasks(agentRole));
+    public TaskView(Role role) {
+        this.role = role;
+        addTool(new MyTasks(role));
     }
 
     @Override

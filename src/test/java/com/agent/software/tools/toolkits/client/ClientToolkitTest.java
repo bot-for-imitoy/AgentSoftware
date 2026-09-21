@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.client;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 import com.agent.software.tools.Toolkits;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ class ClientToolkitTest {
     @Test
     void testLeadershipMembersGetClientToolkit() {
         for (String rid : new String[]{"CEO", "COO", "HR", "CTO", "business_analyst"}) {
-            AgentRole leader = AgentRole.builder().name("Leader").roleId(rid)
+            Role leader = Role.builder().name("Leader").roleId(rid)
                     .group(Toolkits.LEADERSHIP_GROUP).build();
             assertTrue(hasTalkToClient(Toolkits.defaultToolkits(leader)),
                     rid + " (Leadership Group) should be equipped with talk_to_client");
@@ -36,12 +36,12 @@ class ClientToolkitTest {
 
     @Test
     void testNonLeadershipMembersDoNotGetClientToolkit() {
-        AgentRole dev = AgentRole.builder().name("Gu Chengyu").roleId("frontend_dev_1")
+        Role dev = Role.builder().name("Gu Chengyu").roleId("frontend_dev_1")
                 .group("Frontend Development Group").build();
         assertFalse(hasTalkToClient(Toolkits.defaultToolkits(dev)),
                 "non-leadership members should not be equipped with talk_to_client");
 
-        AgentRole ungrouped = AgentRole.builder().name("Newcomer").roleId("newbie_1").build();
+        Role ungrouped = Role.builder().name("Newcomer").roleId("newbie_1").build();
         assertFalse(hasTalkToClient(Toolkits.defaultToolkits(ungrouped)),
                 "ungrouped roles should not be equipped with talk_to_client");
     }
@@ -76,8 +76,8 @@ class ClientToolkitTest {
     @Test
     void testTalkToClientRejectedWhileHeld() {
         ClientCommunicationLock lock = new ClientCommunicationLock();
-        AgentRole a = AgentRole.builder().name("Lin Zong").roleId("CEO").build();
-        AgentRole b = AgentRole.builder().name("Chen Zong").roleId("COO").build();
+        Role a = Role.builder().name("Lin Zong").roleId("CEO").build();
+        Role b = Role.builder().name("Chen Zong").roleId("COO").build();
         TalkToClient ta = new TalkToClient(a, lock);
         TalkToClient tb = new TalkToClient(b, lock);
 

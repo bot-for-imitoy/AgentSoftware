@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.skill;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -175,7 +175,7 @@ public final class SkillManager {
     }
 
     /** Install a skill tool for a role. */
-    public String addSkill(AgentRole role, String skillName) {
+    public String addSkill(Role role, String skillName) {
         ensureLoaded();
         SkillInfo info = skills.get(skillName);
         if (info == null) {
@@ -199,7 +199,7 @@ public final class SkillManager {
     }
 
     /** Remove a skill tool from a role. */
-    public String removeSkill(AgentRole role, String skillName) {
+    public String removeSkill(Role role, String skillName) {
         String roleId = role.roleId;
         Set<String> mine = roleSkills.getOrDefault(roleId, new LinkedHashSet<>());
         if (!mine.contains(skillName)) {
@@ -215,7 +215,7 @@ public final class SkillManager {
     }
 
     /** List the skill tools already added to a role. */
-    public List<Map<String, String>> listRoleSkills(AgentRole role) {
+    public List<Map<String, String>> listRoleSkills(Role role) {
         Set<String> mine = roleSkills.getOrDefault(role.roleId, new LinkedHashSet<>());
         List<Map<String, String>> result = new ArrayList<>();
         for (String n : mine) {

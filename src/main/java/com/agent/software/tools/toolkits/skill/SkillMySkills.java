@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.skill;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.ArrayList;
@@ -13,12 +13,12 @@ import java.util.Map;
  */
 public class SkillMySkills extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final SkillManager manager;
 
-    public SkillMySkills(AgentRole agentRole, SkillManager manager) {
+    public SkillMySkills(Role role, SkillManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -34,7 +34,7 @@ public class SkillMySkills extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        List<Map<String, String>> mine = this.manager.listRoleSkills(agentRole);
+        List<Map<String, String>> mine = this.manager.listRoleSkills(role);
         if (mine.isEmpty()) {
             return "skill_my_skills: you have not added any skills yet. Use skill_search / skill_list to find them and skill_add to add.";
         }

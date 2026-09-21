@@ -1,10 +1,8 @@
 package com.agent.software;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.computers.ComputerManager;
-import com.agent.software.event.TimeEventBus;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.toolkits.client.ClientCommunicationLock;
 import org.junit.jupiter.api.Test;
@@ -70,8 +68,8 @@ class AgentSystemIsolationTest {
 
         // roles are bound to their owning system: clock/computer/mailbox/lock/chat all resolve to this system's
         // instances, not process-level default singletons (global fallbacks such as the default clock are no longer triggered by in-system roles)
-        AgentRole ra = a.getRole("CEO");
-        AgentRole rb = b.getRole("CEO");
+        Role ra = a.getRole("CEO");
+        Role rb = b.getRole("CEO");
         assertSame(a, ra.system());
         assertSame(b, rb.system());
         assertSame(a.timeManager, ra.timeManager());
@@ -186,8 +184,8 @@ class AgentSystemIsolationTest {
     void notesTodosJournalsAreNamespaced() throws Exception {
         AgentSystem a = make(tmp.resolve("a"));
         AgentSystem b = make(tmp.resolve("b"));
-        AgentRole ra = a.getRole("CEO");
-        AgentRole rb = b.getRole("CEO");
+        Role ra = a.getRole("CEO");
+        Role rb = b.getRole("CEO");
 
         // notes
         ra.noteStore().writeNote("Requirements doc", "System A's requirements", null, null);
@@ -232,7 +230,7 @@ class AgentSystemIsolationTest {
 
     @Test
     void standaloneRoleFallsBackToProcessDefaults() {
-        AgentRole standalone = AgentRole.builder().name("Newcomer").roleId("newbie_1").build();
+        Role standalone = Role.builder().name("Newcomer").roleId("newbie_1").build();
         assertNull(standalone.system());
         assertNull(standalone.chatStore());
         assertSame(TimeEventBus.getDefaultBus(), standalone.timeManager());

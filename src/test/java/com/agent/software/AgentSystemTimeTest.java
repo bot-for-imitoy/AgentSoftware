@@ -1,9 +1,8 @@
 package com.agent.software;
 
 import com.agent.software.core.Types;
-import com.agent.software.event.TimeEventBus;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -31,8 +30,8 @@ class AgentSystemTimeTest {
         return new AgentSystem(dir, null, List.of("CEO", "CTO"), 30.0, false, new StdInput());
     }
 
-    private static AgentRole.Task task(String desc) {
-        return new AgentRole.Task(3, desc, "test", null);
+    private static Role.Task task(String desc) {
+        return new Role.Task(3, desc, "test", null);
     }
 
     // ── Idle semantics: queued work keeps the clock alive during the shift ─
@@ -60,7 +59,7 @@ class AgentSystemTimeTest {
         s.timeManager.setProgress(1, s.timeManager.shiftEndTick);  // shift ended (18:00:00)
         s.timeManager.start();
         try {
-            for (AgentRole r : s.pool.allRoles()) {
+            for (Role r : s.pool.allRoles()) {
                 r.setState(Types.AgentState.OFF_DUTY);
             }
             s.assignTask("CEO", task("leftover task carried over to tomorrow"));
@@ -81,8 +80,8 @@ class AgentSystemTimeTest {
         s.timeManager.setProgress(1, s.timeManager.shiftEndTick);
         s.timeManager.start();
         try {
-            AgentRole ceo = s.getRole("CEO");
-            AgentRole cto = s.getRole("CTO");
+            Role ceo = s.getRole("CEO");
+            Role cto = s.getRole("CTO");
             ceo.setState(Types.AgentState.OFF_DUTY);
             cto.setState(Types.AgentState.OFF_DUTY);
             assertTrue(s.dayRolloverReady());
@@ -101,7 +100,7 @@ class AgentSystemTimeTest {
     @Test
     void shiftEndAbortsWaitersSoTheWrapUpCanComplete() {
         AgentSystem s = make(tmp.resolve("d"));
-        AgentRole cto = s.getRole("CTO");
+        Role cto = s.getRole("CTO");
         cto.beginWait("CEO");
         try {
             assertTrue(cto.isWaiting());

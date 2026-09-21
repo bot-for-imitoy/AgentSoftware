@@ -1,15 +1,13 @@
 package com.agent.software;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.computers.ComputerManager;
 import com.agent.software.conversation.ConversationManager;
 import com.agent.software.core.Types;
 import com.agent.software.event.EventDispatcher;
-import com.agent.software.event.TimeEventBus;
 import com.agent.software.io.Input;
 import com.agent.software.io.StdInput;
 import com.agent.software.io.WebInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
 import com.agent.software.services.MailService;
@@ -77,7 +75,7 @@ public class AgentSystem {
     private final Path dataDir;
 
     /** Constructor with the default data directory (./data); behavior is consistent with historical versions. */
-    public AgentSystem(List<AgentRole> roles, List<String> roleIds,
+    public AgentSystem(List<Role> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits,
                        Input input) {
         this(Paths.get("data"), roles, roleIds, checkInterval, autoToolkits, input);
@@ -88,7 +86,7 @@ public class AgentSystem {
      * mail/state/skills) all live under its own dataDir. Multiple systems can safely coexist by passing different
      * directories.
      */
-    public AgentSystem(Path dataDir, List<AgentRole> roles, List<String> roleIds,
+    public AgentSystem(Path dataDir, List<Role> roles, List<String> roleIds,
                        double checkInterval, boolean autoToolkits,
                        Input input) {
         this.dataDir = dataDir != null ? dataDir : Paths.get("data");
@@ -144,7 +142,7 @@ public class AgentSystem {
         }
         this.timeManager.simSecondsPerRealSecond = simRate;
 
-        List<AgentRole> all = new ArrayList<>();
+        List<Role> all = new ArrayList<>();
         if (roles != null) {
             all.addAll(roles);
         }
@@ -211,10 +209,10 @@ public class AgentSystem {
     // ── Role management ──────────────────────────────────────────
 
     /** Register roles in batch: the time-consuming setup (computer creation + MCP server startup) runs in parallel across threads. */
-    public List<AgentRole> addRoles(List<AgentRole> roles) {
+    public List<Role> addRoles(List<Role> roles) {
         // First uniformly bind the shared time source and this system reference (fast, serial) - ensuring that all of
         // the role's lazy dependencies (computer/mailbox/notes/todos/journal/chat) live in this system, not process-level global singletons
-        for (AgentRole role : roles) {
+        for (Role role : roles) {
             role.bindTimeManager(timeManager);
             role.bindSystem(this);
         }
@@ -227,7 +225,7 @@ public class AgentSystem {
             }
             java.util.concurrent.Semaphore gate = new java.util.concurrent.Semaphore(maxWorkers);
             ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor();
-            for (AgentRole role : roles) {
+            for (Role role : roles) {
                 ex.submit(() -> {
                     try {
                         gate.acquire();
@@ -252,7 +250,7 @@ public class AgentSystem {
             }
         }
         // Register in order (including journal initialization)
-        for (AgentRole role : roles) {
+        for (Role role : roles) {
             pool.addRole(role);
             logger.info("AgentSystem: role registered {} ({})", role.roleId, role.name);
         }
@@ -260,20 +258,20 @@ public class AgentSystem {
     }
 
     /** Register a single role. */
-    public AgentRole addRole(AgentRole role) {
+    public Role addRole(Role role) {
         return addRoles(List.of(role)).get(0);
     }
 
     /** Register all default management roles (CEO/COO/HR/CFO). */
-    public List<AgentRole> addDefaultRoles() {
-        List<AgentRole> roles = new ArrayList<>();
+    public List<Role> addDefaultRoles() {
+        List<Role> roles = new ArrayList<>();
         for (String rid : RoleLoader.DEFAULT_ROLES) {
             roles.add(addRole(RoleLoader.getTemplate(rid)));
         }
         return roles;
     }
 
-    public AgentRole getRole(String roleId) {
+    public Role getRole(String roleId) {
         return pool.getRole(roleId);
     }
 
@@ -286,7 +284,7 @@ public class AgentSystem {
     /** Unified entry point for schedule events from the time thread. */
     public void onTimeEvent(Types.Event event) {
         if (TimeEventBus.EVENT_SHIFT_START.equals(event.eventType)) {
-            for (AgentRole role : pool.allRoles()) {
+            for (Role role : pool.allRoles()) {
                 // Wake up at shift start; WAIT roles are already on duty waiting for replies, so do not reset them
                 if (role.state != Types.AgentState.ON_DUTY_IDLE
                         && role.state != Types.AgentState.WAIT) {
@@ -311,7 +309,7 @@ public class AgentSystem {
             // Shift-end unstick: roles synchronously waiting for a talk reply would otherwise block
             // forever on their current task (their counterpart is going off duty) and never reach the
             // queued summary task — wake them so the daily wrap-up can complete.
-            for (AgentRole role : pool.allRoles()) {
+            for (Role role : pool.allRoles()) {
                 if (role.isWaiting()) {
                     role.abortWait("[System: the shift ended at " + timeManager.shiftEndTime()
                             + " and the colleague you were waiting for has gone off duty. "
@@ -332,12 +330,12 @@ public class AgentSystem {
      * clock waiting. An empty role pool is treated as not idle.
      */
     public boolean allRolesIdle() {
-        List<AgentRole> roles = pool.allRoles();
+        List<Role> roles = pool.allRoles();
         if (roles.isEmpty()) {
             return false;
         }
         boolean afterShiftEnd = timeManager.tickOfDay() >= timeManager.shiftEndTick;
-        for (AgentRole r : roles) {
+        for (Role r : roles) {
             if (r.isBusy()) {
                 return false;
             }
@@ -354,11 +352,11 @@ public class AgentSystem {
      * tasks in off-duty queues are fine — they run on the next shift.
      */
     public boolean dayRolloverReady() {
-        List<AgentRole> roles = pool.allRoles();
+        List<Role> roles = pool.allRoles();
         if (roles.isEmpty()) {
             return false;
         }
-        for (AgentRole r : roles) {
+        for (Role r : roles) {
             if (r.state != Types.AgentState.OFF_DUTY) {
                 return false;
             }
@@ -375,13 +373,13 @@ public class AgentSystem {
      */
     public void forceWrapUp() {
         logger.warn("AgentSystem: wrap-up grace exceeded — forcing remaining roles OFF_DUTY");
-        for (AgentRole r : pool.allRoles()) {
+        for (Role r : pool.allRoles()) {
             if (r.isWaiting()) {
                 r.abortWait("[System: the daily wrap-up deadline passed — treat this as the reply for now, "
                         + "finish up and rest; leftover work resumes at the next 08:00 shift.]");
             }
         }
-        for (AgentRole r : pool.allRoles()) {
+        for (Role r : pool.allRoles()) {
             if (r.state != Types.AgentState.OFF_DUTY && !r.isBusy()) {
                 r.setState(Types.AgentState.OFF_DUTY);
                 r.journal("Forced OFF_DUTY by the time manager (daily wrap-up grace exceeded, summary missing)");
@@ -417,7 +415,7 @@ public class AgentSystem {
         if (recipientMailbox.equalsIgnoreCase(message.senderEmail)) {
             return;  // sending to yourself needs no notification
         }
-        AgentRole recipient = findRoleByMailbox(recipientMailbox);
+        Role recipient = findRoleByMailbox(recipientMailbox);
         if (recipient == null) {
             return;  // not an internal employee mailbox (e.g. an external recipient)
         }
@@ -437,8 +435,8 @@ public class AgentSystem {
     }
 
     /** Find the role whose company mailbox equals the given address, or null when it is not an employee mailbox. */
-    private AgentRole findRoleByMailbox(String mailbox) {
-        for (AgentRole role : pool.allRoles()) {
+    private Role findRoleByMailbox(String mailbox) {
+        for (Role role : pool.allRoles()) {
             if (mailService.emailFor(role).equalsIgnoreCase(mailbox)) {
                 return role;
             }
@@ -447,7 +445,7 @@ public class AgentSystem {
     }
 
     /** Directly assign a task to the specified role. */
-    public void assignTask(String roleId, AgentRole.Task task) {
+    public void assignTask(String roleId, Role.Task task) {
         pool.assignTask(roleId, task);
     }
 

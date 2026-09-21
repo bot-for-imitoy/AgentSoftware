@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * tool-calling loop, the ChatStore must receive chain-of-thought (reason), tool invocation
  * (tool, incl. arguments + result) and final output (answer) events for the Web UI.
  */
-class AgentRoleTraceTest {
+class RoleTraceTest {
 
     /** Scripted LLM: round 1 requests the current time via a tool call, round 2 returns the final answer. */
     private static final class SequenceLlm implements LLM {
@@ -61,11 +61,11 @@ class AgentRoleTraceTest {
         }
     }
 
-    private AgentRole newRole(Path dataDir, LLM llm) {
+    private Role newRole(Path dataDir, LLM llm) {
         // autoToolkits=false → no computers / MCP servers; the worker still registers the talk toolkit
         AgentSystem system = new AgentSystem(dataDir,
                 List.of(RoleLoader.getTemplate("backend_dev_1")), null, 1.0, false, new StdInput());
-        AgentRole role = system.getRole("backend_dev_1");
+        Role role = system.getRole("backend_dev_1");
         role.setLlm(llm);
         // register one plain tool so the loop has something to call
         role.addSingleTool("get_time", "Get the current time", Map.of("type", "object"),
@@ -77,11 +77,11 @@ class AgentRoleTraceTest {
         return store.messagesSince(0);
     }
 
-    private static void awaitTask(AgentRole.Task task) throws InterruptedException {
+    private static void awaitTask(Role.Task task) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 10_000;
         while (System.currentTimeMillis() < deadline) {
-            if (!AgentRole.STATUS_PENDING.equals(task.status)
-                    && !AgentRole.STATUS_RUNNING.equals(task.status)) {
+            if (!Role.STATUS_PENDING.equals(task.status)
+                    && !Role.STATUS_RUNNING.equals(task.status)) {
                 return;
             }
             Thread.sleep(20);
@@ -90,17 +90,17 @@ class AgentRoleTraceTest {
 
     @Test
     void workerLoopRecordsReasonToolAnswer(@TempDir Path tmp) throws Exception {
-        AgentRole role = newRole(tmp, new SequenceLlm(false));
+        Role role = newRole(tmp, new SequenceLlm(false));
         AgentSystem system = role.system();
         ChatStore store = system.chatStore;
         try {
             system.pool.start();
-            AgentRole.Task task = new AgentRole.Task(3, "Check the current time and report it", "test",
+            Role.Task task = new Role.Task(3, "Check the current time and report it", "test",
                     Map.of("payload", Map.of("text", "what time is it?")));
             role.addTask(task);
             awaitTask(task);
 
-            assertEquals(AgentRole.STATUS_DONE, task.status);
+            assertEquals(Role.STATUS_DONE, task.status);
             List<Map<String, Object>> msgs = messagesOf(store);
             List<String> kinds = new ArrayList<>();
             for (Map<String, Object> m : msgs) {
@@ -125,7 +125,7 @@ class AgentRoleTraceTest {
             assertTrue(((String) answer.get("text")).contains("10:00 am"));
             @SuppressWarnings("unchecked")
             Map<String, Object> answerExtra = (Map<String, Object>) answer.get("extra");
-            assertEquals(AgentRole.STATUS_DONE, answerExtra.get("status"));
+            assertEquals(Role.STATUS_DONE, answerExtra.get("status"));
             assertNotNull(answerExtra.get("taskId"));
         } finally {
             system.pool.shutdown(false);
@@ -134,16 +134,16 @@ class AgentRoleTraceTest {
 
     @Test
     void failedTaskRecordsFailedAnswer(@TempDir Path tmp) throws Exception {
-        AgentRole role = newRole(tmp, new SequenceLlm(true));
+        Role role = newRole(tmp, new SequenceLlm(true));
         AgentSystem system = role.system();
         ChatStore store = system.chatStore;
         try {
             system.pool.start();
-            AgentRole.Task task = new AgentRole.Task(3, "Query something", "test", Map.of());
+            Role.Task task = new Role.Task(3, "Query something", "test", Map.of());
             role.addTask(task);
             awaitTask(task);
 
-            assertEquals(AgentRole.STATUS_FAILED, task.status);
+            assertEquals(Role.STATUS_FAILED, task.status);
             List<Map<String, Object>> msgs = messagesOf(store);
             assertTrue(msgs.size() >= 1);
             Map<String, Object> answer = msgs.get(msgs.size() - 1);
@@ -151,7 +151,7 @@ class AgentRoleTraceTest {
             assertTrue(((String) answer.get("text")).startsWith("[ERROR]"));
             @SuppressWarnings("unchecked")
             Map<String, Object> extra = (Map<String, Object>) answer.get("extra");
-            assertEquals(AgentRole.STATUS_FAILED, extra.get("status"));
+            assertEquals(Role.STATUS_FAILED, extra.get("status"));
         } finally {
             system.pool.shutdown(false);
         }

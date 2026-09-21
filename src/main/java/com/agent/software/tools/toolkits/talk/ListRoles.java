@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.talk;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.Tool;
 
@@ -44,7 +44,7 @@ public class ListRoles extends Tool {
     /** Build the team roster (fixed format, reused by the talk description and the list_roles tool). */
     public static String buildTeamRoster(RolePool pool) {
         List<String> rosterLines = new ArrayList<>();
-        for (AgentRole r : pool.allRoles()) {
+        for (Role r : pool.allRoles()) {
             String resp = !r.responsibilities.isEmpty() ? r.responsibilities : r.title;
             String group = (r.group == null ? "" : r.group).strip();
             if (group.isEmpty()) {

@@ -4,8 +4,7 @@ import com.agent.software.AgentSystem;
 import com.agent.software.core.Types;
 import com.agent.software.io.StdInput;
 import com.agent.software.llm.LLM;
-import com.agent.software.role.AgentRole;
-import com.agent.software.role.RoleLoader;
+import com.agent.software.role.Role;
 import com.agent.software.tools.toolkits.memory.Memory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -96,20 +95,20 @@ class ConversationEndToEndTest {
         }
     }
 
-    private AgentRole newRole(Path dataDir, LLM llm) {
+    private Role newRole(Path dataDir, LLM llm) {
         // autoToolkits=false → no computers / MCP servers; the worker still registers the talk toolkit
         AgentSystem system = new AgentSystem(dataDir, null, List.of("backend_dev_1"),
                 1.0, false, new StdInput());
-        AgentRole role = system.getRole("backend_dev_1");
+        Role role = system.getRole("backend_dev_1");
         role.setLlm(llm);
         return role;
     }
 
-    private static void awaitTask(AgentRole.Task task) throws InterruptedException {
+    private static void awaitTask(Role.Task task) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 10_000;
         while (System.currentTimeMillis() < deadline) {
-            if (!AgentRole.STATUS_PENDING.equals(task.status)
-                    && !AgentRole.STATUS_RUNNING.equals(task.status)) {
+            if (!Role.STATUS_PENDING.equals(task.status)
+                    && !Role.STATUS_RUNNING.equals(task.status)) {
                 return;
             }
             Thread.sleep(20);
@@ -122,18 +121,18 @@ class ConversationEndToEndTest {
         ScriptedLlm llm = new ScriptedLlm(List.of(
                 Step.answer("First task answer."),
                 Step.answer("Second task answer.")));
-        AgentRole role = newRole(tmp, llm);
+        Role role = newRole(tmp, llm);
         AgentSystem system = role.system();
         try {
             system.pool.start();
-            AgentRole.Task task1 = new AgentRole.Task(3, "Implement login", "test", Map.of());
-            AgentRole.Task task2 = new AgentRole.Task(3, "Fix review comments", "test", Map.of());
+            Role.Task task1 = new Role.Task(3, "Implement login", "test", Map.of());
+            Role.Task task2 = new Role.Task(3, "Fix review comments", "test", Map.of());
             role.addTask(task1);
             awaitTask(task1);
             role.addTask(task2);
             awaitTask(task2);
 
-            assertEquals(AgentRole.STATUS_DONE, task2.status);
+            assertEquals(Role.STATUS_DONE, task2.status);
             assertEquals(2, llm.received.size());
             List<Map<String, Object>> second = llm.received.get(1);
             // system + committed [user task1, assistant answer1] + new user task
@@ -155,17 +154,17 @@ class ConversationEndToEndTest {
         ScriptedLlm llm = new ScriptedLlm(List.of(
                 Step.tool("get_time", "{}"),
                 Step.answer("It is 10:00 am now.")));
-        AgentRole role = newRole(tmp, llm);
+        Role role = newRole(tmp, llm);
         AgentSystem system = role.system();
         role.addSingleTool("get_time", "Get the current time", Map.of("type", "object"),
                 args -> "10:00 am", "test");
         try {
             system.pool.start();
-            AgentRole.Task task = new AgentRole.Task(3, "Check the current time and report it", "test",
+            Role.Task task = new Role.Task(3, "Check the current time and report it", "test",
                     Map.of("payload", Map.of("text", "what time is it?")));
             role.addTask(task);
             awaitTask(task);
-            assertEquals(AgentRole.STATUS_DONE, task.status);
+            assertEquals(Role.STATUS_DONE, task.status);
 
             // the committed assistant message carries a compact recap of the tool outcome
             Conversation conv = role.conversation();
@@ -187,23 +186,23 @@ class ConversationEndToEndTest {
                 Step.answer("Job done."),
                 Step.tool("summary", "{\"content\":\"Today I implemented the login page.\",\"day\":1}"),
                 Step.answer("Summary saved.")));
-        AgentRole role = newRole(tmp, llm);
+        Role role = newRole(tmp, llm);
         AgentSystem system = role.system();
         role.addToolkit(new Memory(role));   // registers the summary tool on the role
         try {
             system.pool.start();
             // normal daytime task → its exchange is committed to the day dialogue
-            AgentRole.Task task1 = new AgentRole.Task(3, "Implement the login page", "test", Map.of());
+            Role.Task task1 = new Role.Task(3, "Implement the login page", "test", Map.of());
             role.addTask(task1);
             awaitTask(task1);
-            assertEquals(AgentRole.STATUS_DONE, task1.status);
+            assertEquals(Role.STATUS_DONE, task1.status);
             assertEquals(2, role.conversation().historySize());
 
             // shift-end task → the role calls summary(), which persists the recap and closes the dialogue
-            AgentRole.Task task2 = new AgentRole.Task(3, "Shift end: please summarize today's work with the summary tool", "time", Map.of());
+            Role.Task task2 = new Role.Task(3, "Shift end: please summarize today's work with the summary tool", "time", Map.of());
             role.addTask(task2);
             awaitTask(task2);
-            assertEquals(AgentRole.STATUS_DONE, task2.status);
+            assertEquals(Role.STATUS_DONE, task2.status);
             assertEquals(Types.AgentState.OFF_DUTY, role.state);
 
             Conversation conv = role.conversation();

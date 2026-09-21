@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.skill;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 
 /**
@@ -11,21 +11,21 @@ import com.agent.software.tools.Toolkit;
  */
 public class Skill extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final SkillManager manager;
 
-    public Skill(AgentRole agentRole, SkillManager manager) {
-        this.agentRole = agentRole;
+    public Skill(Role role, SkillManager manager) {
+        this.role = role;
         this.manager = manager;
         addTool(new SkillSearch(manager));
         addTool(new SkillList(manager));
-        addTool(new SkillAdd(agentRole, manager));
-        addTool(new SkillRemove(agentRole, manager));
-        addTool(new SkillMySkills(agentRole, manager));
+        addTool(new SkillAdd(role, manager));
+        addTool(new SkillRemove(role, manager));
+        addTool(new SkillMySkills(role, manager));
     }
 
-    public Skill(AgentRole agentRole) {
-        this(agentRole, new SkillManager());
+    public Skill(Role role) {
+        this(role, new SkillManager());
     }
 
     @Override

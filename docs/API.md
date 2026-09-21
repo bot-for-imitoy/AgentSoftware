@@ -277,7 +277,7 @@ File: `src/core/roles.py`
 `Task(description, urgency=Urgency.NORMAL, source="", payload={})`
 Fields: `task_id` (auto), `status` (pending/running/done/failed), `result`, `tokens_consumed`, `assigned_role`.
 
-### `AgentRole` (dataclass)
+### `Role` (dataclass)
 Role definition + task queue + LLM binding.
 
 **Role attributes**:

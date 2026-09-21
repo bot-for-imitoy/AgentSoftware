@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.skill;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -12,12 +12,12 @@ import java.util.Map;
  */
 public class SkillAdd extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final SkillManager manager;
 
-    public SkillAdd(AgentRole agentRole, SkillManager manager) {
+    public SkillAdd(Role role, SkillManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -45,6 +45,6 @@ public class SkillAdd extends Tool {
         if (name.isEmpty()) {
             return "skill_add: Error: needs skill_name";
         }
-        return this.manager.addSkill(agentRole, name);
+        return this.manager.addSkill(role, name);
     }
 }

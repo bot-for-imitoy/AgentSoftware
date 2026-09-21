@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.skill;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -11,12 +11,12 @@ import java.util.Map;
  */
 public class SkillRemove extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final SkillManager manager;
 
-    public SkillRemove(AgentRole agentRole, SkillManager manager) {
+    public SkillRemove(Role role, SkillManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -44,6 +44,6 @@ public class SkillRemove extends Tool {
         if (name.isEmpty()) {
             return "skill_remove: Error: needs skill_name";
         }
-        return this.manager.removeSkill(agentRole, name);
+        return this.manager.removeSkill(role, name);
     }
 }

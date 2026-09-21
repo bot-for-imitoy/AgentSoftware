@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.memory;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.store.NoteStore;
 import com.agent.software.tools.Toolkit;
 
@@ -13,18 +13,18 @@ import com.agent.software.tools.Toolkit;
 public class Memory extends Toolkit {
 
     private final NoteStore noteStore;
-    private final AgentRole agentRole;
+    private final Role role;
 
     public Memory(NoteStore noteStore) {
         this.noteStore = noteStore;
-        this.agentRole = null;
-        addTool(new Summary(noteStore, agentRole));
+        this.role = null;
+        addTool(new Summary(noteStore, role));
     }
 
-    public Memory(AgentRole agentRole) {
-        this.noteStore = agentRole.noteStore();
-        this.agentRole = agentRole;
-        addTool(new Summary(noteStore, agentRole));
+    public Memory(Role role) {
+        this.noteStore = role.noteStore();
+        this.role = role;
+        addTool(new Summary(noteStore, role));
     }
 
     @Override

@@ -73,7 +73,7 @@ class RoleLoaderJsonTest {
 
     @Test
     void testTemplateSpotChecks() {
-        AgentRole architect = RoleLoader.getTemplate("architect");
+        Role architect = RoleLoader.getTemplate("architect");
         assertEquals("Wang Jianguo", architect.name);
         assertEquals("System Architect", architect.title);
         assertEquals("Architecture & Release Group", architect.group);
@@ -81,20 +81,20 @@ class RoleLoaderJsonTest {
         assertTrue(architect.skills.contains("C4 Model"));
         assertTrue(architect.interestKeywords.contains("architecture"));
 
-        AgentRole ceo = RoleLoader.getTemplate("CEO");
+        Role ceo = RoleLoader.getTemplate("CEO");
         assertEquals("Lin Zong", ceo.name);
         assertTrue(ceo.isDefault);
         assertEquals("Leadership Group", ceo.group);
 
-        AgentRole rm = RoleLoader.getTemplate("release_manager");
+        Role rm = RoleLoader.getTemplate("release_manager");
         assertTrue(rm.systemPromptExtra.contains("/mnt/drive/Public/work/"));
         assertTrue(rm.systemPromptExtra.contains("git init"));
 
-        AgentRole lead = RoleLoader.getTemplate("frontend_lead");
+        Role lead = RoleLoader.getTemplate("frontend_lead");
         assertTrue(lead.systemPromptExtra.contains("Fang Jinyan"));
         assertTrue(lead.systemPromptExtra.contains("review"));
 
-        AgentRole tester = RoleLoader.getTemplate("tester_20");
+        Role tester = RoleLoader.getTemplate("tester_20");
         assertEquals("Ruan Zhiming", tester.name);
         assertEquals("Testing Group", tester.group);
     }
@@ -103,7 +103,7 @@ class RoleLoaderJsonTest {
     @Test
     void testOnlyManagementRolesAreDefault() {
         Set<String> defaultIds = Set.of("CEO", "COO", "HR", "CFO");
-        for (Map.Entry<String, Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, Supplier<Role>> e : RoleLoader.TEMPLATES.entrySet()) {
             assertEquals(defaultIds.contains(e.getKey()),
                     e.getValue().get().isDefault, e.getKey() + " has incorrect is_default");
         }
@@ -138,16 +138,16 @@ class RoleLoaderJsonTest {
                   }
                 ]
                 """;
-        List<AgentRole> roles = RoleLoader.loadFromJson(json);
+        List<Role> roles = RoleLoader.loadFromJson(json);
         assertEquals(2, roles.size());
-        AgentRole a = roles.get(0);
+        Role a = roles.get(0);
         assertEquals("alpha", a.roleId);
         assertEquals("Zhang San", a.name);
         assertEquals("Testing Group", a.group);
         assertTrue(a.skills.contains("testing"));
         assertTrue(a.interestKeywords.contains("quality"));
         assertEquals("Keep output concise", a.systemPromptExtra);
-        AgentRole b = roles.get(1);
+        Role b = roles.get(1);
         assertEquals("beta", b.roleId);
         assertFalse(b.isDefault);
         assertEquals("", b.systemPromptExtra);  // extra not given → default empty string
@@ -171,7 +171,7 @@ class RoleLoaderJsonTest {
                   }
                 }
                 """;
-        Map<String, Supplier<AgentRole>> table = RoleLoader.templatesFromJson(json);
+        Map<String, Supplier<Role>> table = RoleLoader.templatesFromJson(json);
         assertEquals(Set.of("alpha"), table.keySet());
         assertEquals("alpha", table.get("alpha").get().roleId);
         assertEquals("Zhang San", table.get("alpha").get().name);
@@ -192,7 +192,7 @@ class RoleLoaderJsonTest {
                   "interest_keywords": ["b"]
                 }
                 """;
-        List<AgentRole> roles = RoleLoader.loadFromJson(json);
+        List<Role> roles = RoleLoader.loadFromJson(json);
         assertEquals(1, roles.size());
         assertEquals("solo", roles.get(0).roleId);
         assertEquals("Standalone Role", roles.get(0).name);
@@ -214,7 +214,7 @@ class RoleLoaderJsonTest {
                   }
                 }
                 """, StandardCharsets.UTF_8);
-        List<AgentRole> roles = RoleLoader.loadFromJson(f);
+        List<Role> roles = RoleLoader.loadFromJson(f);
         assertEquals(1, roles.size());
         assertEquals("file_role", roles.get(0).roleId);
     }
@@ -240,7 +240,7 @@ class RoleLoaderJsonTest {
         m.put("computer_kwargs", Map.of("cpu", "2"));
         m.put("salience_threshold", 0.6);
         m.put("state", "WAIT");
-        AgentRole r = RoleLoader.fromJsonMap(m);
+        Role r = RoleLoader.fromJsonMap(m);
         assertEquals("rich", r.roleId);
         assertEquals("Rich Fields", r.name);
         assertEquals("fuziduan", r.username);
@@ -271,7 +271,7 @@ class RoleLoaderJsonTest {
         m.put("personality", "P");
         m.put("skills", List.of("s"));
         m.put("interest_keywords", List.of("k"));
-        AgentRole r = RoleLoader.fromJsonMap(m);
+        Role r = RoleLoader.fromJsonMap(m);
         assertEquals("derived", r.username);
         assertEquals(1100, r.uid);
     }
@@ -281,8 +281,8 @@ class RoleLoaderJsonTest {
     /** After a toJsonMap → fromJsonMap round trip, a single template's object equals field by field. */
     @Test
     void testToJsonMapRoundTrip() {
-        AgentRole src = RoleLoader.getTemplate("CEO");
-        AgentRole back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
+        Role src = RoleLoader.getTemplate("CEO");
+        Role back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
         assertRoleEquals(src, back);
     }
 
@@ -290,8 +290,8 @@ class RoleLoaderJsonTest {
     @Test
     void testToJsonMapRoundTripAllTemplates() {
         for (String rid : RoleLoader.TEMPLATES.keySet()) {
-            AgentRole src = RoleLoader.getTemplate(rid);
-            AgentRole back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
+            Role src = RoleLoader.getTemplate(rid);
+            Role back = RoleLoader.fromJsonMap(RoleLoader.toJsonMap(src));
             assertRoleEquals(src, back);
         }
     }
@@ -299,7 +299,7 @@ class RoleLoaderJsonTest {
     /** toJsonMap omits default-valued fields (matching the built-in template file shape). */
     @Test
     void testToJsonMapOmitsDefaults() {
-        AgentRole architect = RoleLoader.getTemplate("architect");
+        Role architect = RoleLoader.getTemplate("architect");
         Map<String, Object> m = RoleLoader.toJsonMap(architect);
         assertNull(m.get("is_default"));
         assertNull(m.get("email"));
@@ -334,7 +334,7 @@ class RoleLoaderJsonTest {
 
     // ── Helpers ───────────────────────────────────────────────
 
-    private static void assertRoleEquals(AgentRole a, AgentRole b) {
+    private static void assertRoleEquals(Role a, Role b) {
         assertEquals(a.name, b.name);
         assertEquals(a.roleId, b.roleId);
         assertEquals(a.username, b.username);

@@ -1,6 +1,6 @@
 package com.agent.software.tools;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.toolkits.talk.ListRoles;
 import com.agent.software.tools.toolkits.talk.Talk;
@@ -47,7 +47,7 @@ class TalkWaitTest {
     private static Map<String, Talk> setupRoles(RolePool pool, String... roleIds) {
         Map<String, Talk> toolkits = new LinkedHashMap<>();
         for (String rid : roleIds) {
-            AgentRole role = AgentRole.builder().name("Role " + rid).roleId(rid).build();
+            Role role = Role.builder().name("Role " + rid).roleId(rid).build();
             pool.addRole(role);
             role.setPool(pool);  // simulate the back-reference after start()
             toolkits.put(rid, new Talk(role, pool));
@@ -72,8 +72,8 @@ class TalkWaitTest {
     @Test
     void testRosterHidesRoleId() {
         RolePool pool = new RolePool();
-        pool.addRole(AgentRole.builder().name("Zhang San").roleId("dev_1").build());
-        pool.addRole(AgentRole.builder().name("Li Si").roleId("dev_2").build());
+        pool.addRole(Role.builder().name("Zhang San").roleId("dev_1").build());
+        pool.addRole(Role.builder().name("Li Si").roleId("dev_2").build());
         String roster = ListRoles.buildTeamRoster(pool);
         assertTrue(roster.contains("Zhang San") && roster.contains("Li Si"));
         assertFalse(roster.contains("dev_1"));
@@ -85,7 +85,7 @@ class TalkWaitTest {
     void testTalkByPersonName() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        AgentRole roleB = pool.getRole("B");
+        Role roleB = pool.getRole("B");
         String result = talk(tks, "A", "Role B", "send-by-name test", false);
         assertTrue(result.contains("message sent to Role B"));
         assertEquals(1, roleB.queueDepth());
@@ -106,7 +106,7 @@ class TalkWaitTest {
     void testWaitRoundtrip() throws InterruptedException {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        AgentRole roleA = pool.getRole("A");
+        Role roleA = pool.getRole("A");
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "What's the progress?", true)));
         t.start();
@@ -127,14 +127,14 @@ class TalkWaitTest {
     @Test
     void testWaitRoundtripWithRealNames() throws InterruptedException {
         RolePool pool = new RolePool();
-        AgentRole a = AgentRole.builder().name("Wang Jianguo").roleId("architect").build();
-        AgentRole b = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").build();
+        Role a = Role.builder().name("Wang Jianguo").roleId("architect").build();
+        Role b = Role.builder().name("Guo Xiaodong").roleId("tester_1").build();
         pool.addRole(a);
         pool.addRole(b);
         a.setPool(pool);
         b.setPool(pool);
         Map<String, Talk> tks = new LinkedHashMap<>();
-        for (AgentRole r : new AgentRole[]{a, b}) {
+        for (Role r : new Role[]{a, b}) {
             tks.put(r.roleId, new Talk(r, pool));
         }
         AtomicReference<String> result = new AtomicReference<>();
@@ -161,7 +161,7 @@ class TalkWaitTest {
     void testAbortWaitUnblocksInfiniteWait() throws InterruptedException {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        AgentRole roleA = pool.getRole("A");
+        Role roleA = pool.getRole("A");
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "How's the progress?", true)));
         t.start();
@@ -186,8 +186,8 @@ class TalkWaitTest {
     void testMutualWaitDecomposed() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        AgentRole roleA = pool.getRole("A");
-        AgentRole roleB = pool.getRole("B");
+        Role roleA = pool.getRole("A");
+        Role roleB = pool.getRole("B");
         roleA.beginWait("B");  // A is waiting for B's reply
         try {
             String result = talk(tks, "B", "A", "Got it, handling it right away", true);
@@ -205,9 +205,9 @@ class TalkWaitTest {
     void testDeadlockCycleRejected() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B", "C");
-        AgentRole roleA = pool.getRole("A");
-        AgentRole roleB = pool.getRole("B");
-        AgentRole roleC = pool.getRole("C");
+        Role roleA = pool.getRole("A");
+        Role roleB = pool.getRole("B");
+        Role roleC = pool.getRole("C");
         roleB.beginWait("C");
         roleC.beginWait("A");
         try {
@@ -226,14 +226,14 @@ class TalkWaitTest {
     void testWaitMessageCarriesWaitingHint() throws InterruptedException {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B");
-        AgentRole roleA = pool.getRole("A");
-        AgentRole roleB = pool.getRole("B");
+        Role roleA = pool.getRole("A");
+        Role roleB = pool.getRole("B");
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "A", "B", "How's the progress?", true)));
         t.start();
         try {
             assertTrue(waitUntil(() -> roleB.queueDepth() == 1, 5000), "B did not receive the message");
-            AgentRole.Task task = roleB.popTask();
+            Role.Task task = roleB.popTask();
             assertTrue(task != null && task.description.contains("is waiting for your reply"));
             assertTrue(task.description.contains("Role A"));
             assertEquals(Boolean.TRUE, task.context.get("waiting"));
@@ -258,7 +258,7 @@ class TalkWaitTest {
     void testThirdPartyMessageNotDeliveredAsReply() {
         RolePool pool = new RolePool();
         Map<String, Talk> tks = setupRoles(pool, "A", "B", "C");
-        AgentRole roleA = pool.getRole("A");
+        Role roleA = pool.getRole("A");
         roleA.beginWait("B");
         try {
             String result = talk(tks, "C", "A", "Regular message", false);
@@ -275,13 +275,13 @@ class TalkWaitTest {
 
     @Test
     void testTalkAttachmentValidatedAndCarried() {
-        AgentRole.JOURNAL_DIR = tmp.resolve("journals");
+        Role.JOURNAL_DIR = tmp.resolve("journals");
         RolePool pool = new RolePool();
         Map<String, Object> kw = new LinkedHashMap<>();
         kw.put("drive_dir", tmp.resolve("drive").toString());
-        AgentRole a = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1")
+        Role a = Role.builder().name("Guo Xiaodong").roleId("tester_1")
                 .computerKind("local").computerKwargs(kw).build();
-        AgentRole b = AgentRole.builder().name("Wang Jianguo").roleId("architect")
+        Role b = Role.builder().name("Wang Jianguo").roleId("architect")
                 .computerKind("local").computerKwargs(kw).build();
         pool.addRole(a);
         pool.addRole(b);
@@ -307,7 +307,7 @@ class TalkWaitTest {
         okArgs.put("attachment", "drafts/design-doc.md");
         String r2 = talkA.trigger("talk", okArgs);
         assertTrue(r2.contains("message sent to Wang Jianguo"));
-        AgentRole.Task task = b.popTask();
+        Role.Task task = b.popTask();
         assertTrue(task != null && task.description.contains("[Attachment: drafts/design-doc.md]"));
         assertTrue(task.description.contains("mnt/drive"));
         assertEquals("drafts/design-doc.md", task.context.get("attachment"));

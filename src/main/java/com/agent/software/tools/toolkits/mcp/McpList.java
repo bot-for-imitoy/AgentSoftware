@@ -1,7 +1,7 @@
 package com.agent.software.tools.toolkits.mcp;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.role.ToolRegistry.ToolDef;
 import com.agent.software.tools.Tool;
@@ -16,11 +16,11 @@ import java.util.Map;
  */
 public class McpList extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public McpList(AgentRole agentRole) {
+    public McpList(Role role) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
     }
 
     @Override
@@ -35,7 +35,7 @@ public class McpList extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        Computer computer = agentRole.computer();
+        Computer computer = role.computer();
         List<String> avail = new ArrayList<>();
         for (ToolDef td : computer.iterMcpTools()) {
             avail.add("- " + td.name + ": " + td.description);

@@ -1,8 +1,7 @@
 package com.agent.software.tools.toolkits.pc;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.computers.ComputerManager;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.tools.Toolkit;
 
@@ -29,8 +28,8 @@ public class Pc extends Toolkit {
         addTool(new Reboot(computer));
     }
 
-    public Pc(AgentRole agentRole) {
-        this(agentRole.computer(), agentRole.computerManager());
+    public Pc(Role role) {
+        this(role.computer(), role.computerManager());
     }
 
     @Override

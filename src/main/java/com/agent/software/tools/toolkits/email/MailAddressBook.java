@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.role.RolePool;
 import com.agent.software.services.MailService;
@@ -17,12 +17,12 @@ import java.util.Map;
  */
 public class MailAddressBook extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MailService mailService;
 
-    public MailAddressBook(AgentRole agentRole, MailService mailService) {
+    public MailAddressBook(Role role, MailService mailService) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.mailService = mailService;
     }
 
@@ -40,14 +40,14 @@ public class MailAddressBook extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        RolePool pool = agentRole.pool();
+        RolePool pool = role.pool();
         if (pool == null) {
             return "mail_address_book: Error: the current role is not bound to a role pool, so the address book is unavailable.";
         }
         Object ogroup = args.get("group");
         String groupFilter = ogroup instanceof String s ? s.strip() : "";
-        Map<String, List<AgentRole>> byGroup = new LinkedHashMap<>();
-        for (AgentRole r : pool.allRoles()) {
+        Map<String, List<Role>> byGroup = new LinkedHashMap<>();
+        for (Role r : pool.allRoles()) {
             String g = (r.group == null ? "" : r.group).strip();
             if (g.isEmpty()) {
                 g = "Ungrouped";
@@ -64,9 +64,9 @@ public class MailAddressBook extends Tool {
                 continue;
             }
             lines.add("[" + g + "]");
-            List<AgentRole> members = byGroup.get(g);
+            List<Role> members = byGroup.get(g);
             members.sort((a, b) -> a.name.compareTo(b.name));
-            for (AgentRole r : members) {
+            for (Role r : members) {
                 String desc = !r.title.isEmpty() ? r.title
                         : (!r.responsibilities.isEmpty() ? r.responsibilities : "team member");
                 lines.add("  - " + r.name + " <" + mailService.emailFor(r) + "> — " + desc);

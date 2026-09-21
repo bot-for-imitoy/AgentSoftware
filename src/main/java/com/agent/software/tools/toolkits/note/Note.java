@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.note;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.store.NoteStore;
 import com.agent.software.tools.Toolkit;
 
@@ -23,8 +23,8 @@ public class Note extends Toolkit {
         addTool(new DeleteNote(noteStore));
     }
 
-    public Note(AgentRole agentRole) {
-        this(agentRole.noteStore());
+    public Note(Role role) {
+        this(role.noteStore());
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.mcp;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.ArrayList;
@@ -13,12 +13,12 @@ import java.util.Map;
  */
 public class McpMyTools extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MCPManager manager;
 
-    public McpMyTools(AgentRole agentRole, MCPManager manager) {
+    public McpMyTools(Role role, MCPManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -34,7 +34,7 @@ public class McpMyTools extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        List<Map<String, String>> mine = this.manager.listRoleTools(agentRole);
+        List<Map<String, String>> mine = this.manager.listRoleTools(role);
         if (mine.isEmpty()) {
             return "mcp_my_tools: you have not added any MCP tools yet. Use mcp_search / mcp_list to find tools and mcp_add to add them.";
         }

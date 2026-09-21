@@ -1,6 +1,6 @@
 package com.agent.software.services;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.toolkits.email.Email;
@@ -27,10 +27,10 @@ class MailServiceTest {
      * Test role constructor: when the name and id match the template, the username is taken
      * directly from the template JSON (the old PinyinMap's pinyin derivation now lives in its username field).
      */
-    private static AgentRole role(String name, String roleId, String group) {
-        AgentRole.Builder b = AgentRole.builder().name(name).roleId(roleId).group(group);
+    private static Role role(String name, String roleId, String group) {
+        Role.Builder b = Role.builder().name(name).roleId(roleId).group(group);
         if (RoleLoader.TEMPLATES.containsKey(roleId)) {
-            AgentRole t = RoleLoader.getTemplate(roleId);
+            Role t = RoleLoader.getTemplate(roleId);
             if (t.name.equals(name)) {
                 b.username(t.username);
             }
@@ -49,14 +49,14 @@ class MailServiceTest {
 
     @Test
     void testEmailAddressFromUsernameAndSuffix() {
-        AgentRole r = role("Guo Xiaodong", "tester_1", "");
+        Role r = role("Guo Xiaodong", "tester_1", "");
         assertEquals("guoxiaodong@example.com", service("example.com").emailFor(r));
         assertEquals("guoxiaodong@company.cn", service("company.cn").emailFor(r));
     }
 
     @Test
     void testEmailExplicitFieldWins() {
-        AgentRole r = role("Guo Xiaodong", "tester_1", "");
+        Role r = role("Guo Xiaodong", "tester_1", "");
         r.email = "dx.guo@corp.cn";
         assertEquals("dx.guo@corp.cn", service("company.com").emailFor(r));
     }
@@ -66,8 +66,8 @@ class MailServiceTest {
     @Test
     void testVirtualSendAndInbox() {
         MailService svc = service("company.com");
-        AgentRole a = role("Guo Xiaodong", "tester_1", "Testing Group");
-        AgentRole b = role("Wang Jianguo", "architect", "Architecture & Release Group");
+        Role a = role("Guo Xiaodong", "tester_1", "Testing Group");
+        Role b = role("Wang Jianguo", "architect", "Architecture & Release Group");
         String result = svc.send(svc.emailFor(a), a.name, List.of(svc.emailFor(b)),
                 "Test report", "Found a login page bug; see the attachment for details.", null);
         assertTrue(result.contains("Email sent to"));
@@ -87,9 +87,9 @@ class MailServiceTest {
     @Test
     void testSendToMultipleAndCc() {
         MailService svc = service("company.com");
-        AgentRole a = role("Lin Zong", "CEO", "Leadership Group");
-        AgentRole b = role("Chen Zong", "COO", "Leadership Group");
-        AgentRole c = role("Wang Renshi", "HR", "Leadership Group");
+        Role a = role("Lin Zong", "CEO", "Leadership Group");
+        Role b = role("Chen Zong", "COO", "Leadership Group");
+        Role c = role("Wang Renshi", "HR", "Leadership Group");
         svc.send(svc.emailFor(a), a.name, List.of(svc.emailFor(b)),
                 "Weekly meeting agenda", "We will meet tomorrow morning.", List.of(svc.emailFor(c)));
         assertEquals(1, svc.inbox(svc.emailFor(b), null).size());
@@ -103,8 +103,8 @@ class MailServiceTest {
     @Test
     void testPersistenceRoundtrip() {
         MailService svc = service("company.com");
-        AgentRole a = role("Guo Xiaodong", "tester_1", "");
-        AgentRole b = role("Wang Jianguo", "architect", "");
+        Role a = role("Guo Xiaodong", "tester_1", "");
+        Role b = role("Wang Jianguo", "architect", "");
         svc.send(svc.emailFor(a), a.name, List.of(svc.emailFor(b)), "Archive", "Can I still see this after a restart?", null);
         MailService svc2 = service("company.com");
         List<MailService.MailMessage> inbox = svc2.inbox(svc.emailFor(b), null);
@@ -125,7 +125,7 @@ class MailServiceTest {
 
     // ── email toolkit (LLM call surface) ──────────────────────
 
-    private Email mailToolkit(AgentRole sender, RolePool pool, MailService svc) {
+    private Email mailToolkit(Role sender, RolePool pool, MailService svc) {
         sender.setPool(pool);
         return new Email(sender, svc);
     }
@@ -133,8 +133,8 @@ class MailServiceTest {
     @Test
     void testSendEmailToolByPersonName() {
         RolePool pool = new RolePool();
-        AgentRole a = role("Guo Xiaodong", "tester_1", "Testing Group");
-        AgentRole b = role("Wang Jianguo", "architect", "Architecture & Release Group");
+        Role a = role("Guo Xiaodong", "tester_1", "Testing Group");
+        Role b = role("Wang Jianguo", "architect", "Architecture & Release Group");
         pool.addRole(a);
         pool.addRole(b);
         MailService svc = service("company.com");
@@ -150,7 +150,7 @@ class MailServiceTest {
     @Test
     void testSendEmailUnknownRecipient() {
         RolePool pool = new RolePool();
-        AgentRole a = role("Guo Xiaodong", "tester_1", "Testing Group");
+        Role a = role("Guo Xiaodong", "tester_1", "Testing Group");
         pool.addRole(a);
         MailService svc = service("company.com");
         Email email = mailToolkit(a, pool, svc);
@@ -163,8 +163,8 @@ class MailServiceTest {
     @Test
     void testReadAndOpenMailTools() {
         RolePool pool = new RolePool();
-        AgentRole a = role("Guo Xiaodong", "tester_1", "Testing Group");
-        AgentRole b = role("Wang Jianguo", "architect", "Architecture & Release Group");
+        Role a = role("Guo Xiaodong", "tester_1", "Testing Group");
+        Role b = role("Wang Jianguo", "architect", "Architecture & Release Group");
         pool.addRole(a);
         pool.addRole(b);
         MailService svc = service("company.com");
@@ -189,9 +189,9 @@ class MailServiceTest {
     @Test
     void testAddressBookGroupsAndEmails() {
         RolePool pool = new RolePool();
-        AgentRole a = role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group");
-        AgentRole b = role("Chen Siyuan", "frontend_lead", "Frontend Development Group");
-        AgentRole c = role("Lin Zong", "CEO", "Leadership Group");
+        Role a = role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group");
+        Role b = role("Chen Siyuan", "frontend_lead", "Frontend Development Group");
+        Role c = role("Lin Zong", "CEO", "Leadership Group");
         pool.addRole(a);
         pool.addRole(b);
         pool.addRole(c);

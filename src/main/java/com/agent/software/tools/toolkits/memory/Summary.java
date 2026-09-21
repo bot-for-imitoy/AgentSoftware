@@ -1,7 +1,7 @@
 package com.agent.software.tools.toolkits.memory;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.store.NoteStore;
 import com.agent.software.core.Types;
@@ -23,12 +23,12 @@ public class Summary extends Tool {
     private static final Logger logger = LoggerFactory.getLogger(Summary.class);
 
     private final NoteStore noteStore;
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public Summary(NoteStore noteStore, AgentRole agentRole) {
+    public Summary(NoteStore noteStore, Role role) {
         super();
         this.noteStore = noteStore;
-        this.agentRole = agentRole;
+        this.role = role;
     }
 
     @Override
@@ -57,35 +57,35 @@ public class Summary extends Tool {
             return "summary: Error: needs summary content";
         }
         Integer day = toInt(args.get("day"));
-        if (day == null && agentRole != null) {
-            day = agentRole.timeManager().dayNumber();
+        if (day == null && role != null) {
+            day = role.timeManager().dayNumber();
         }
         if (day == null) {
             day = 1;
         }
         Path path = this.noteStore.saveSummary(content, day);
-        if (agentRole != null) {
-            agentRole.journal("Saved summary for day " + day + " (" + content.length() + " characters)");
-            if (agentRole.state != Types.AgentState.OFF_DUTY) {
-                agentRole.setState(Types.AgentState.OFF_DUTY);
-                logger.info("[{}] summary complete, role switched to OFF_DUTY", agentRole.roleId);
+        if (role != null) {
+            role.journal("Saved summary for day " + day + " (" + content.length() + " characters)");
+            if (role.state != Types.AgentState.OFF_DUTY) {
+                role.setState(Types.AgentState.OFF_DUTY);
+                logger.info("[{}] summary complete, role switched to OFF_DUTY", role.roleId);
             }
             // Conversation management (role ↔ LLM API): the day's recap now lives in the summary
             // note above, so close the day dialogue — clear the context and mark the day closed
             // (the in-flight "summary saved" exchange will not be appended afterwards)
             try {
-                agentRole.conversation().closeDay(day);
+                role.conversation().closeDay(day);
             } catch (Exception e) {
-                logger.warn("[{}] failed to close the day conversation", agentRole.roleId, e);
+                logger.warn("[{}] failed to close the day conversation", role.roleId, e);
             }
             try {
-                Computer comp = agentRole.computerIfCreated();
+                Computer comp = role.computerIfCreated();
                 if (comp != null && comp.isOn()) {
                     comp.powerOff();
-                    logger.info("[{}] end of day, computer powered off automatically", agentRole.roleId);
+                    logger.info("[{}] end of day, computer powered off automatically", role.roleId);
                 }
             } catch (Exception e) {
-                logger.warn("[{}] failed to power off the computer automatically", agentRole.roleId);
+                logger.warn("[{}] failed to power off the computer automatically", role.roleId);
             }
             return "summary: Day " + day + " summary saved: " + path
                     + ". You are now OFF_DUTY, computer powered off.";

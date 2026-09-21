@@ -2,7 +2,7 @@ package com.agent.software;
 
 import com.agent.software.io.StdInput;
 import com.agent.software.llm.LLM;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -64,8 +64,8 @@ class AgentSystemPauseTest {
         return cond.getAsBoolean();
     }
 
-    private static AgentRole.Task task(String desc) {
-        return new AgentRole.Task(3, desc, "test", null);
+    private static Role.Task task(String desc) {
+        return new Role.Task(3, desc, "test", null);
     }
 
     // ── Pause state: transitions, frozen clock, Web chat notice, idempotency ─
@@ -110,7 +110,7 @@ class AgentSystemPauseTest {
     void testPausedRolesHoldTasksUntilResume(@TempDir Path tmp) throws Exception {
         AgentSystem system = new AgentSystem(tmp.resolve("pause"), null,
                 List.of("CEO"), 30.0, false, new StdInput());
-        AgentRole ceo = system.getRole("CEO");
+        Role ceo = system.getRole("CEO");
         ThrowingLLM stub = new ThrowingLLM();
         ceo.setLlm(stub);          // no real API traffic in the test
         system.pool.start();

@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.mcp;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -11,12 +11,12 @@ import java.util.Map;
  */
 public class McpRemove extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MCPManager manager;
 
-    public McpRemove(AgentRole agentRole, MCPManager manager) {
+    public McpRemove(Role role, MCPManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -44,6 +44,6 @@ public class McpRemove extends Tool {
         if (name.isEmpty()) {
             return "mcp_remove: Error: needs tool_name";
         }
-        return this.manager.removeTool(agentRole, name);
+        return this.manager.removeTool(role, name);
     }
 }

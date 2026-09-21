@@ -2,7 +2,7 @@ package com.agent.software.conversation;
 
 import com.agent.software.AgentSystem;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.store.StateStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -32,7 +32,7 @@ class ConversationStateStoreTest {
     void openConversationSurvivesSaveRestoreRoundTrip() {
         StateStore store = new StateStore(tmp.resolve("state.json").toString());
         AgentSystem s1 = make(tmp.resolve("s1"));
-        AgentRole ceo = s1.getRole("CEO");
+        Role ceo = s1.getRole("CEO");
         // simulate two completed daytime exchanges committed to the day dialogue (day 1)
         assertTrue(ceo.conversation().appendTaskExchange(1, "Collect the project requirements", "Requirements noted.", null));
         assertTrue(ceo.conversation().appendTaskExchange(1, "Reply to the client about the plan", "Plan sent to the client.", null));
@@ -40,7 +40,7 @@ class ConversationStateStoreTest {
 
         AgentSystem s2 = make(tmp.resolve("s2"));
         assertEquals(1, store.restore(s2));
-        AgentRole ceo2 = s2.getRole("CEO");
+        Role ceo2 = s2.getRole("CEO");
         Conversation conv2 = ceo2.conversation();
         assertEquals(4, conv2.historySize());
         assertEquals(1, conv2.day());
@@ -69,7 +69,7 @@ class ConversationStateStoreTest {
 
         AgentSystem s2 = make(tmp.resolve("a2"));
         store.restore(s2);
-        AgentRole ceo2 = s2.getRole("CEO");
+        Role ceo2 = s2.getRole("CEO");
         Conversation conv2 = ceo2.conversation();
         assertTrue(conv2.isEmpty());
         assertEquals(0, conv2.day());

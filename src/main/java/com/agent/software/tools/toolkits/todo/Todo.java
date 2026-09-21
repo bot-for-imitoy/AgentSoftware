@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.todo;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.store.TodoStore;
 import com.agent.software.tools.Toolkit;
 
@@ -20,8 +20,8 @@ public class Todo extends Toolkit {
         addTool(new TodoDelete(todoStore));
     }
 
-    public Todo(AgentRole agentRole) {
-        this(agentRole.todoStore());
+    public Todo(Role role) {
+        this(role.todoStore());
     }
 
     @Override

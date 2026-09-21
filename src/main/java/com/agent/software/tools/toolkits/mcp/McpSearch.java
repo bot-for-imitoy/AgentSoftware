@@ -1,7 +1,7 @@
 package com.agent.software.tools.toolkits.mcp;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.role.ToolRegistry.ToolDef;
 import com.agent.software.tools.Tool;
@@ -17,11 +17,11 @@ import java.util.Map;
  */
 public class McpSearch extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public McpSearch(AgentRole agentRole) {
+    public McpSearch(Role role) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
     }
 
     @Override
@@ -48,7 +48,7 @@ public class McpSearch extends Tool {
         if (kw.isEmpty()) {
             return "mcp_search: Error: needs keyword";
         }
-        Computer computer = agentRole.computer();
+        Computer computer = role.computer();
         List<String> lines = new ArrayList<>();
         int hits = 0;
         for (String n : computer.listInstalledMcpTools()) {

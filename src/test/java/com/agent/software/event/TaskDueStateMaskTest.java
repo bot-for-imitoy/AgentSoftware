@@ -3,7 +3,7 @@ package com.agent.software.event;
 import com.agent.software.AgentSystem;
 import com.agent.software.core.Types;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -50,7 +50,7 @@ class TaskDueStateMaskTest {
     @Test
     void taskDueReachesACeoInWait() {
         AgentSystem s = make(tmp.resolve("a"));
-        AgentRole ceo = s.getRole("CEO");
+        Role ceo = s.getRole("CEO");
         ceo.beginWait("CTO");
         try {
             Map<String, Map<String, Object>> results = s.trigger(taskDue("CEO", "remind-1"));
@@ -70,7 +70,7 @@ class TaskDueStateMaskTest {
     @Test
     void taskDueReachesAnOffDutyRole() {
         AgentSystem s = make(tmp.resolve("b"));
-        AgentRole ceo = s.getRole("CEO");
+        Role ceo = s.getRole("CEO");
         ceo.setState(Types.AgentState.OFF_DUTY);
         try {
             Map<String, Map<String, Object>> results = s.trigger(taskDue("CEO", "remind-2"));
@@ -88,7 +88,7 @@ class TaskDueStateMaskTest {
     @Test
     void nonReminderTargetedEventsStillRespectTheStateMask() {
         AgentSystem s = make(tmp.resolve("c"));
-        AgentRole ceo = s.getRole("CEO");
+        Role ceo = s.getRole("CEO");
         ceo.setState(Types.AgentState.OFF_DUTY);
         try {
             Map<String, Object> payload = Map.of("title", "You have a new email");

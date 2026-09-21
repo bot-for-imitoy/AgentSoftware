@@ -1,7 +1,7 @@
 package com.agent.software.web;
 
 import com.agent.software.AgentSystem;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Toolkits;
 import com.agent.software.utils.Json;
@@ -238,12 +238,12 @@ public final class ChatWebServer {
         Set<String> seenRoleIds = new HashSet<>();
         // 1) Current role pool (active members, including dynamically hired newcomers)
         if (system.pool != null) {
-            for (AgentRole r : system.pool.allRoles()) {
+            for (Role r : system.pool.allRoles()) {
                 addMember(groups, seenRoleIds, r);
             }
         }
         // 2) Template completion: members not hired but belonging to a group (full roster)
-        for (Map.Entry<String, Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
+        for (Map.Entry<String, Supplier<Role>> e : RoleLoader.TEMPLATES.entrySet()) {
             if (!seenRoleIds.contains(e.getKey())) {
                 addMember(groups, seenRoleIds, e.getValue().get());
             }
@@ -263,7 +263,7 @@ public final class ChatWebServer {
     }
 
     @SuppressWarnings("unchecked")
-    private void addMember(Map<String, Map<String, Object>> groups, Set<String> seenRoleIds, AgentRole r) {
+    private void addMember(Map<String, Map<String, Object>> groups, Set<String> seenRoleIds, Role r) {
         String key = r.group == null || r.group.isBlank() ? "" : r.group;
         Map<String, Object> g = groups.computeIfAbsent(key, k -> {
             Map<String, Object> m = new LinkedHashMap<>();

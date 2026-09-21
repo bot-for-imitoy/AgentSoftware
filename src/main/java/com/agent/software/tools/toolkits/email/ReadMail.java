@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
@@ -16,12 +16,12 @@ import java.util.Map;
  */
 public class ReadMail extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MailService mailService;
 
-    public ReadMail(AgentRole agentRole, MailService mailService) {
+    public ReadMail(Role role, MailService mailService) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.mailService = mailService;
     }
 
@@ -40,7 +40,7 @@ public class ReadMail extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        String email = mailService.emailFor(agentRole);
+        String email = mailService.emailFor(role);
         int limit = 10;
         Object l = args.get("limit");
         if (l instanceof Integer) {

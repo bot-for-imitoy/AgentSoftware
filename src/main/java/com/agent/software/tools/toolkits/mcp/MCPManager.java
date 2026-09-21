@@ -1,7 +1,7 @@
 package com.agent.software.tools.toolkits.mcp;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 
 import com.agent.software.role.ToolRegistry.ToolDef;
@@ -67,7 +67,7 @@ public final class MCPManager {
      * Install the MCP tools of the given group to the role as default tools (from the role computer's independent server).
      * Returns the list of tool names that were installed successfully.
      */
-    public List<String> installGroupDefaults(AgentRole role, String group) {
+    public List<String> installGroupDefaults(Role role, String group) {
         // 1) Make sure the role computer's MCP server sessions are up and their tools registered
         Computer computer = role.computer();
         computer.ensureMcpServers();
@@ -118,7 +118,7 @@ public final class MCPManager {
     }
 
     /** Install an MCP tool for the role (from the MCP servers of the role's own computer). */
-    public String addTool(AgentRole role, String toolName) {
+    public String addTool(Role role, String toolName) {
         Computer computer = role.computer();
         computer.ensureMcpServers();
         String roleId = role.roleId;
@@ -145,7 +145,7 @@ public final class MCPManager {
     }
 
     /** Uninstall an MCP tool from the role's computer. */
-    public String removeTool(AgentRole role, String toolName) {
+    public String removeTool(Role role, String toolName) {
         String roleId = role.roleId;
         Set<String> mine = roleTools.getOrDefault(roleId, new LinkedHashSet<>());
         if (!mine.contains(toolName)) {
@@ -160,7 +160,7 @@ public final class MCPManager {
     }
 
     /** List the MCP tools installed on the role's computer. */
-    public List<Map<String, String>> listRoleTools(AgentRole role) {
+    public List<Map<String, String>> listRoleTools(Role role) {
         Computer computer = role.computer();
         List<Map<String, String>> out = new ArrayList<>();
         for (String n : computer.listInstalledMcpTools()) {

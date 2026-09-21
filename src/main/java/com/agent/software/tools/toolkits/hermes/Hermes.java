@@ -1,7 +1,7 @@
 package com.agent.software.tools.toolkits.hermes;
 
 import com.agent.software.computers.Computer;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.tools.Toolkit;
 
@@ -19,8 +19,8 @@ public class Hermes extends Toolkit {
         addTool(new HermesSend(computer));
     }
 
-    public Hermes(AgentRole agentRole) {
-        this(agentRole.computer());
+    public Hermes(Role role) {
+        this(role.computer());
     }
 
     @Override

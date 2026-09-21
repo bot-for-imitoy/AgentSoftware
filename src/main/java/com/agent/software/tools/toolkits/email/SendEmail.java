@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.role.RolePool;
 import com.agent.software.services.MailService;
@@ -17,12 +17,12 @@ import java.util.Map;
  */
 public class SendEmail extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MailService mailService;
 
-    public SendEmail(AgentRole agentRole, MailService mailService) {
+    public SendEmail(Role role, MailService mailService) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.mailService = mailService;
     }
 
@@ -57,7 +57,7 @@ public class SendEmail extends Tool {
         if (subject.isEmpty() && body.strip().isEmpty()) {
             return "send_email: Error: at least one of 'subject' or 'body' must be provided.";
         }
-        RolePool pool = agentRole.pool();
+        RolePool pool = role.pool();
         List<String> failed = new ArrayList<>();
         List<String> to = resolveRecipients(pool, oto, failed);
         List<String> cc = new ArrayList<>();
@@ -70,12 +70,12 @@ public class SendEmail extends Tool {
             return "send_email: Error: could not resolve recipients: " + String.join(", ", failed.isEmpty() ? List.of("(empty)") : failed)
                     + ". Please call mail_address_book first to look up member names/emails.";
         }
-        String senderEmail = mailService.emailFor(agentRole);
-        String result = mailService.send(senderEmail, agentRole.name, to, subject, body, cc);
+        String senderEmail = mailService.emailFor(role);
+        String result = mailService.send(senderEmail, role.name, to, subject, body, cc);
         if (!failed.isEmpty()) {
             result += " Note: the following recipients were not found and were not sent: " + String.join(", ", failed);
         }
-        agentRole.journal("Sent mail: \"" + subject + "\" -> " + String.join(", ", to));
+        role.journal("Sent mail: \"" + subject + "\" -> " + String.join(", ", to));
         return "send_email: " + result;
     }
 
@@ -122,7 +122,7 @@ public class SendEmail extends Tool {
         if (pool == null) {
             return "";
         }
-        AgentRole role = pool.getRoleByName(v);
+        Role role = pool.getRoleByName(v);
         if (role == null) {
             return "";
         }

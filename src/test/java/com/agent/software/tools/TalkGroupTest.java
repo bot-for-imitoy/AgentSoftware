@@ -1,6 +1,6 @@
 package com.agent.software.tools;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.toolkits.talk.ListRoles;
 import com.agent.software.tools.toolkits.talk.Talk;
@@ -40,13 +40,13 @@ class TalkGroupTest {
         return false;
     }
 
-    private static AgentRole role(String name, String rid, String group) {
-        return AgentRole.builder().name(name).roleId(rid).group(group).build();
+    private static Role role(String name, String rid, String group) {
+        return Role.builder().name(name).roleId(rid).group(group).build();
     }
 
-    private static Map<String, Talk> setupRoles(RolePool pool, AgentRole... roles) {
+    private static Map<String, Talk> setupRoles(RolePool pool, Role... roles) {
         Map<String, Talk> toolkits = new LinkedHashMap<>();
-        for (AgentRole role : roles) {
+        for (Role role : roles) {
             pool.addRole(role);
             role.setPool(pool);
             toolkits.put(role.roleId, new Talk(role, pool));
@@ -84,7 +84,7 @@ class TalkGroupTest {
         Map<String, Talk> tks = setupRoles(pool,
                 role("Gu Chengyu", "frontend_dev_1", "Frontend Development Group"),
                 role("Chen Siyuan", "frontend_lead", "Frontend Development Group"));
-        AgentRole roleA = pool.getRole("frontend_dev_1");
+        Role roleA = pool.getRole("frontend_dev_1");
         AtomicReference<String> result = new AtomicReference<>();
         Thread t = new Thread(() -> result.set(talk(tks, "frontend_dev_1", "Chen Siyuan", "Progress?", true)));
         t.start();
@@ -122,7 +122,7 @@ class TalkGroupTest {
         Map<String, Talk> tks = setupRoles(pool,
                 role("Guo Xiaodong", "tester_1", "Testing Group"),
                 role("Fang Jinyan", "release_manager", "Architecture & Release Group"));
-        AgentRole roleA = pool.getRole("tester_1");
+        Role roleA = pool.getRole("tester_1");
         String result = talk(tks, "tester_1", "Fang Jinyan", "Urgent matter", true);
         assertTrue(result.contains("only for communication within the same group"));
         assertEquals(Types.AgentState.ON_DUTY_IDLE, roleA.state);  // did not enter WAIT

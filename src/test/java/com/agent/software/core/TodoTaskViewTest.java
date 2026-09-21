@@ -1,6 +1,6 @@
 package com.agent.software.core;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.store.TodoStore;
 import com.agent.software.tools.toolkits.taskview.TaskView;
 import com.agent.software.tools.toolkits.todo.Todo;
@@ -60,7 +60,7 @@ class TodoTaskViewTest {
 
     @Test
     void testTodoToolsViaHandler() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester_1").build();
+        Role role = Role.builder().name("Test").roleId("tester_1").build();
         Todo todo = new Todo(new TodoStore("tester_1", tmp.resolve("todos.json").toString()));
 
         assertTrue(todo.trigger("todo_add", Map.of("detail", "x")).contains("Error"));
@@ -79,18 +79,18 @@ class TodoTaskViewTest {
 
     @Test
     void testMyTasksTool() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester_1").build();
+        Role role = Role.builder().name("Test").roleId("tester_1").build();
         TaskView taskView = new TaskView(role);
 
         String empty = taskView.trigger("my_tasks", Map.of());
         assertTrue(empty.contains("Pending (queue 0)"));
 
-        role.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "Task not started yet", "", new LinkedHashMap<>()));
-        AgentRole.Task done = new AgentRole.Task(AgentRole.Urgency.HIGH.value, "Completed task", "", new LinkedHashMap<>());
+        role.addTask(new Role.Task(Role.Urgency.NORMAL.value, "Task not started yet", "", new LinkedHashMap<>()));
+        Role.Task done = new Role.Task(Role.Urgency.HIGH.value, "Completed task", "", new LinkedHashMap<>());
         done.status = "done";
         done.tokensConsumed = 123;
         role.appendTaskHistory(done);
-        AgentRole.Task failed = new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "Failed task", "", new LinkedHashMap<>());
+        Role.Task failed = new Role.Task(Role.Urgency.NORMAL.value, "Failed task", "", new LinkedHashMap<>());
         failed.status = "failed";
         failed.result = "[ERROR] x";
         role.appendTaskHistory(failed);

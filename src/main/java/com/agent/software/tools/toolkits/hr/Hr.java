@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.hr;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 
 /**
@@ -9,13 +9,13 @@ import com.agent.software.tools.Toolkit;
  */
 public class Hr extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final String apiKey;
 
-    public Hr(AgentRole agentRole, String apiKey) {
-        this.agentRole = agentRole;
+    public Hr(Role role, String apiKey) {
+        this.role = role;
         this.apiKey = apiKey;
-        addTool(new PostJobPosting(agentRole, apiKey));
+        addTool(new PostJobPosting(role, apiKey));
         addTool(new ListCandidates());
     }
 

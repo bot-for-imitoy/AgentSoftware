@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.time;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.core.Types;
 import com.agent.software.tools.Tool;
 import org.slf4j.Logger;
@@ -17,11 +17,11 @@ public class TakeRest extends Tool {
 
     private static final Logger logger = LoggerFactory.getLogger(TakeRest.class);
 
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public TakeRest(AgentRole agentRole) {
+    public TakeRest(Role role) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
     }
 
     @Override
@@ -36,9 +36,9 @@ public class TakeRest extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        if (agentRole != null && agentRole.state != Types.AgentState.ON_DUTY_IDLE) {
-            agentRole.setState(Types.AgentState.ON_DUTY_IDLE);
-            logger.info("[{}] rest started (state ON_DUTY_IDLE, waiting for events to wake up)", agentRole.roleId);
+        if (role != null && role.state != Types.AgentState.ON_DUTY_IDLE) {
+            role.setState(Types.AgentState.ON_DUTY_IDLE);
+            logger.info("[{}] rest started (state ON_DUTY_IDLE, waiting for events to wake up)", role.roleId);
         }
         return "take_rest: rest started (state ON_DUTY_IDLE). You will be automatically woken up when tasks or events arrive.";
     }

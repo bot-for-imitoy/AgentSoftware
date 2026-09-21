@@ -2,7 +2,7 @@ package com.agent.software.tools.toolkits.client;
 
 import com.agent.software.AgentSystem;
 import com.agent.software.io.WebInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Tool;
 import com.agent.software.web.ChatStore;
@@ -42,7 +42,7 @@ class TalkToClientWebTest {
     void testWebModeRoundtrip() throws Exception {
         // WebInput: the client reply is read from the Web page input box (bound by AgentSystem to its store)
         AgentSystem system = new AgentSystem(List.of(RoleLoader.getTemplate("CEO")), null, 30.0, false, new WebInput());
-        AgentRole ceo = system.getRole("CEO");
+        Role ceo = system.getRole("CEO");
         ChatStore store = system.chatStore;
         store.markAttached();   // simulate an attached Web frontend
 

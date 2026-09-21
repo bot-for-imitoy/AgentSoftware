@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.taskview;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.ArrayList;
@@ -17,11 +17,11 @@ public class MyTasks extends Tool {
 
     private static final int HISTORY_LIMIT = 10;
 
-    private final AgentRole agentRole;
+    private final Role role;
 
-    public MyTasks(AgentRole agentRole) {
+    public MyTasks(Role role) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
     }
 
     @Override
@@ -41,16 +41,16 @@ public class MyTasks extends Tool {
         Object oscope = args.get("scope");
         String scope = oscope instanceof String s && !s.strip().isEmpty()
                 ? s.strip().toLowerCase() : "all";
-        List<AgentRole.Task> queue = agentRole.pendingTasks();
+        List<Role.Task> queue = role.pendingTasks();
         List<String> pendingLines = new ArrayList<>();
-        for (AgentRole.Task t : queue) {
+        for (Role.Task t : queue) {
             String desc = t.description.length() > 120 ? t.description.substring(0, 120) : t.description;
             pendingLines.add("- [id=" + t.taskId + "] urgency=" + t.urgency + " | " + desc);
         }
-        List<AgentRole.Task> history = agentRole.taskHistory(HISTORY_LIMIT);
+        List<Role.Task> history = role.taskHistory(HISTORY_LIMIT);
         List<String> histLines = new ArrayList<>();
         for (int i = history.size() - 1; i >= 0; i--) {
-            AgentRole.Task t = history.get(i);
+            Role.Task t = history.get(i);
             String mark = "done".equals(t.status) ? "✅" : "❌";
             String desc = t.description.length() > 100 ? t.description.substring(0, 100) : t.description;
             histLines.add("- " + mark + " [" + t.status + ", " + t.tokensConsumed + " tokens] " + desc);

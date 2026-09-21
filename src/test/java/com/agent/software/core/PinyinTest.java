@@ -1,7 +1,7 @@
 package com.agent.software.core;
 
 import com.agent.software.core.Types.AgentState;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.role.RolePool;
 import org.junit.jupiter.api.Test;
@@ -23,8 +23,8 @@ class PinyinTest {
 
     @Test
     void testAllTemplatesHavePinyinUsername() {
-        for (Map.Entry<String, java.util.function.Supplier<AgentRole>> e : RoleLoader.TEMPLATES.entrySet()) {
-            AgentRole r = e.getValue().get();
+        for (Map.Entry<String, java.util.function.Supplier<Role>> e : RoleLoader.TEMPLATES.entrySet()) {
+            Role r = e.getValue().get();
             assertTrue(r.username != null && !r.username.isEmpty(), e.getKey() + " missing pinyin username");
             assertTrue(r.username.matches("[a-z0-9_]+"),
                     e.getKey() + " has invalid username '" + r.username + "'");
@@ -33,39 +33,39 @@ class PinyinTest {
 
     @Test
     void testUnknownNameFallsBackToRoleId() {
-        AgentRole r = AgentRole.builder().name("Alien").roleId("alien_1").build();
+        Role r = Role.builder().name("Alien").roleId("alien_1").build();
         assertEquals("alien_1", r.username);
     }
 
     @Test
     void testExplicitUsernameWins() {
-        AgentRole r = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").username("gxd").build();
+        Role r = Role.builder().name("Guo Xiaodong").roleId("tester_1").username("gxd").build();
         assertEquals("gxd", r.username);
     }
 
     @Test
     void testUidAssignedByRegistrationOrder() {
-        AgentRole.JOURNAL_DIR = tmp;
+        Role.JOURNAL_DIR = tmp;
         RolePool pool = new RolePool();
-        AgentRole a = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").build();
-        AgentRole b = AgentRole.builder().name("Wang Jianguo").roleId("architect").build();
+        Role a = Role.builder().name("Guo Xiaodong").roleId("tester_1").build();
+        Role b = Role.builder().name("Wang Jianguo").roleId("architect").build();
         pool.addRole(a);
         pool.addRole(b);
         assertEquals(1101, a.uid);
         assertEquals(1102, b.uid);
-        AgentRole c = AgentRole.builder().name("Lin Zong").roleId("CEO").uid(1200).build();
+        Role c = Role.builder().name("Lin Zong").roleId("CEO").uid(1200).build();
         pool.addRole(c);
         assertEquals(1200, c.uid);
     }
 
     @Test
     void testSystemPromptMentionsCloudDrive() {
-        AgentRole.JOURNAL_DIR = tmp;
+        Role.JOURNAL_DIR = tmp;
         String oldProp = System.getProperty("AGENTSOFTWARE_DATA_DIR");
         System.setProperty("AGENTSOFTWARE_DATA_DIR", tmp.resolve("data").toString());
         try {
             RolePool pool = new RolePool();
-            AgentRole r = AgentRole.builder().name("Guo Xiaodong").roleId("tester_1").computerKind("local").build();
+            Role r = Role.builder().name("Guo Xiaodong").roleId("tester_1").computerKind("local").build();
             pool.addRole(r);
             String prompt = r.buildSystemPrompt();
             assertTrue(prompt.contains("/mnt/drive"));
@@ -87,12 +87,12 @@ class PinyinTest {
 
     @Test
     void testReleaseManagerPromptMentionsProjectDir() {
-        AgentRole.JOURNAL_DIR = tmp;
+        Role.JOURNAL_DIR = tmp;
         String oldProp = System.getProperty("AGENTSOFTWARE_DATA_DIR");
         System.setProperty("AGENTSOFTWARE_DATA_DIR", tmp.resolve("data").toString());
         try {
             RolePool pool = new RolePool();
-            AgentRole r = RoleLoader.getTemplate("release_manager");
+            Role r = RoleLoader.getTemplate("release_manager");
             r.computerKind = "local";  // avoid buildSystemPrompt triggering podman power-on
             pool.addRole(r);
             String prompt = r.buildSystemPrompt();
@@ -111,7 +111,7 @@ class PinyinTest {
     @Test
     void testEventFilterLayerBasics() {
         // basic 3-layer filter behavior: time events pass through; OFF_DUTY blocks non-urgent events
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester").build();
+        Role role = Role.builder().name("Test").roleId("tester").build();
         Map<String, Object> payload = new java.util.LinkedHashMap<>();
         payload.put("tick", 0);
         Types.Event timeEvent = new Types.Event("time", "SHIFT_START", Types.Priority.EMERGENCY, payload, null);

@@ -277,7 +277,7 @@ Roles can also be built in code with the `AgentRole.builder()` fluent API.
 
 ### 2. AgentRole & RolePool
 
-- Every role is an `AgentRole`: a task queue, a state machine (`ON_DUTY` / `OFF_DUTY` / `WAIT` /
+- Every role is an `Role`: a task queue, a state machine (`ON_DUTY` / `OFF_DUTY` / `WAIT` /
   wrapping-up), its own LLM client, its own stores (notes/todos) and its own activity journal.
 - `RolePool` schedules roles: one resident **virtual thread** per role, a priority task queue
   (CRITICAL > HIGH > NORMAL > LOW), dynamic onboarding (`addRoleAndStart` — hire and start
@@ -467,7 +467,7 @@ Message kinds: `talk`, `client`, `reason`, `note`, `tool`, `answer`; trace messa
 structured `extra` metadata (`tool`: `{tool, args, result, round, taskId}`; `answer`:
 `{status: done|failed, tokens, taskId}`). Implementation: `web/ChatStore.java` (storage +
 Client A coordination) + `web/ChatWebServer.java`; tests in `ChatStoreTest` /
-`ChatWebServerTest` / `TalkToClientWebTest` / `AgentRoleTraceTest`.
+`ChatWebServerTest` / `TalkToClientWebTest` / `RoleTraceTest`.
 
 ### 12. Tool & MCP management
 
@@ -483,7 +483,7 @@ Client A coordination) + `web/ChatWebServer.java`; tests in `ChatStoreTest` /
 ### 13. Role ↔ LLM API conversation management
 
 Each role now runs a managed **dialogue with its LLM API** (`conversation/Conversation.java` +
-`conversation/ConversationManager.java`), sitting exactly between `AgentRole` and `OpenAICompatLLM`:
+`conversation/ConversationManager.java`), sitting exactly between `Role` and `OpenAICompatLLM`:
 
 - **Cross-task continuity.** Previously every task started from an empty message list (system
   prompt + the task description), so a role could not remember within a day what it had just

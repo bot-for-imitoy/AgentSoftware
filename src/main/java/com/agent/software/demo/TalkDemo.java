@@ -1,6 +1,6 @@
 package com.agent.software.demo;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 
 import java.util.LinkedHashMap;
@@ -41,21 +41,21 @@ public final class TalkDemo {
     public static void main(String[] args) {
         header("Inter-Role Communication — talk Tool Demo");
 
-        AgentRole coder = AgentRole.builder()
+        Role coder = Role.builder()
                 .name("Li Ming").roleId("coder").title("Senior Backend Engineer")
                 .personality("Rigorous and meticulous, proactively asks the reviewer to review after writing code. Consults the architect when facing architecture problems.")
                 .skills(List.of("Python", "Go", "PostgreSQL", "Kubernetes"))
                 .interestKeywords(new java.util.LinkedHashSet<>(List.of("bug", "fix", "crash", "code", "implement")))
                 .build();
 
-        AgentRole reviewer = AgentRole.builder()
+        Role reviewer = Role.builder()
                 .name("Zhang Wei").roleId("reviewer").title("Code Review Lead")
                 .personality("Immediately notifies the architect when a review uncovers architecture risks. Zero tolerance for security issues.")
                 .skills(List.of("Code Review", "Security Audit"))
                 .interestKeywords(new java.util.LinkedHashSet<>(List.of("pr", "review", "security", "code")))
                 .build();
 
-        AgentRole architect = AgentRole.builder()
+        Role architect = Role.builder()
                 .name("Wang Jianguo").roleId("architect").title("System Architect")
                 .personality("Gives concise solutions when consulted. If code implementation is needed, delegates the execution to the coder.")
                 .skills(List.of("System Design", "Microservices", "DDD"))
@@ -67,18 +67,18 @@ public final class TalkDemo {
         pool.addRole(reviewer);
         pool.addRole(architect);
 
-        AgentRole.TaskCallback onStart = (role, task) ->
+        Role.TaskCallback onStart = (role, task) ->
                 System.out.println("  " + BLUE + "[" + role.name + "]" + RESET + " "
-                        + YELLOW + "▶ " + AgentRole.Urgency.from(task.urgency).name() + RESET
+                        + YELLOW + "▶ " + Role.Urgency.from(task.urgency).name() + RESET
                         + " — " + (task.description.length() > 100 ? task.description.substring(0, 100) : task.description));
-        AgentRole.TaskCallback onDone = (role, task) -> {
+        Role.TaskCallback onDone = (role, task) -> {
             String icon = "done".equals(task.status) ? GREEN + "✓" + RESET : RED + "✗" + RESET;
             String preview = task.result.length() > 200 ? task.result.substring(0, 200) : task.result;
             System.out.println("  " + BLUE + "[" + role.name + "]" + RESET + " " + icon + " done ("
                     + task.tokensConsumed + "t)");
             System.out.println("  " + MAGENTA + "→" + RESET + " " + preview.replace("\n", " ") + "...");
         };
-        for (AgentRole r : List.of(coder, reviewer, architect)) {
+        for (Role r : List.of(coder, reviewer, architect)) {
             r.onTaskStart = onStart;
             r.onTaskDone = onDone;
         }
@@ -86,7 +86,7 @@ public final class TalkDemo {
         pool.start();
 
         Map<String, List<String>> toolsSummary = new LinkedHashMap<>();
-        for (AgentRole r : pool.allRoles()) {
+        for (Role r : pool.allRoles()) {
             toolsSummary.put(r.roleId, r.mcpToolNames());
         }
         System.out.println("\n  " + GREEN + "Auto-registered tools per role:" + RESET);
@@ -97,7 +97,7 @@ public final class TalkDemo {
         header("Collaboration Chain: Coder → Reviewer → Architect → Coder");
         System.out.println("  " + YELLOW + "Starting: Coder implements a feature, should ask reviewer to review" + RESET + "\n");
 
-        pool.assignTask("coder", new AgentRole.Task(AgentRole.Urgency.HIGH.value,
+        pool.assignTask("coder", new Role.Task(Role.Urgency.HIGH.value,
                 "I just implemented a JWT refresh token rotation feature. The code is in PR #188.\n"
                         + "Please use the talk tool to notify the reviewer to do a code review, and set urgency to HIGH.\n"
                         + "First briefly describe what you implemented, then call talk to send the review request.",

@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.talk;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 import com.agent.software.tools.Toolkit;
 
@@ -12,13 +12,13 @@ import com.agent.software.tools.Toolkit;
  */
 public class Talk extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final RolePool pool;
 
-    public Talk(AgentRole agentRole, RolePool pool) {
-        this.agentRole = agentRole;
+    public Talk(Role role, RolePool pool) {
+        this.role = role;
         this.pool = pool;
-        addTool(new TalkTo(agentRole, pool));
+        addTool(new TalkTo(role, pool));
         addTool(new ListRoles(pool));
     }
 

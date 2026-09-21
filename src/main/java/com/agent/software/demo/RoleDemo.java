@@ -1,6 +1,6 @@
 package com.agent.software.demo;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RolePool;
 
 import java.util.List;
@@ -28,7 +28,7 @@ public final class RoleDemo {
     public static void main(String[] args) {
         header("Multi-Role Concurrent Task Scheduler — OpenAI Integration");
 
-        AgentRole coder = AgentRole.builder()
+        Role coder = Role.builder()
                 .name("Li Ming")
                 .roleId("coder")
                 .title("Senior Backend Engineer")
@@ -51,8 +51,8 @@ public final class RoleDemo {
         System.out.println("\n  Auto-registered tools: " + coder.mcpToolNames());
 
         // Assign a task directly
-        pool.assignTask("coder", new AgentRole.Task(
-                AgentRole.Urgency.HIGH.value,
+        pool.assignTask("coder", new Role.Task(
+                Role.Urgency.HIGH.value,
                 "Fix the 500 error on the login endpoint (POST /api/login NPE in UserService.verifyPassword)",
                 "github", new java.util.LinkedHashMap<>()));
 

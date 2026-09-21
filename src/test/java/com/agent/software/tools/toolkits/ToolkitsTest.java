@@ -1,9 +1,8 @@
 package com.agent.software.tools.toolkits;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.computers.Computer;
 import com.agent.software.store.NoteStore;
-import com.agent.software.event.TimeEventBus;
 import com.agent.software.store.TodoStore;
 import com.agent.software.core.Types;
 import com.agent.software.tools.Tool;
@@ -91,7 +90,7 @@ class ToolkitsTest {
 
     @Test
     void testMemoryToolkitOnlySummary() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester").build();
+        Role role = Role.builder().name("Test").roleId("tester").build();
         Memory memory = new Memory(role);
         assertEquals(1, memory.getTools().size());
         assertEquals("summary", memory.getTools().get(0).getToolName());
@@ -107,7 +106,7 @@ class ToolkitsTest {
 
     @Test
     void testTimeToolkit() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester").build();
+        Role role = Role.builder().name("Test").roleId("tester").build();
         Time time = new Time(role);
         assertTrue(time.trigger("get_time", Map.of()).contains("Tick"));
         role.setState(Types.AgentState.ON_DUTY_BUSY);
@@ -137,8 +136,8 @@ class ToolkitsTest {
 
     @Test
     void testTaskViewToolkit() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester").build();
-        role.addTask(new AgentRole.Task(AgentRole.Urgency.NORMAL.value, "Task not started yet", "", new LinkedHashMap<>()));
+        Role role = Role.builder().name("Test").roleId("tester").build();
+        role.addTask(new Role.Task(Role.Urgency.NORMAL.value, "Task not started yet", "", new LinkedHashMap<>()));
         TaskView taskView = new TaskView(role);
         String r = taskView.trigger("my_tasks", Map.of());
         assertTrue(r.contains("Task not started yet"));
@@ -166,7 +165,7 @@ class ToolkitsTest {
 
     @Test
     void testAgentRoleLoadsTemplateToolkits() {
-        AgentRole role = AgentRole.builder().name("Test").roleId("tester").build();
+        Role role = Role.builder().name("Test").roleId("tester").build();
         int added = role.addToolkit(new Note(role));
         assertTrue(added >= 5, "note tool count: " + added);
         assertTrue(role.mcpToolNames().contains("write_note"));

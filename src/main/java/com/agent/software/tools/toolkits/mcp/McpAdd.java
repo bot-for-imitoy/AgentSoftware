@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.mcp;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
@@ -12,12 +12,12 @@ import java.util.Map;
  */
 public class McpAdd extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MCPManager manager;
 
-    public McpAdd(AgentRole agentRole, MCPManager manager) {
+    public McpAdd(Role role, MCPManager manager) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.manager = manager;
     }
 
@@ -45,6 +45,6 @@ public class McpAdd extends Tool {
         if (name.isEmpty()) {
             return "mcp_add: Error: needs tool_name";
         }
-        return this.manager.addTool(agentRole, name);
+        return this.manager.addTool(role, name);
     }
 }

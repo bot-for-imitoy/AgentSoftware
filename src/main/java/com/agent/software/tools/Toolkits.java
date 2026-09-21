@@ -10,7 +10,7 @@ import com.agent.software.tools.toolkits.skill.Skill;
 import com.agent.software.tools.toolkits.taskview.TaskView;
 import com.agent.software.tools.toolkits.time.Time;
 import com.agent.software.tools.toolkits.todo.Todo;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 
@@ -68,7 +68,7 @@ public final class Toolkits {
      * instance of the {@link com.agent.software.AgentSystem} the role belongs to; standalone roles not bound to a system
      * fall back to the process-level default singletons of this class (legacy behavior).
      */
-    public static List<Toolkit> defaultToolkits(AgentRole role) {
+    public static List<Toolkit> defaultToolkits(Role role) {
         MCPManager mcpManager = role != null ? role.mcpManager() : MCP_MANAGER;
         SkillManager skillManager = role != null ? role.skillManager() : SKILL_MANAGER;
         List<Toolkit> out = new ArrayList<>();

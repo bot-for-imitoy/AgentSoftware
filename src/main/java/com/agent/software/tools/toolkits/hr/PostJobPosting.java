@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.hr;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.role.RoleFactory;
 import com.agent.software.role.RolePool;
@@ -22,12 +22,12 @@ public class PostJobPosting extends Tool {
 
     private static final Logger logger = LoggerFactory.getLogger(PostJobPosting.class);
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final String apiKey;
 
-    public PostJobPosting(AgentRole agentRole, String apiKey) {
+    public PostJobPosting(Role role, String apiKey) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.apiKey = apiKey;
     }
 
@@ -56,7 +56,7 @@ public class PostJobPosting extends Tool {
             return "post_job_posting: Error: needs requirement";
         }
         RoleFactory factory = new RoleFactory(apiKey, null);
-        AgentRole newRole;
+        Role newRole;
         try {
             newRole = factory.createRole(requirement);
         } catch (Exception exc) {
@@ -64,7 +64,7 @@ public class PostJobPosting extends Tool {
             return "post_job_posting: Error: job posting processing failed - " + exc.getMessage();
         }
         // onboarding: join the running team (RolePool), start the worker
-        RolePool pool = agentRole.pool();
+        RolePool pool = role.pool();
         String onboarding = "Joined the team";
         if (pool != null) {
             try {

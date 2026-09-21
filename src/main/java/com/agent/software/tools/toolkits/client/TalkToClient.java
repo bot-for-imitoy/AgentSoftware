@@ -2,7 +2,7 @@ package com.agent.software.tools.toolkits.client;
 
 import com.agent.software.io.Input;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.Toolkits;
 import com.agent.software.web.ChatStore;
@@ -38,17 +38,17 @@ public class TalkToClient extends Tool {
     private static final String BOLD = "\033[1m";
     private static final String RESET = "\033[0m";
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final ClientCommunicationLock lock;
 
-    public TalkToClient(AgentRole agentRole) {
-        this(agentRole, ClientCommunicationLock.getInstance());
+    public TalkToClient(Role role) {
+        this(role, ClientCommunicationLock.getInstance());
     }
 
     /** Package-private: tests can inject an independent lock instance. */
-    TalkToClient(AgentRole agentRole, ClientCommunicationLock lock) {
+    TalkToClient(Role role, ClientCommunicationLock lock) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.lock = lock;
     }
 
@@ -66,8 +66,8 @@ public class TalkToClient extends Tool {
 
     @Override
     public String handler(Map<String, Object> args) {
-        String roleId = agentRole != null ? agentRole.roleId : "";
-        String name = agentRole != null ? agentRole.name : "Client";
+        String roleId = role != null ? role.roleId : "";
+        String name = role != null ? role.name : "Client";
         String conflict = lock.tryAcquire(roleId, name);
         if (conflict != null) {
             return "talk_to_client: Error: " + conflict + ", try again later.";
@@ -75,8 +75,8 @@ public class TalkToClient extends Tool {
         try {
             Object omsg = args.get("message");
             String question = omsg instanceof String s ? s.strip() : "";
-            String group = agentRole != null && agentRole.group != null
-                    && !agentRole.group.isBlank() ? agentRole.group : Toolkits.LEADERSHIP_GROUP;
+            String group = role != null && role.group != null
+                    && !role.group.isBlank() ? role.group : Toolkits.LEADERSHIP_GROUP;
             // Record the question to the chat store (shown in the Web UI; console mode keeps the log too)
             ChatStore store = chatStore();
             if (store != null) {
@@ -99,8 +99,8 @@ public class TalkToClient extends Tool {
 
     /** The Input of the owning AgentSystem; standalone roles fall back to console (StdInput). */
     private Input inputOf() {
-        if (agentRole != null && agentRole.system() != null && agentRole.system().input != null) {
-            return agentRole.system().input;
+        if (role != null && role.system() != null && role.system().input != null) {
+            return role.system().input;
         }
         return new StdInput();
     }
@@ -134,7 +134,7 @@ public class TalkToClient extends Tool {
 
     /** The chat store of the system this role belongs to (null for standalone roles not bound to a system). */
     private ChatStore chatStore() {
-        return agentRole != null && agentRole.system() != null
-                ? agentRole.system().chatStore : null;
+        return role != null && role.system() != null
+                ? role.system().chatStore : null;
     }
 }

@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Toolkit;
@@ -11,16 +11,16 @@ import com.agent.software.tools.Toolkit;
  */
 public class Email extends Toolkit {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MailService mailService;
 
-    public Email(AgentRole agentRole, MailService mailService) {
-        this.agentRole = agentRole;
+    public Email(Role role, MailService mailService) {
+        this.role = role;
         this.mailService = mailService != null ? mailService : MailService.getMailService();
-        addTool(new SendEmail(agentRole, this.mailService));
-        addTool(new ReadMail(agentRole, this.mailService));
-        addTool(new OpenMail(agentRole, this.mailService));
-        addTool(new MailAddressBook(agentRole, this.mailService));
+        addTool(new SendEmail(role, this.mailService));
+        addTool(new ReadMail(role, this.mailService));
+        addTool(new OpenMail(role, this.mailService));
+        addTool(new MailAddressBook(role, this.mailService));
     }
 
     @Override

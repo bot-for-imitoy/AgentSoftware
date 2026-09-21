@@ -1,6 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
@@ -14,12 +14,12 @@ import java.util.Map;
  */
 public class OpenMail extends Tool {
 
-    private final AgentRole agentRole;
+    private final Role role;
     private final MailService mailService;
 
-    public OpenMail(AgentRole agentRole, MailService mailService) {
+    public OpenMail(Role role, MailService mailService) {
         super();
-        this.agentRole = agentRole;
+        this.role = role;
         this.mailService = mailService;
     }
 
@@ -47,7 +47,7 @@ public class OpenMail extends Tool {
         if (messageId.isEmpty()) {
             return "open_mail: Error: needs message_id";
         }
-        MailService.MailMessage msg = mailService.read(mailService.emailFor(agentRole), messageId);
+        MailService.MailMessage msg = mailService.read(mailService.emailFor(role), messageId);
         if (msg == null) {
             return "open_mail: Error: mail not found: " + messageId
                     + ". Please call read_mail first to view mails in the current inbox.";

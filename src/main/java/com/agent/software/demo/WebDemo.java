@@ -2,7 +2,7 @@ package com.agent.software.demo;
 
 import com.agent.software.AgentSystem;
 import com.agent.software.io.WebInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.toolkits.client.Client;
@@ -38,10 +38,10 @@ public class WebDemo {
                 RoleLoader.getTemplate("frontend_lead"),
                 RoleLoader.getTemplate("frontend_dev_1")), null, 30.0, false, new WebInput());
 
-        AgentRole ceo = system.getRole("CEO");
-        AgentRole coo = system.getRole("COO");
-        AgentRole fLead = system.getRole("frontend_lead");
-        AgentRole fDev = system.getRole("frontend_dev_1");
+        Role ceo = system.getRole("CEO");
+        Role coo = system.getRole("COO");
+        Role fLead = system.getRole("frontend_lead");
+        Role fDev = system.getRole("frontend_dev_1");
 
         // 2. Manually assemble the talk / talk_to_client tools
         Talk ceoTalkTk = new Talk(ceo, system.pool);

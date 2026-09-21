@@ -42,7 +42,7 @@
 
 ### P4. Roles/tools directly pull global singletons
 
-`AgentRole` and the various tool classes call the global singletons directly **without dependency injection**:
+`Role` and the various tool classes call the global singletons directly **without dependency injection**:
 
 - `AgentRole.computer()` → `ComputerManager.getInstance().create(...)`
 - `AgentRole.mailAddress()` → `MailService.getMailService().emailFor(this)`
@@ -115,7 +115,7 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
 |---|---|
 | `AgentSystem` | Add direct fields `computerManager/mailService/mcpManager/skillManager/clientLock/chatStore/conversationManager/dataDir` created at construction time; add an `AgentSystem(Path dataDir, ...)` overload (original signature stays compatible); `addRoles` unconditionally binds `bindTimeManager` + `bindSystem(this)`; add accessors for each data directory |
 | `RolePool` | Add a constructor overload carrying `AgentSystem owner` (may be null = standalone role pool); `setupRole` binds `bindSystem`; default MCP groups use `role.mcpManager()`; `removeRole` uses `role.computerManager()`; `newLlm` uses `owner.configStore` |
-| `AgentRole` | Add a `system` field and `bindSystem()/system()`; add `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()/chatStore()/conversation()` resolution helpers (use the system instance when owned by a system, otherwise fall back to global defaults to keep legacy usage compatible); `computer()/mailAddress()/noteStore()/todoStore()/journal()` all go through the owning system |
+| `Role` | Add a `system` field and `bindSystem()/system()`; add `computerManager()/mailService()/clientLock()/mcpManager()/skillManager()/chatStore()/conversation()` resolution helpers (use the system instance when owned by a system, otherwise fall back to global defaults to keep legacy usage compatible); `computer()/mailAddress()/noteStore()/todoStore()/journal()` all go through the owning system |
 | `Toolkits.defaultToolkits` | Build tool classes with `role.mcpManager()/skillManager()/mailService()` (roles inside a system get that system's instances) |
 | `toolkits/client/Client` + `TalkToClient` | Use `role.system().clientLock` / `.chatStore` (unbound systems fall back to global defaults / no chat store) |
 | `toolkits/talk/TalkTo` | `recordTalk` uses `role.system().chatStore` |
@@ -139,7 +139,7 @@ Multi-instance usage: pass a different `dataDir` to each `AgentSystem` for compl
 
 ### 3.4 Compatibility
 
-- All existing public constructors and fields of `AgentSystem` / `RolePool` / `AgentRole` are kept;
+- All existing public constructors and fields of `AgentSystem` / `RolePool` / `Role` are kept;
   `Main.java`, demo programs, and existing tests need no structural changes (only Web-related tests change to access
   `system.chatStore` directly).
 - Single-system usage behaves the same (data stays under `./data/*`); only `NoteStore`'s default directory moves from the user home

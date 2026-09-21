@@ -1,9 +1,8 @@
 package com.agent.software;
 
-import com.agent.software.io.StdInput;
 import com.agent.software.io.WebInput;
 import com.agent.software.tools.toolkits.hr.Hr;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.role.RoleLoader;
 import com.agent.software.store.NoteStore;
 import com.agent.software.store.StateStore;
@@ -124,7 +123,7 @@ public class Main {
         // Day 1: the CEO talks to the client (only once)
         if (withClientTask) {
             step("CEO registers the opening note reminder: Tick " + CEO_KICKOFF_TICK + " (≈08:01:00) to discuss project requirements with the user...");
-            AgentRole ceo = system.getRole("CEO");
+            Role ceo = system.getRole("CEO");
             Path note = ceo.noteStore().writeNote("Day1-collect-project-requirements",
                     "Talk to the user about the project requirements and gather what needs to be built today", CEO_KICKOFF_TICK, day);
             ok("Note + reminder registered: " + note + " (Day " + day + " Tick " + CEO_KICKOFF_TICK + " = ≈08:01:00 → CEO)");
@@ -199,7 +198,7 @@ public class Main {
         }
 
         for (String rid : ROLE_IDS) {
-            AgentRole role = system.getRole(rid);
+            Role role = system.getRole(rid);
             String summary = role.noteStore().getSummary(day);
             if (summary == null) {
                 // The summary tool shuts the computer down right after saving; read the host-mounted dir directly

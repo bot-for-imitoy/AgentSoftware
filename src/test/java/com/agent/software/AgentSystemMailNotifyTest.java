@@ -2,7 +2,7 @@ package com.agent.software;
 
 import com.agent.software.core.Types;
 import com.agent.software.io.StdInput;
-import com.agent.software.role.AgentRole;
+import com.agent.software.role.Role;
 import com.agent.software.services.MailService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,8 +37,8 @@ class AgentSystemMailNotifyTest {
     @Test
     void onDutyRecipientGetsNewMailTask() {
         AgentSystem a = make(tmp.resolve("a"));
-        AgentRole ceo = a.getRole("CEO");
-        AgentRole cto = a.getRole("CTO");
+        Role ceo = a.getRole("CEO");
+        Role cto = a.getRole("CTO");
 
         String result = a.mailService.send(a.mailService.emailFor(cto), cto.name,
                 List.of(a.mailService.emailFor(ceo)), "Architecture sync", "Please review the plan", null);
@@ -49,7 +49,7 @@ class AgentSystemMailNotifyTest {
         assertEquals(1, ceo.queueDepth());
         assertEquals(0, cto.queueDepth());  // the sender is not notified
 
-        AgentRole.Task task = ceo.popTask();
+        Role.Task task = ceo.popTask();
         assertNotNull(task);
         assertTrue(task.description.contains("[email/" + AgentSystem.EVENT_NEW_MAIL + "]"));
         assertTrue(task.description.contains("Gao Yuan"));
@@ -66,9 +66,9 @@ class AgentSystemMailNotifyTest {
     @Test
     void toAndCcRecipientsAreBothNotified() {
         AgentSystem a = make(tmp.resolve("a"));
-        AgentRole ceo = a.getRole("CEO");
-        AgentRole cto = a.getRole("CTO");
-        AgentRole cfo = a.getRole("CFO");
+        Role ceo = a.getRole("CEO");
+        Role cto = a.getRole("CTO");
+        Role cfo = a.getRole("CFO");
 
         a.mailService.send(a.mailService.emailFor(ceo), ceo.name,
                 List.of(a.mailService.emailFor(cto)), "Budget review", "Please check the numbers.",
@@ -88,8 +88,8 @@ class AgentSystemMailNotifyTest {
     @Test
     void restingRecipientIsNotDisturbed() throws Exception {
         AgentSystem a = make(tmp.resolve("a"));
-        AgentRole ceo = a.getRole("CEO");
-        AgentRole cto = a.getRole("CTO");
+        Role ceo = a.getRole("CEO");
+        Role cto = a.getRole("CTO");
         ceo.setState(Types.AgentState.OFF_DUTY);
 
         a.mailService.send(a.mailService.emailFor(cto), cto.name,
@@ -111,7 +111,7 @@ class AgentSystemMailNotifyTest {
     @Test
     void externalRecipientTriggersNoEvent() {
         AgentSystem a = make(tmp.resolve("a"));
-        AgentRole ceo = a.getRole("CEO");
+        Role ceo = a.getRole("CEO");
 
         a.mailService.send(a.mailService.emailFor(ceo), ceo.name,
                 List.of("external@partner-corp.example"), "Hi", "Are you free?", null);
@@ -127,7 +127,7 @@ class AgentSystemMailNotifyTest {
     @Test
     void selfMailDoesNotNotifySelf() {
         AgentSystem a = make(tmp.resolve("a"));
-        AgentRole cto = a.getRole("CTO");
+        Role cto = a.getRole("CTO");
 
         a.mailService.send(a.mailService.emailFor(cto), cto.name,
                 List.of(a.mailService.emailFor(cto)), "Reminder to self", "Buy coffee beans.", null);
