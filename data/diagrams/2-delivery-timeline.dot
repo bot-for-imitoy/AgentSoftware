@@ -1,0 +1,53 @@
+/* ============================================================
+   图 2 · 事（一）：可演示版本交付主线 D1 → D6
+   数据来源：data/notes/CEO/summaries/*.md、data/notes/CEO/notes/Day*.md
+   渲染：dot -Tpng diagrams/2-delivery-timeline.dot -o diagrams/2-delivery-timeline.png
+   ============================================================ */
+digraph delivery {
+  graph [
+    rankdir=TB, fontname="Noto Sans CJK SC", bgcolor="#fbfcfe", labelloc=t,
+    label=<<b>图 2 · 事（一）：可演示版本交付主线（D1 09-12 → D6 09-17）</b><br/><font point-size="11" color="#475569">绿=已闭环　黄=当前卡点　蓝=质量门禁　★=对外冻结基线</font>>,
+    fontsize=24, nodesep=0.30, ranksep=0.42, pad=0.4, compound=true
+  ];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=12,
+        fillcolor="#dcfce7", color="#16a34a", penwidth=1.1, margin="0.18,0.10", width=3.6];
+  edge [fontname="Noto Sans CJK SC", fontsize=10, color="#475569", arrowsize=0.75, penwidth=1.4];
+
+  E0  [label="D1  客户原始需求（模糊）\n「三端测评闭环演示」学生 / 教师 / 管理员", fillcolor="#ecfdf5", color="#16a34a"];
+  E1  [label="D1  范围澄清：三端统一改为纯 Web\n验收标准 =「界面能看、可演示即可」\n（客户 5 个待确认项由 CEO 亲自争取到在线窗口）", fillcolor="#ecfdf5", color="#16a34a"];
+  E2  [label="D1  《需求规格说明书》v0.1 初稿（BA 徐若男）", fillcolor="#ecfdf5", color="#16a34a"];
+  E3  [label="D2  客户当场「认可」+ 拍板交付日 2026-09-16（硬节点）\n红线解除 → 设计与实现放行", fillcolor="#fef9c3", color="#ca8a04"];
+  E4  [label="D2  RS v1.1 定稿 + 阶段0 交底\n页面清单 / 跳转关系 / 信息结构 / 视觉占位规范", fillcolor="#ecfdf5", color="#16a34a"];
+  E5  [label="D2–D4  阶段1 实现（前端 / 移动 / 后端 + Mock 静态数据）\nAD-P01~P03 合入、CI 流水线接入、dist 可运行", fillcolor="#ecfdf5", color="#16a34a"];
+  E6  [label="D3  ★ AD-03 裁定：走路径 A「静态快照」\n客户认可口径 = 合同级口径，不因实现便利而改", fillcolor="#fef9c3", color="#ca8a04"];
+  E7  [label="D3  v0.1.0 → v0.1.1 发布\nAD-03 静态快照回退 + UX-DEF-4 钳制（单批放行）", fillcolor="#ecfdf5", color="#16a34a"];
+  E8  [label="D4  v0.1.2 发布\n门禁③ CI 卡口启用 c767487（loop-regression 26/26 blocking）", fillcolor="#ecfdf5", color="#16a34a"];
+  E9  [label="D5  ★ v0.1.3 封版：tag peel = 8e3951b\n唯一对外演示基线 · 冻结不动（红线）", fillcolor="#fde68a", color="#b45309", penwidth=2.6];
+  E10 [label="D5  阶段4 评审 PASS + 归档\n/Public/release/v0.1.3/ 七类材料齐备", fillcolor="#ecfdf5", color="#16a34a"];
+  E11 [label="D5–D6  客户验收（唯一外部依赖）\nCEO 对外约请 ×4 超时 ＋ BA 需求侧渠道催促\n>> 截至 D6 无回信 <<", fillcolor="#fef08a", color="#d97706", penwidth=2.6];
+  E12 [label="D6  《最终交付确认》定稿待发\n草稿已备 /drive/linzong/Day5-最终交付确认-草稿-v0.1.3.md\n>> 当前卡点：等客户回信即发布归档 <<", fillcolor="#fef08a", color="#d97706", penwidth=2.6, style="rounded,filled,dashed"];
+
+  E0 -> E1  [label="CEO 对外澄清"];
+  E1 -> E2  [label="BA 编写"];
+  E2 -> E3  [label="CEO 提交客户评审"];
+  E3 -> E4  [label="BA 定稿归档"];
+  E4 -> E5  [label="COO 走 SDLC 派发"];
+  E5 -> E6  [label="BA 实测：口径与实现不符"];
+  E6 -> E7  [label="CTO 评估可行、成本最小 → COO 排期"];
+  E7 -> E8  [label="CTO 复核 → RM 放行 → 冻结 tag"];
+  E8 -> E9  [label="RM 封版打标"];
+  E9 -> E10 [label="COO 组织阶段4 评审"];
+  E10 -> E11 [label="CEO 作为对外窗口提交验收"];
+  E11 -> E12 [label="客户认可后定稿发布"];
+
+  /* ---------------- 门禁侧线 ---------------- */
+  subgraph cluster_gate {
+    label=<<b>质量门禁（贯穿主线）</b>>; labeljust=l; fontsize=14; color="#1d4ed8"; style="rounded";
+    G1 [label="门禁①  qa/release-gate-smoke.sh\n· 签字基准 sha 断言\n· 工作树 clean 断言\n· 第4断言 HEAD == 签字提交", fillcolor="#dbeafe", color="#2563eb", width=3.4];
+    G2 [label="门禁③  qa/loop-regression.test.ts\n26/26 用例 · C-6b 快照不变式\nCI 一级阻断（依赖仓库内基准）", fillcolor="#dbeafe", color="#2563eb", width=3.4];
+    G3 [label="阶段0 门禁 ①~⑦ 全 PASS\n证据链齐备（签字报告/复跑记录）", fillcolor="#dbeafe", color="#2563eb", width=3.4];
+  }
+  G1 -> E9  [label=" 签字放行", color="#2563eb", style=dashed, fontcolor="#1d4ed8"];
+  G2 -> E8  [label=" 卡口生效", color="#2563eb", style=dashed, fontcolor="#1d4ed8"];
+  G3 -> E10 [label=" 放行依据", color="#2563eb", style=dashed, fontcolor="#1d4ed8"];
+}

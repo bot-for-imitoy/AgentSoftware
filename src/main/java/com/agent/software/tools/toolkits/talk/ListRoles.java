@@ -1,25 +1,23 @@
 package com.agent.software.tools.toolkits.talk;
 
 import com.agent.software.role.Role;
-import com.agent.software.role.RolePool;
 import com.agent.software.tools.Tool;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * list_roles — get the current team members (name/responsibilities/skills/group).
- * Call this tool before sending messages to colleagues, or when you are not sure who to ask about something.
+ * list_roles：列出当前可以沟通的人。
+ *
+ * <p>按 F2：只显示被 COO 抽调进大组的成员；非管理组还会再受"同部门"限制，
+ * 管理组豁免部门限制。
  */
 public class ListRoles extends Tool {
 
-    private final RolePool pool;
+    private final Role role;
 
-    public ListRoles(RolePool pool) {
-        super();
-        this.pool = pool;
+    public ListRoles(Role role) {
+        this.role = role;
     }
 
     @Override
@@ -33,27 +31,30 @@ public class ListRoles extends Tool {
     }
 
     @Override
-    public String handler(Map<String, Object> args) {
-        String roster = buildTeamRoster(pool);
-        if (roster.isEmpty()) {
-            return "list_roles: (no team members currently)";
-        }
-        return "list_roles: current team members:\n" + roster;
+    public String getDescription() {
+        return "List cohort members you can talk to.";
     }
 
-    /** Build the team roster (fixed format, reused by the talk description and the list_roles tool). */
-    public static String buildTeamRoster(RolePool pool) {
-        List<String> rosterLines = new ArrayList<>();
-        for (Role r : pool.allRoles()) {
-            String resp = !r.responsibilities.isEmpty() ? r.responsibilities : r.title;
-            String group = (r.group == null ? "" : r.group).strip();
-            if (group.isEmpty()) {
-                group = "Unassigned";
-            }
-            List<String> skills = r.skills.size() > 4 ? r.skills.subList(0, 4) : r.skills;
-            rosterLines.add("  - **" + r.name + "** -- " + resp + "  (Group: " + group + ")  "
-                    + "Skills: " + String.join(", ", skills));
+    @Override
+    public String handler(Map<String, Object> args) {
+        if (role == null || role.getSystem() == null) {
+            return "list_roles error: role not bound to a system";
         }
-        return String.join("\n", rosterLines);
+        StringBuilder sb = new StringBuilder("list_roles (cohort):\n");
+        int shown = 0;
+        for (Role r : role.getSystem().getRolePool().all()) {
+            if (r == role) {
+                continue;
+            }
+            boolean talkable = role.canTalkTo(r);
+            sb.append("  - ").append(r.name).append(" (").append(r.roleId).append(", ").append(r.group)
+                    .append(") ").append(talkable ? "[talkable]" : "[not talkable: different department]")
+                    .append('\n');
+            shown++;
+        }
+        if (shown == 0) {
+            sb.append("  (nobody else in the cohort yet)");
+        }
+        return sb.toString();
     }
 }

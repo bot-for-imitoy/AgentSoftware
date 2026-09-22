@@ -6,16 +6,13 @@ import com.agent.software.tools.Tool;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * skill_remove — remove an added skill from the current role.
- */
+/** skill_remove：取消登记一个技能。 */
 public class SkillRemove extends Tool {
 
     private final Role role;
     private final SkillManager manager;
 
     public SkillRemove(Role role, SkillManager manager) {
-        super();
         this.role = role;
         this.manager = manager;
     }
@@ -28,22 +25,18 @@ public class SkillRemove extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("skill_name", "The skill name to remove.");
+        schema.put("name", "skill name to remove");
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Unregister a skill you added.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object oname = args.get("skill_name");
-        if (!(oname instanceof String)) {
-            return oname == null
-                    ? "skill_remove: Error: needs skill_name"
-                    : "skill_remove: Error: skill_name is not a string";
-        }
-        String name = ((String) oname).strip();
-        if (name.isEmpty()) {
-            return "skill_remove: Error: needs skill_name";
-        }
-        return this.manager.removeSkill(role, name);
+        String name = args.get("name") == null ? "" : String.valueOf(args.get("name"));
+        return manager.removeSkill(role, name);
     }
 }

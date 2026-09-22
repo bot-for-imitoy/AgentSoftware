@@ -1,0 +1,31 @@
+<div#root> DSH Local Buildb150a55新会话任务看板SSH技能中心工作区milthm-juceschool-netAgentSoftware新会话进行中修复Web界面消息显示2分钟AgentSystem与Web的关系7小时Implement Web Input Class 
+            <button._7D6uKa_entry> 任务看板
+              <span._7D6uKa_entryIcon> 
+              <span._7D6uKa_entryLabel> 任务看板
+            <button.mL8Uca_entry> SSH
+              <span.mL8Uca_entryIcon> 
+              <span.mL8Uca_entryLabel> SSH
+            <button.cBrkua_entry> 技能中心
+              <span.cBrkua_entryIcon> 
+              <span.cBrkua_entryLabel> 技能中心
+                <div.fThDlq_entryRow> 
+                <clippath#clip0_1450_63327> 
+                <filter#empty-glow-r0> 
+              <h2> 远程 SSH
+            <div.mL8Uca_panelContent> 不分组按环境分组按标签分组新增主机导入 ~/.ssh/config出错：HTTP 404: invalid JSON response
+                <div.mL8Uca_toolbar> 不分组按环境分组按标签分组新增主机导入 ~/.ssh/config
+                <div.mL8Uca_toolbarSpacer> 
+              <h2> 任务看板
+              <section> 待规划0这个状态还没有任务
+                <h3> 待规划
+              <section> 待办0这个状态还没有任务
+                <h3> 待办
+              <section> 进行中0这个状态还没有任务
+                <h3> 进行中
+              <section> 已完成0这个状态还没有任务
+                <h3> 已完成
+              <section> 已失败0这个状态还没有任务
+                <h3> 已失败
+  <div.kz2Bea_bubbleStack> 使唤终端跑个腿
+    <button.kz2Bea_bubble.kz2Bea_bubbleStatus.kz2Bea_bubbleClickable> 使唤终端跑个腿
+            <div.nArs4W_paneContent> AgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Container

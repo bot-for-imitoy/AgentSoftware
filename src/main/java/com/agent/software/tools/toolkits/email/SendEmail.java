@@ -1,8 +1,6 @@
 package com.agent.software.tools.toolkits.email;
 
 import com.agent.software.role.Role;
-
-import com.agent.software.role.RolePool;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
 
@@ -11,19 +9,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * send_email - send company mail to colleagues (the way employees communicate formally/across groups).
- * to takes a colleague name (see the mail_address_book directory) or a full email address; can be sent to multiple people at once.
- */
+/** send_email：给同事或客户发邮件。 */
 public class SendEmail extends Tool {
 
     private final Role role;
-    private final MailService mailService;
+    private final MailService mail;
 
-    public SendEmail(Role role, MailService mailService) {
-        super();
+    public SendEmail(Role role, MailService mail) {
         this.role = role;
-        this.mailService = mailService;
+        this.mail = mail;
     }
 
     @Override
@@ -34,98 +28,56 @@ public class SendEmail extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("to", "Recipient: colleague name or email, comma separated for multiple.");
-        schema.put("subject", "Email subject (one sentence).");
-        schema.put("body", "Email body (the more detailed the better).");
-        schema.put("cc", "(Optional) CC: name or email, comma separated.");
+        schema.put("to", "recipient role_id(s) or email address(es), comma separated");
+        schema.put("subject", "mail subject");
+        schema.put("body", "mail body");
+        schema.put("cc", "optional cc, comma separated");
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Send a company email to colleagues or the client.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object oto = args.get("to");
-        Object osubject = args.get("subject");
-        Object obody = args.get("body");
-        Object occ = args.get("cc");
-        if (!(oto instanceof String) || String.valueOf(oto).strip().isEmpty()) {
-            return oto == null
-                    ? "send_email: Error: needs 'to' (recipient)"
-                    : "send_email: Error: 'to' is not a string";
+        if (role == null || mail == null) {
+            return "send_email error: mail service unavailable";
         }
-        String subject = osubject instanceof String s ? s.strip() : "";
-        String body = obody instanceof String s ? s : "";
-        if (subject.isEmpty() && body.strip().isEmpty()) {
-            return "send_email: Error: at least one of 'subject' or 'body' must be provided.";
-        }
-        RolePool pool = role.pool();
-        List<String> failed = new ArrayList<>();
-        List<String> to = resolveRecipients(pool, oto, failed);
-        List<String> cc = new ArrayList<>();
-        if (occ != null) {
-            List<String> ccFailed = new ArrayList<>();
-            cc = resolveRecipients(pool, occ, ccFailed);
-            failed.addAll(ccFailed);
-        }
+        List<String> to = resolve(args.get("to"));
+        List<String> cc = resolve(args.get("cc"));
+        String subject = args.get("subject") == null ? "" : String.valueOf(args.get("subject"));
+        String body = args.get("body") == null ? "" : String.valueOf(args.get("body"));
         if (to.isEmpty()) {
-            return "send_email: Error: could not resolve recipients: " + String.join(", ", failed.isEmpty() ? List.of("(empty)") : failed)
-                    + ". Please call mail_address_book first to look up member names/emails.";
+            return "send_email error: no recipients";
         }
-        String senderEmail = mailService.emailFor(role);
-        String result = mailService.send(senderEmail, role.name, to, subject, body, cc);
-        if (!failed.isEmpty()) {
-            result += " Note: the following recipients were not found and were not sent: " + String.join(", ", failed);
-        }
-        role.journal("Sent mail: \"" + subject + "\" -> " + String.join(", ", to));
-        return "send_email: " + result;
+        String result = mail.send(mail.getAddress(role.roleId), to, cc, subject, body);
+        role.journal("Sent mail: \"" + subject + "\" -> " + to);
+        return result;
     }
 
-    /** Resolve recipients in batch (a mix of names or emails, supports comma-separated strings/lists). */
-    private List<String> resolveRecipients(RolePool pool, Object values, List<String> failed) {
-        List<String> parts = new ArrayList<>();
-        if (values instanceof String s) {
-            for (String v : s.split(",")) {
-                if (!v.strip().isEmpty()) {
-                    parts.add(v.strip());
-                }
-            }
-        } else if (values instanceof List<?> list) {
-            for (Object v : list) {
-                if (String.valueOf(v).strip().isEmpty()) {
-                    continue;
-                }
-                parts.add(String.valueOf(v).strip());
-            }
-        } else if (values != null) {
-            parts.add(String.valueOf(values).strip());
+    /** 支持 role_id 或直接邮箱；role_id 会转成公司地址。 */
+    private List<String> resolve(Object raw) {
+        List<String> out = new ArrayList<>();
+        if (raw == null) {
+            return out;
         }
-        List<String> emails = new ArrayList<>();
-        for (String p : parts) {
-            String addr = resolveAddress(pool, p);
-            if (!addr.isEmpty()) {
-                emails.add(addr);
+        for (String part : String.valueOf(raw).split(",")) {
+            String v = part.trim();
+            if (v.isEmpty()) {
+                continue;
+            }
+            if (v.contains("@")) {
+                out.add(v);
+            } else if (role.getSystem() != null && role.getSystem().getRolePool().find(v) != null) {
+                out.add(mail.getAddress(v));
+            } else if ("client".equalsIgnoreCase(v) || "client_a".equalsIgnoreCase(v)) {
+                out.add(mail.getClientAddress());
             } else {
-                failed.add(p);
+                out.add(mail.getAddress(v));
             }
         }
-        return emails;
-    }
-
-    /** Resolve a name/email to an email address; returns an empty string if it cannot be resolved. */
-    private String resolveAddress(RolePool pool, String value) {
-        String v = (value == null ? "" : value).strip();
-        if (v.isEmpty()) {
-            return "";
-        }
-        if (v.contains("@")) {
-            return v;
-        }
-        if (pool == null) {
-            return "";
-        }
-        Role role = pool.getRoleByName(v);
-        if (role == null) {
-            return "";
-        }
-        return mailService.emailFor(role);
+        return out;
     }
 }

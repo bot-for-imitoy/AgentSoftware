@@ -1,28 +1,23 @@
 package com.agent.software.tools.toolkits.email;
 
 import com.agent.software.role.Role;
-
+import com.agent.software.services.MailMessage;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * read_mail - view your own company mailbox inbox (newest first). Returns the mail list:
- * sender/subject/summary/read or unread/message_id. Use open_mail to open the full content of a mail.
- */
+/** read_mail：查看自己收件箱。 */
 public class ReadMail extends Tool {
 
     private final Role role;
-    private final MailService mailService;
+    private final MailService mail;
 
-    public ReadMail(Role role, MailService mailService) {
-        super();
+    public ReadMail(Role role, MailService mail) {
         this.role = role;
-        this.mailService = mailService;
+        this.mail = mail;
     }
 
     @Override
@@ -33,51 +28,33 @@ public class ReadMail extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("limit", "(Optional) Max number of messages to show (default 10).");
-        schema.put("unread_only", "(Optional) Only show unread mails (default false).");
+        schema.put("limit", Map.of("type", "integer", "description", "how many recent mails (default 10)"));
         return schema;
     }
 
     @Override
-    public String handler(Map<String, Object> args) {
-        String email = mailService.emailFor(role);
-        int limit = 10;
-        Object l = args.get("limit");
-        if (l instanceof Integer) {
-            limit = (Integer) l;
-        } else if (l instanceof Number n) {
-            limit = n.intValue();
-        } else if (l instanceof String s && s.matches("\\d+")) {
-            limit = Integer.parseInt(s);
-        }
-        boolean unreadOnly = oBool(args.get("unread_only"));
-        List<MailService.MailMessage> msgs = mailService.inbox(email, null);
-        if (unreadOnly) {
-            msgs.removeIf(m -> m.read);
-        }
-        if (msgs.size() > Math.max(0, limit)) {
-            msgs = new ArrayList<>(msgs.subList(0, Math.max(0, limit)));
-        }
-        if (msgs.isEmpty()) {
-            return "read_mail: inbox is empty (mailbox " + email + ").";
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("read_mail: inbox " + email + " (" + mailService.unreadCount(email) + " unread):");
-        int i = 1;
-        for (MailService.MailMessage m : msgs) {
-            lines.add("  " + i + ". " + m.preview());
-            i++;
-        }
-        return String.join("\n", lines);
+    public String getDescription() {
+        return "List your inbox, newest last.";
     }
 
-    private static boolean oBool(Object o) {
-        if (o instanceof Boolean b) {
-            return b;
+    @Override
+    public String handler(Map<String, Object> args) {
+        if (role == null || mail == null) {
+            return "read_mail error: mail service unavailable";
         }
-        if (o instanceof String s) {
-            return s.matches("1|true|yes|on");
+        int limit = args.get("limit") instanceof Number n ? n.intValue() : 10;
+        String address = mail.getAddress(role.roleId);
+        List<MailMessage> inbox = mail.inbox(address, limit);
+        StringBuilder sb = new StringBuilder("read_mail: " + inbox.size() + " mail(s), unread "
+                + mail.unreadCount(address) + "\n");
+        for (MailMessage m : inbox) {
+            sb.append("  - [").append(m.read ? "read" : "NEW").append("] ").append(m.messageId)
+                    .append(" | ").append(m.senderName).append(" <").append(m.senderEmail).append(">")
+                    .append(" | ").append(m.subject).append('\n');
         }
-        return false;
+        if (inbox.isEmpty()) {
+            sb.append("  (empty)");
+        }
+        return sb.toString();
     }
 }

@@ -1,22 +1,19 @@
 package com.agent.software.tools.toolkits.time;
 
+import com.agent.software.event.TimeBus;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * get_time — view the current simulated schedule time (calendar date, clock and work-rest status).
- * Time rules: 1 tick = 1 simulated second (configurable), each day starts at 08:00:00 (tick 0)
- * and the shift ends at 18:00:00 (tick 36000 by default).
- */
+/** get_time：返回当前模拟日期/时间/tick。 */
 public class GetTime extends Tool {
 
-    private final TimeEventBus timeManager;
+    private final Role role;
 
-    public GetTime(TimeEventBus timeManager) {
-        super();
-        this.timeManager = timeManager;
+    public GetTime(Role role) {
+        this.role = role;
     }
 
     @Override
@@ -30,7 +27,18 @@ public class GetTime extends Tool {
     }
 
     @Override
+    public String getDescription() {
+        return "Get the current simulated date/time and shift progress.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        return this.timeManager.describe() + "\nCurrent Tick count: " + this.timeManager.currentTick();
+        if (role == null || role.getSystem() == null) {
+            return "get_time error: role not bound to a system";
+        }
+        TimeBus tb = role.getSystem().getTimeBus();
+        return "Now: " + tb.currentDateTime()
+                + " (day " + tb.getDay() + ", tick " + tb.now()
+                + ", working hours: " + tb.isWorkingHours() + ")";
     }
 }

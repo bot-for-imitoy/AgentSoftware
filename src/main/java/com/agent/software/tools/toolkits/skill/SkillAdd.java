@@ -6,17 +6,13 @@ import com.agent.software.tools.Tool;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * skill_add — add a skill for the current role. After adding, the skill can be invoked in tasks
- * (obtaining its complete usage instructions).
- */
+/** skill_add：把技能库里的技能装到自己身上。 */
 public class SkillAdd extends Tool {
 
     private final Role role;
     private final SkillManager manager;
 
     public SkillAdd(Role role, SkillManager manager) {
-        super();
         this.role = role;
         this.manager = manager;
     }
@@ -29,22 +25,18 @@ public class SkillAdd extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("skill_name", "The skill name to add, e.g. pptx-generator.");
+        schema.put("name", "skill name to install");
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Install a skill as a tool you can call.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object oname = args.get("skill_name");
-        if (!(oname instanceof String)) {
-            return oname == null
-                    ? "skill_add: Error: needs skill_name"
-                    : "skill_add: Error: skill_name is not a string";
-        }
-        String name = ((String) oname).strip();
-        if (name.isEmpty()) {
-            return "skill_add: Error: needs skill_name";
-        }
-        return this.manager.addSkill(role, name);
+        String name = args.get("name") == null ? "" : String.valueOf(args.get("name"));
+        return manager.addSkill(role, name);
     }
 }

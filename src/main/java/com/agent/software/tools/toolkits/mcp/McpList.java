@@ -1,26 +1,20 @@
 package com.agent.software.tools.toolkits.mcp;
 
-import com.agent.software.computers.Computer;
 import com.agent.software.role.Role;
-
-import com.agent.software.role.ToolRegistry.ToolDef;
 import com.agent.software.tools.Tool;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-/**
- * mcp_list - list all MCP tools available locally (name + short description).
- */
+/** mcp_list：列出当前电脑上 MCP 服务器暴露的工具。 */
 public class McpList extends Tool {
 
     private final Role role;
+    private final MCPManager manager;
 
-    public McpList(Role role) {
-        super();
+    public McpList(Role role, MCPManager manager) {
         this.role = role;
+        this.manager = manager;
     }
 
     @Override
@@ -34,18 +28,23 @@ public class McpList extends Tool {
     }
 
     @Override
+    public String getDescription() {
+        return "List MCP tools exposed by the server running on your computer.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Computer computer = role.computer();
-        List<String> avail = new ArrayList<>();
-        for (ToolDef td : computer.iterMcpTools()) {
-            avail.add("- " + td.name + ": " + td.description);
+        if (role == null || !role.hasComputer()) {
+            return "mcp_list: no computer";
         }
-        if (avail.isEmpty()) {
-            return "mcp_list: no MCP server tools on this computer (the server may not be connected).";
+        var tools = role.getComputer().getMcpTools();
+        StringBuilder sb = new StringBuilder("mcp_list: " + tools.size() + " tool(s)\n");
+        for (var t : tools) {
+            sb.append("  - ").append(t.getToolName()).append(": ").append(t.getDescription()).append('\n');
         }
-        List<String> out = new ArrayList<>();
-        out.add("mcp_list: this computer's MCP server has " + avail.size() + " tools:");
-        out.addAll(avail);
-        return String.join("\n", out);
+        if (tools.isEmpty()) {
+            sb.append("  (none; the server may not be started yet)");
+        }
+        return sb.toString();
     }
 }

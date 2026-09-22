@@ -2,22 +2,18 @@ package com.agent.software.tools.toolkits.skill;
 
 import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
+import com.agent.software.utils.Json;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-/**
- * skill_my_skills — view the list of skills already added to the current role.
- */
+/** skill_my_skills：列出我已经装上的技能。 */
 public class SkillMySkills extends Tool {
 
     private final Role role;
     private final SkillManager manager;
 
     public SkillMySkills(Role role, SkillManager manager) {
-        super();
         this.role = role;
         this.manager = manager;
     }
@@ -33,16 +29,12 @@ public class SkillMySkills extends Tool {
     }
 
     @Override
+    public String getDescription() {
+        return "List the skills you have installed.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        List<Map<String, String>> mine = this.manager.listRoleSkills(role);
-        if (mine.isEmpty()) {
-            return "skill_my_skills: you have not added any skills yet. Use skill_search / skill_list to find them and skill_add to add.";
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("skill_my_skills: you have added " + mine.size() + " skills:");
-        for (Map<String, String> m : mine) {
-            lines.add("- " + m.get("name") + ": " + m.get("description"));
-        }
-        return String.join("\n", lines);
+        return "skill_my_skills: " + Json.stringify(manager.listRoleSkills(role));
     }
 }

@@ -1,29 +1,21 @@
 package com.agent.software.tools.toolkits.email;
 
 import com.agent.software.role.Role;
-
-import com.agent.software.role.RolePool;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-/**
- * mail_address_book - view the company address book: all members listed by group
- * (group name -> name <email> - position). If unsure about the recipient before sending mail, call this tool first.
- */
+/** mail_address_book：公司通讯录（大组同事 + 客户）。 */
 public class MailAddressBook extends Tool {
 
     private final Role role;
-    private final MailService mailService;
+    private final MailService mail;
 
-    public MailAddressBook(Role role, MailService mailService) {
-        super();
+    public MailAddressBook(Role role, MailService mail) {
         this.role = role;
-        this.mailService = mailService;
+        this.mail = mail;
     }
 
     @Override
@@ -33,49 +25,25 @@ public class MailAddressBook extends Tool {
 
     @Override
     public Map<String, Object> getSchema() {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("group", "(Optional) Only show one group, e.g. 'Frontend Development Group'.");
-        return schema;
+        return new LinkedHashMap<>();
+    }
+
+    @Override
+    public String getDescription() {
+        return "List company addresses: active colleagues and the client.";
     }
 
     @Override
     public String handler(Map<String, Object> args) {
-        RolePool pool = role.pool();
-        if (pool == null) {
-            return "mail_address_book: Error: the current role is not bound to a role pool, so the address book is unavailable.";
+        if (role == null || role.getSystem() == null || mail == null) {
+            return "mail_address_book error: unavailable";
         }
-        Object ogroup = args.get("group");
-        String groupFilter = ogroup instanceof String s ? s.strip() : "";
-        Map<String, List<Role>> byGroup = new LinkedHashMap<>();
-        for (Role r : pool.allRoles()) {
-            String g = (r.group == null ? "" : r.group).strip();
-            if (g.isEmpty()) {
-                g = "Ungrouped";
-            }
-            byGroup.computeIfAbsent(g, k -> new ArrayList<>()).add(r);
+        StringBuilder sb = new StringBuilder("mail_address_book:\n");
+        sb.append("  - Client A <").append(mail.getClientAddress()).append(">\n");
+        for (Role r : role.getSystem().getRolePool().all()) {
+            sb.append("  - ").append(r.name).append(" (").append(r.roleId).append(", ").append(r.group)
+                    .append(") <").append(mail.getAddress(r.roleId)).append(">\n");
         }
-        List<String> lines = new ArrayList<>();
-        lines.add("mail_address_book: company address book (email suffix @" + mailService.config.suffix
-                + ", " + pool.allRoles().size() + " people):");
-        List<String> groups = new ArrayList<>(byGroup.keySet());
-        groups.sort(String::compareTo);
-        for (String g : groups) {
-            if (!groupFilter.isEmpty() && !groupFilter.equals(g)) {
-                continue;
-            }
-            lines.add("[" + g + "]");
-            List<Role> members = byGroup.get(g);
-            members.sort((a, b) -> a.name.compareTo(b.name));
-            for (Role r : members) {
-                String desc = !r.title.isEmpty() ? r.title
-                        : (!r.responsibilities.isEmpty() ? r.responsibilities : "team member");
-                lines.add("  - " + r.name + " <" + mailService.emailFor(r) + "> — " + desc);
-            }
-        }
-        if (!groupFilter.isEmpty() && !byGroup.containsKey(groupFilter)) {
-            return "mail_address_book: Error: group not found: " + groupFilter + ". Available groups: "
-                    + String.join(", ", groups);
-        }
-        return String.join("\n", lines);
+        return sb.toString();
     }
 }

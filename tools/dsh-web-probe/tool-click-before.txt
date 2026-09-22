@@ -1,0 +1,153 @@
+DSH Local Build
+b150a55
+新会话
+任务看板
+SSH
+技能中心
+工作区
+milthm-juce
+school-net
+AgentSoftware
+进行中
+修复Web界面消息显示
+18分钟
+AgentSystem与Web的关系
+7小时
+Implement Web Input Class for TalkToClient
+6小时
+运行Maven测试并报告问题
+22小时
+LLM Provider管理器设计与推送
+23小时
+dsh-mcp-server
+img2pdf
+AgentCompany
+linux-PKGBUILD
+snake
+认知实习
+Blog-Material-You
+guochuang_case
+wuyitang-local
+maf_scheduler
+deepseek-harness-plugin
+deepseek-harness
+workspace
+未分组
+设置
+修复Web界面消息显示
+/
+2 个子代理
+标准模式
+1 个后台任务
+Session log
+对话
+轨迹
+加载更早
+Bash
+Read tool conversation node source
+Think
+Tool node captures argsRaw and results — so rendering capability exists. The chat node renderers (chat/register-node-renderers.ts, tool-node-reader.ts, chat cards (ToolCard etc. probably in ui-tool?) decide what's visible. The message stream shows "rows" with labels and clicking opens the right "详情" panel.
+
+The client supports tool args/results in its data model. Let me delegate two focused code-mapping tasks to subagents while the live probe runs.
+
+Tool call
+subagent · Map client live-event pipeline
+Tool call
+subagent · Map host session & GUI binding
+Think
+Both subagents are running in the background. Meanwhile, let me examine how the rendering shows tool parameters/outputs in the chat stream — chat node renderers & message items: tool-node-reader.ts and the ToolCard used in the stream; and check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+Bash
+Probe expandable row states
+Bash
+View expandables dump
+Think
+Great detail. In the message stream DOM:
+
+Let me check the live-streaming probe results and the two subagent findings.
+
+Tool call
+job_output · bash-7
+Bash
+View live tail snapshots head
+Think
+HUGE FINDING! The live tail shows that the running session's chat area DOES update live:
+
+The live probe confirms the open running session does stream live (new tool rows, subagents, background jobs, stats all appear). So rendering/streaming works once the right session is open — but on page load the GUI lands on a blank 新会话 (or whatever dsh.sessions.current points to), showing zero messages.
+
+Before I pick the fix in this large codebase, let me confirm exactly what you observe, since that determines the change:
+
+提问
+2/2 已回答
+上下文注入
+subagent-report
+上下文注入
+subagent-settled
+Background subagent e1cc83c2-f327-4bce-ae06-f9b2eaa40414 finished and will do no further work unless you send it more.
+上下文注入
+subagent-settled
+Background subagent 1c962610-d52e-4b84-a0b7-01f4a667d854 finished and will do no further work unless you send it more.
+Think
+Both subagent reports are extremely informative. Also the user answered my question:
+
+The user confirmed: their GUI opens the current (blank) session with no message content, and they want the page to auto-enter the running session on load with full live content. Both subagent reports show this behavior is client-driven startup selection (startInitialSelection + restore path). Let me read the exact code to design the change.
+
+更新任务清单
+2/6 已完成 · Implement startup auto-attach to the running session (client selection policy)
+Bash
+Read workspaces service selection logic
+Think
+Now I see `startInitialSelection`. Key: after baselines ready: if `current` (persisted/restored current) !== undefined → done (restore path wins); else if `recentWorkspaceId` exists → connect & open blank session.
+Bash
+Read sessions service head
+Bash
+Find running flag usage client-side
+Think
+Client `SessionSummary` has `running: boolean` and `updatedAt`. The list store lives under `sessions.list` (SessionListState with .byId etc.) accessible from workspaces service via `this.sessions.list.getSnapshot()` — used in connectWorkspace: `this.sessions.list.getSnapshot()` returns snapshot with `.ids`, `.byId[id]` (SessionSummary), `.current`.
+Bash
+Read sessions service init and restore logic
+Bash
+Read workspaces service project logic
+Think
+Now I understand the pieces:
+Bash
+Read workspaces service class head
+Bash
+Read SessionManager select/get logic
+Think
+Good: `WorkspaceRuntime` constructor subscribes to both `this.manager` (workspace) AND `this.sessions.list` → project() → list store notify → reconcile runs whenever either baseline changes. That covers readiness.
+Bash
+Read sessions.open implementation
+Think
+The `SessionRuntime.open(id)` at line 372: let me read 360-430 to see open/clear and how current is set (i.e., open sets the selection/current → the list store notify triggers followCurrent → window). This is the API to programmatically switch sessions: `this.sessions.open(sessionId)` — also used in connectWorkspace flow & startSession.
+
+Now let me look at how rows decide expanded state and what content they render (to make reasoning/tool args/results visible by default). Let me find the expandable row components.
+
+Bash
+Locate aria-expanded row components
+Bash
+Read ReasoningRow component
+Think
+So the chat stream's Think row: `DisclosureRow` with `open={expanded}` default false — the reasoning is collapsed; summary shows only first line (or latest line while running). The full reasoning text is inside the disclosure's children (only shown when open).
+
+Let me check what happens when a tool row is clicked — whether args/results appear inline or only in the side details panel.
+
+Write
+tools/dsh-web-probe/probe8.cjs
+运行中
+Bash
+Run tool-row click probe and diff text
+Deep diving...
+任务
+2 已完成 · 1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 56 步| LLM 9m5s · 工具调用 8m45s| 首 token 平均 1.2s · 133 tok/s| 缓存命中 98%| 输入 3.9M tok · 输出 63.4K tok
+详情
+点击消息流中的工具行查看详情
+终端全速运转中

@@ -6,17 +6,13 @@ import com.agent.software.tools.Tool;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * mcp_add - add a locally available MCP tool to the current role.
- * After adding, the tool can be called directly in subsequent tasks.
- */
+/** mcp_add：把一个 MCP 工具装到自己的电脑上。 */
 public class McpAdd extends Tool {
 
     private final Role role;
     private final MCPManager manager;
 
     public McpAdd(Role role, MCPManager manager) {
-        super();
         this.role = role;
         this.manager = manager;
     }
@@ -29,22 +25,18 @@ public class McpAdd extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("tool_name", "The MCP tool name to add, e.g. read_file.");
+        schema.put("tool", "MCP tool name to install");
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Install an MCP tool onto your own computer.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object oname = args.get("tool_name");
-        if (!(oname instanceof String)) {
-            return oname == null
-                    ? "mcp_add: Error: needs tool_name"
-                    : "mcp_add: Error: tool_name is not a string";
-        }
-        String name = ((String) oname).strip();
-        if (name.isEmpty()) {
-            return "mcp_add: Error: needs tool_name";
-        }
-        return this.manager.addTool(role, name);
+        String name = args.get("tool") == null ? "" : String.valueOf(args.get("tool"));
+        return manager.addTool(role, name);
     }
 }

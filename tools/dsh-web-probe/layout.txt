@@ -1,0 +1,93 @@
+=== TITLE ===
+DSH Local Build
+=== LOCALSTORAGE ===
+{
+ "dsh.workspace.view.v5": "{\"groupBy\":\"workspace\",\"orderBy\":\"updated\",\"groupExpansion\":{\"677ff9ee-9c15-433d-acc0-142e58ee836d\":true},\"sessionOrderByAccount\":{\"04af1bea-dad6-48c2-b63e-dab500f5ac6b\":[\"session-c440f34d-d9cc-444b-a846-5cc5f517d2b3\"],\"9ed0696a-6d76-4aec-a04d-273fa889e7fe\":[\"session-6c459867-281b-48bb-ada4-690faaf8",
+ "dsh.sessions.current": "{\"sessionId\":\"session-d91d0e8d-c319-42f8-b88f-8a5abefada7d\"}"
+}
+=== ACTIVE ===
+[
+ {
+  "tag": "DIV",
+  "cls": "_5cQKXG_sessionRow _5cQKXG_selected",
+  "t": "新会话"
+ },
+ {
+  "tag": "BUTTON",
+  "cls": "mL8Uca_tab",
+  "t": "主机"
+ }
+]
+=== TEXT MAP ===
+(1552,17) 25x18  Files
+(1513,28) 0x20  详情
+(114,36) 132x24  DSH Local Build
+(210,36) 47x16  b150a55
+(150,93) 42x22  新会话
+(1589,95) 92x22  AgentSoftware
+(1575,129) 19x22  .git
+(80,138) 52x19  任务看板
+(1582,163) 33x22  .m2w
+(69,174) 27x15  SSH
+(1582,197) 33x22  .tools
+(80,210) 52x19  技能中心
+(1517,215) 0x296  点击消息流中的工具行查看详情
+(1582,231) 33x22  .venv
+(37,248) 42x20  工作区
+(1590,265) 48x22  .vscode
+(151,287) 218x20  milthm-juce
+(1345,297) 170x36  让命令飞一会儿
+(1579,299) 27x22  data
+(151,325) 218x20  school-net
+(1580,333) 30x22  docs
+(151,363) 218x20  AgentSoftware
+(990,367) 52x21  预览版
+(1575,367) 19x22  src
+(878,370) 156x32  探索未至之境
+(147,398) 214x20  新会话
+(1583,401) 36x22  target
+(571,424) 85x20  AgentSoftware
+(694,424) 106x28  标准模式
+(795,424) 40x20  master
+(28,432) 1x1  进行中
+(132,432) 183x20  修复Web界面消息显示
+(245,432) 31x20  7分钟
+(1580,435) 30x22  tests
+(132,466) 183x20  AgentSystem与Web的关系
+(245,466) 31x20  7小时
+(1580,469) 30x22  tools
+(132,500) 183x20  Implement Web Input Class for TalkToClient
+(245,500) 31x20  6小时
+(1608,503) 85x22  .dockerignore
+(128,534) 177x20  运行Maven测试并报告问题
+(241,534) 37x20  22小时
+(1594,537) 58x22  .gitignore
+(624,540) 99x20  Workspace Write
+(1110,540) 117x20  DeepSeek-V4-Flash
+(1186,540) 27x20  High
+(140,564) 256x28  展开其余 1 个会话
+(1605,571) 79x22  Containerfile
+(151,599) 218x20  dsh-mcp-server
+(1592,605) 53x22  pom.xml
+(151,637) 218x20  img2pdf
+(1607,639) 83x22  README.md
+(1601,673) 70x22  run_out.log
+(151,675) 218x20  AgentCompany
+(151,713) 218x20  linux-PKGBUILD
+(151,751) 218x20  snake
+(151,789) 218x20  认知实习
+(151,827) 218x20  Blog-Material-You
+(151,865) 218x20  guochuang_case
+(151,903) 218x20  wuyitang-local
+(56,919) 28x22  设置
+(151,941) 218x20  maf_scheduler
+(151,979) 218x20  deepseek-harness-plugin
+(151,1017) 218x20  deepseek-harness
+(363,1046) 24x18  文件
+(514,1046) 60x18  源代码管理
+(664,1046) 48x18  任务管理
+(815,1046) 79x18  侧边对话(beta)
+(965,1046) 24x18  终端
+(1116,1046) 36x18  浏览器
+(151,1055) 218x20  workspace
+(151,1093) 218x20  未分组

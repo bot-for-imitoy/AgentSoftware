@@ -1,23 +1,18 @@
 package com.agent.software.tools.toolkits.pc;
 
-
-import com.agent.software.computers.Computer;
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * run_command - run a command on the personal computer (e.g. ls, cat, python, git, etc.),
- * and return the command output. Useful for viewing files on the computer, running scripts, and checking project status.
- */
+/** run_command：在自己电脑上执行命令。 */
 public class RunCommand extends Tool {
 
-    private final Computer computer;
+    private final Role role;
 
-    public RunCommand(Computer computer) {
-        super();
-        this.computer = computer;
+    public RunCommand(Role role) {
+        this.role = role;
     }
 
     @Override
@@ -28,22 +23,43 @@ public class RunCommand extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("command", "The command to run on your computer.");
+        schema.put("command", "shell command to run on your own computer");
+        schema.put("timeout", Map.of("type", "integer", "description", "timeout seconds (default 60)"));
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Run a shell command on your own personal computer.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object ocmd = args.get("command");
-        if (!(ocmd instanceof String)) {
-            return ocmd == null
-                    ? "run_command: Error: needs a command"
-                    : "run_command: Error: command is not a string";
+        if (role == null || !role.hasComputer()) {
+            return "run_command error: no computer";
         }
-        String cmd = ((String) ocmd).strip();
-        if (cmd.isEmpty()) {
-            return "run_command: Error: needs a command";
+        String command = str(args.get("command"));
+        if (command.isBlank()) {
+            return "run_command error: empty command";
         }
-        return this.computer.runCommand(cmd, 60, 2000);
+        int timeout = intArg(args.get("timeout"), 60);
+        return role.getComputer().runCommand(command, timeout, 20_000);
+    }
+
+    private static String str(Object o) {
+        return o == null ? "" : String.valueOf(o);
+    }
+
+    private static int intArg(Object o, int def) {
+        if (o instanceof Number n) {
+            return n.intValue();
+        }
+        if (o != null) {
+            try {
+                return Integer.parseInt(String.valueOf(o).trim());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return def;
     }
 }

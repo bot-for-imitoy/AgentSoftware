@@ -1,40 +1,21 @@
 package com.agent.software.tools.toolkits.pc;
 
-import com.agent.software.computers.Computer;
 import com.agent.software.role.Role;
-
 import com.agent.software.tools.Toolkit;
 
-/**
- * Personal computer toolkit class (Pc Toolkit = Computer tools) - lets the LLM work on its own computer:
- * run_command / computer_status / lan_devices / reboot.
- *
- * Each role has its own computer (a Podman virtual computer by default); the computer turns on when the role
- * joins/starts, and turns off automatically at the end of the day (off-duty summary) or when the role leaves.
- */
+/** 个人电脑工具包：run_command / computer_status / reboot / lan_devices。 */
 public class Pc extends Toolkit {
 
-    private final Computer computer;
-
-    public Pc(Computer computer) {
-        this(computer, null);
-    }
-
-    public Pc(Computer computer, ComputerManager manager) {
-        this.computer = computer;
-        addTool(new RunCommand(computer));
-        addTool(new ComputerStatus(computer));
-        addTool(new LanDevices(manager));
-        addTool(new Reboot(computer));
-    }
-
     public Pc(Role role) {
-        this(role.computer(), role.computerManager());
+        addTool(new RunCommand(role));
+        addTool(new ComputerStatus(role));
+        addTool(new Reboot(role));
+        addTool(new LanDevices(role == null || role.getSystem() == null
+                ? null : role.getSystem().getComputerManager()));
     }
 
     @Override
-    public String getDescription(){
-        return "Personal computer toolkit (pc): run commands, view computer status, view LAN devices, reboot computer";
+    public String getDescription() {
+        return "Personal computer: run_command / computer_status / reboot / lan_devices";
     }
-
 }

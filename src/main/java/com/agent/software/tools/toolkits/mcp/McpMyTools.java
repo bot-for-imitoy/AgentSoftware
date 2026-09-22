@@ -2,22 +2,18 @@ package com.agent.software.tools.toolkits.mcp;
 
 import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
+import com.agent.software.utils.Json;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-/**
- * mcp_my_tools - view the list of MCP tools already added to the current role.
- */
+/** mcp_my_tools：查看自己已安装的 MCP 工具。 */
 public class McpMyTools extends Tool {
 
     private final Role role;
     private final MCPManager manager;
 
     public McpMyTools(Role role, MCPManager manager) {
-        super();
         this.role = role;
         this.manager = manager;
     }
@@ -33,16 +29,12 @@ public class McpMyTools extends Tool {
     }
 
     @Override
+    public String getDescription() {
+        return "Show the MCP tools already installed on your computer.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        List<Map<String, String>> mine = this.manager.listRoleTools(role);
-        if (mine.isEmpty()) {
-            return "mcp_my_tools: you have not added any MCP tools yet. Use mcp_search / mcp_list to find tools and mcp_add to add them.";
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("mcp_my_tools: you have added " + mine.size() + " MCP tools:");
-        for (Map<String, String> m : mine) {
-            lines.add("- " + m.get("name") + ": " + m.get("description"));
-        }
-        return String.join("\n", lines);
+        return "mcp_my_tools: " + Json.stringify(manager.listRoleTools(role));
     }
 }

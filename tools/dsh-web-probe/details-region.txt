@@ -1,0 +1,6 @@
+<DIV nArs4W_panel nArs4W_panelHidden x=1511 y=0> FilesAgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件
+<DIV nArs4W_panelBody x=1512 y=0> FilesAgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件
+<DIV nArs4W_pane x=1512 y=0> FilesAgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件
+<DIV nArs4W_paneContent x=1512 y=35> AgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件
+<DIV nArs4W_paneTab x=1512 y=35> AgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件
+<DIV nArs4W_editorTreePanel nArs4W_editorTreePanelFull x=1512 y=35> AgentSoftware@文件.git@文件.m2w@文件.tools@文件.venv@文件.vscode@文件data@文件docs@文件src@文件target@文件tests@文件tools@文件.dockerignore@文件.gitignore@文件Containerfile@文件pom.xml@文件README.md@文件run_out.log@文件

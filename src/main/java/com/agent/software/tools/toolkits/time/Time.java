@@ -3,28 +3,16 @@ package com.agent.software.tools.toolkits.time;
 import com.agent.software.role.Role;
 import com.agent.software.tools.Toolkit;
 
-/**
- * Time toolkit — schedule time viewing and rest.
- */
+/** 时间工具包：get_time / take_rest。 */
 public class Time extends Toolkit {
 
-    private final TimeEventBus timeManager;
-    private final Role role;
-
-    public Time(TimeEventBus timeManager, Role role) {
-        this.timeManager = timeManager;
-        this.role = role;
-        addTool(new GetTime(timeManager));
+    public Time(Role role) {
+        addTool(new GetTime(role));
         addTool(new TakeRest(role));
     }
 
-    public Time(Role role) {
-        this(role.timeManager(), role);
-    }
-
     @Override
-    public String getDescription(){
-        return "Time toolkit: check the current schedule time (get_time), take a rest (take_rest)";
+    public String getDescription() {
+        return "Time: get_time (current simulated time), take_rest (idle until the next event)";
     }
-
 }

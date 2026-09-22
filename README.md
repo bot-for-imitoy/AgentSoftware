@@ -1,5 +1,12 @@
 # AgentSoftware — Shift & Event-Driven Agent Scheduler
 
+> **分支状态（`refactor3`）**：本分支已按"实体 + 管理器 + 事件 + 状态化 LLM"的纯 OO 架构**重写完成**：
+> `main` 与测试全量编译通过（11 个测试类 / 37 用例全绿），`AgentSystem` 可启动默认管理组大组并起 Web UI。
+> 当前实现的设计与公共 API 见 **`docs/refactor3-framework.md`**，
+> 运行时机制与风险见 **`docs/refactor3-deep-dive.md`**，
+> 需求（名单/大组/抽调、甲方客户）见 **`docs/refactor3-requirements-2.md`**。
+> 下面正文描述的是 **`master` 分支的旧架构**（行为基线），仅作语义参照。
+
 A **multi-role AI agent "software company" simulator** written in Java (Maven, JUnit 5).
 A team of LLM-powered employees — CEO, COO, HR, team leads, developers, testers, security
 engineers, … — runs like a real company: it works on a **corporate shift clock**, reacts to

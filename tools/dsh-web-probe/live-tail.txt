@@ -1,0 +1,262 @@
+--- t+10s ---
+Meanwhile, let me examine how the rendering shows tool parameters/outputs in the chat stream — chat node renderers & message items: tool-node-reader.ts and the ToolCard used in the stream; and check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+运行中
+Bash
+Probe expandable row states
+Deep diving...
+8分44秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 43 步| LLM 6m10s · 工具调用 2m32s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.3M tok · 输出 44.2K tok
+详情
+点击消息流中的工具行查看详情
+稳了稳了，这波稳得很
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/c…
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+bash
+{"command": "ls /home/openclaw/ai/deepseek-harness/packages/…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 29 秒
+--- t+20s ---
+mine how the rendering shows tool parameters/outputs in the chat stream — chat node renderers & message items: tool-node-reader.ts and the ToolCard used in the stream; and check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+运行中
+Bash
+Probe expandable row states
+Deep diving...
+8分54秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 43 步| LLM 6m10s · 工具调用 2m32s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.3M tok · 输出 44.2K tok
+详情
+点击消息流中的工具行查看详情
+跑跑 cd /home/openclaw/workspa...
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/c…
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/h…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 39 秒
+--- t+30s ---
+mine how the rendering shows tool parameters/outputs in the chat stream — chat node renderers & message items: tool-node-reader.ts and the ToolCard used in the stream; and check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+运行中
+Bash
+Probe expandable row states
+Deep diving...
+9分04秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 43 步| LLM 6m10s · 工具调用 2m32s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.3M tok · 输出 44.2K tok
+详情
+点击消息流中的工具行查看详情
+跑跑 cd /home/openclaw/workspa...
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+bash
+{"command": "ls /home/openclaw/ai/deepseek-harness/packages …
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/s…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 49 秒
+--- t+40s ---
++ ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+Bash
+Probe expandable row states
+Bash
+View expandables dump
+row.running
+Think
+So the message stream rows exist and show brief summaries; deeper content (args/result/reasoning full text) hidden behind expansion. The right "详情" panel — clicking a tool row opens details there. The user's complaint "思维链、工具调用（参数与输出结果）、最终输出都要显示" +
+Deep diving...
+9分14秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 45 步| LLM 6m12s · 工具调用 2m59s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.4M tok · 输出 44.3K tok
+详情
+点击消息流中的工具行查看详情
+输出开始冒烟了
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/c…
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+grep
+{"include": "*.ts", "path": "/home/openclaw/ai/deepseek-harn…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 59 秒
+--- t+50s ---
+m; and check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+Bash
+Probe expandable row states
+Bash
+View expandables dump
+Think
+Great detail. In the message stream DOM:
+
+Let me check the live-streaming probe results and the two subagent findings.
+
+运行中
+Tool call
+job_output · bash-7
+Deep diving...
+9分24秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 45 步| LLM 6m22s · 工具调用 2m59s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.5M tok · 输出 45.4K tok
+详情
+点击消息流中的工具行查看详情
+让我听听它下一步打算
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/h…
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+grep
+{"include": "*.ts", "path": "/home/openclaw/ai/deepseek-harn…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 1 分 9 秒
+--- t+60s ---
+ check ui-tool's ToolCard: what content is displayed vs hidden; and check chat/MessageItem.tsx + ReasoningRow for what gets rendered by default vs expandable. Read relevant parts: register-node-renderers.ts, tool-node-reader.ts, ReasoningRow.tsx (default open/closed?), MessageItem.tsx structure (assistant content rendering: streaming assistant text).
+
+While those run, let me inspect how the open conversation structures expandable tool/reasoning rows (defaults expanded or collapsed?) — querying DOM state after opening the session.
+
+Write
+tools/dsh-web-probe/probe7.cjs
+Bash
+Probe expandable row states
+Bash
+View expandables dump
+Think
+Great detail. In the message stream DOM:
+
+Let me check the live-streaming probe results and the two subagent findings.
+
+运行中
+Tool call
+job_output · bash-7
+Deep diving...
+9分34秒
+任务
+1 进行中 · 3 待处理
+Workspace Write
+DeepSeek-V4-Flash
+High
+1 轮 · 45 步| LLM 6m22s · 工具调用 2m59s| 首 token 平均 1.1s · 137 tok/s| 缓存命中 98%| 输入 2.5M tok · 输出 45.4K tok
+详情
+点击消息流中的工具行查看详情
+正在使用 job_output
+Files
+任务管理
+任务管理 · 修复Web界面消息显示
+2 个子代理 · 2 运行中
+修复Web界面消息显示
+主代理 · 运行中
+Map client live-event pipeline
+You are investigating the DeepSeek · 可续接 · 运行中
+bash
+{"command": "find /home/openclaw/ai/deepseek-harness/package…
+Map host session & GUI binding
+You are investigating the DeepSeek · 可续接 · 运行中
+read
+{"file_path": "/home/openclaw/ai/deepseek-harness/packages/c…
+后台任务
+1 个后台任务 · 1 运行中
+bash
+cd /home/openclaw/workspace/AgentSoftware/tools/dsh-web-probe && node probe6.cjs 2>&1 | tail -8
+运行中 · 1 分 19 秒

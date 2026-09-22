@@ -1,0 +1,92 @@
+/* ============================================================
+   图 4 · 人 × 事：D6 关键路径上的责任映射（谁在做哪件事、做到哪一步）
+   数据来源：data/todos/*.json 的 status 字段 + data/journals/*.md D6 段落
+   渲染：dot -Tpng diagrams/4-owner-matrix.dot -o diagrams/4-owner-matrix.png
+   ============================================================ */
+digraph owners {
+  graph [
+    rankdir=LR, fontname="Noto Sans CJK SC", bgcolor="#fbfcfe", labelloc=t,
+    label=<<b>图 4 · 人 × 事：D6（2026-09-17）关键路径责任映射</b><br/><font point-size="11" color="#475569">左侧 = 人（角色）　右侧 = 事（任务 / 事件，节点颜色 = 状态）　连线 = 承担的关系</font><br/>>,
+    fontsize=24, nodesep=0.16, ranksep=1.8, pad=0.4, compound=true, splines=spline
+  ];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=11,
+        fillcolor="#e0f2fe", color="#0284c7", penwidth=1.2, margin="0.16,0.09"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#8595ad", arrowsize=0.7, penwidth=1.2];
+
+  /* ============ 左列：人 ============ */
+  subgraph cluster_person {
+    label=<<b>人（角色）</b>>; labeljust=l; fontsize=14; color="#64748b"; style="rounded,dashed";
+
+    P_CLIENT [label="客户（外部甲方）", fillcolor="#fde68a", color="#d97706"];
+    P_CEO    [label="林 总 · CEO / 对外窗口", fillcolor="#1e3a8a", fontcolor="white", color="#1e3a8a"];
+    P_COO    [label="陈 总 · COO / 调度", fillcolor="#1d4ed8", fontcolor="white", color="#1d4ed8"];
+    P_CTO    [label="高 远 · CTO / 技术终裁", fillcolor="#2563eb", fontcolor="white", color="#2563eb"];
+    P_BA     [label="徐若男 · BA 需求", fillcolor="#ccfbf1", color="#0f766e"];
+    P_RM     [label="方瑾妍 · RM 发布（单写者）", fillcolor="#a7f3d0", color="#047857"];
+    P_TL     [label="刘子涵 · 测试负责人", fillcolor="#bbf7d0", color="#047857"];
+    P_YD     [label="严 东 · 安全审计", fillcolor="#fca5a5", color="#b91c1c"];
+    P_BLUE   [label="纪 安 · 蓝队防御", fillcolor="#fecaca", color="#dc2626"];
+    P_RED    [label="白 鹏 · 红队（D6 无任务）", fillcolor="#fecaca", color="#dc2626"];
+    P_SUYUN  [label="苏 云 · 测试环境 & CI owner", fillcolor="#dcfce7", color="#16a34a"];
+    P_PAN    [label="潘志远 · 混沌 QA（第三方复跑）", fillcolor="#dcfce7", color="#16a34a"];
+    P_HU     [label="胡婷婷 · 回归 QA（r2 载荷）", fillcolor="#dcfce7", color="#16a34a"];
+    P_RUAN   [label="阮志明 · 全链路 QA", fillcolor="#dcfce7", color="#16a34a"];
+    P_YUAN   [label="袁明轩 · API QA（第三方核验）", fillcolor="#dcfce7", color="#16a34a"];
+    P_SONG   [label="宋佳期 · 移动 QA", fillcolor="#dcfce7", color="#16a34a"];
+    P_XIE    [label="谢婉婷 · 移动自动化 QA", fillcolor="#dcfce7", color="#16a34a"];
+    P_WEI    [label="魏 莱 · 兼容性 QA", fillcolor="#dcfce7", color="#16a34a"];
+    P_FE     [label="陈思远 · 前端 Lead", fillcolor="#93c5fd", color="#0284c7"];
+  }
+
+  /* ============ 右列：事 ============ */
+  subgraph cluster_todo {
+    label=<<b>事（任务 / 事件）</b>>; labeljust=l; fontsize=14; color="#64748b"; style="rounded,dashed";
+
+    A1  [label="客户验收结论（唯一外部依赖）", fillcolor="#fef08a", color="#d97706", penwidth=2.2];
+    A2  [label="《最终交付确认》定稿发布", fillcolor="#fef08a", color="#d97706", penwidth=2.0];
+    A3  [label="D6 17:30《窗口收口结论》发布", fillcolor="#fde68a", color="#b45309", penwidth=2.2];
+    A4  [label="v0.1.4 干净重建 C1→C1'→C1''→C3", fillcolor="#ffedd5", color="#ea580c"];
+    A5  [label="门禁① 正控/负控复跑（打标前硬门槛）", fillcolor="#ffedd5", color="#ea580c"];
+    A6  [label="CTO tag-peel 复核", fillcolor="#ffedd5", color="#ea580c"];
+    A7  [label="push --atomic + release/v0.1.4 归档", fillcolor="#ffedd5", color="#ea580c"];
+    A8  [label="SEC-INCIDENT 全量安全回归", fillcolor="#fee2e2", color="#dc2626"];
+    A9  [label="CI 供应链硬化 3 项 + eval（独立轨）", fillcolor="#fee2e2", color="#dc2626"];
+    A10 [label="移动端 D-3/D-4 复验 + 弱网对表", fillcolor="#dcfce7", color="#16a34a"];
+    A11 [label="桌面矩阵复跑（6 视口 × 4 路由）", fillcolor="#dcfce7", color="#16a34a"];
+    A12 [label=".btn-link 对比度 3.01:1 → v0.1.5", fillcolor="#f1f5f9", color="#94a3b8"];
+    A13 [label="v0.1.3 基线冻结守护（红线）", fillcolor="#dcfce7", color="#16a34a", penwidth=2.0];
+    A14 [label="客户需求侧渠道催促确认", fillcolor="#fef08a", color="#d97706"];
+  }
+
+  /* ============ 关系：人 → 事 ============ */
+  P_CLIENT -> A1  [label="提供结论（双通道超时未回）", color="#d97706", fontcolor="#b45309", penwidth=1.8];
+  P_CEO    -> A1  [label="对外窗口跟进", color="#1e3a8a", fontcolor="#1e3a8a"];
+  P_CEO    -> A2  [label="客户回信即定稿", color="#1e3a8a", fontcolor="#1e3a8a", penwidth=1.8];
+  P_CEO    -> A3  [label="唯一发布人", color="#b45309", fontcolor="#b45309", penwidth=1.8];
+  P_CEO    -> A13 [label="红线裁定", color="#1e3a8a", fontcolor="#1e3a8a"];
+  P_COO    -> A3  [label="收口件转达一线", color="#1d4ed8", fontcolor="#1d4ed8"];
+  P_COO    -> A4  [label="协调 / 收敛基点", color="#1d4ed8", fontcolor="#1d4ed8", penwidth=1.6];
+  P_COO    -> A13 [label="实核两仓 pristine", color="#1d4ed8", fontcolor="#1d4ed8"];
+  P_CTO    -> A4  [label="基点终裁 + 技术确认", color="#2563eb", fontcolor="#1d4ed8"];
+  P_CTO    -> A6  [label="复核闸门", color="#2563eb", fontcolor="#1d4ed8", penwidth=2.0];
+  P_CTO    -> A13 [label="独立实机复核", color="#2563eb", fontcolor="#1d4ed8"];
+  P_BA     -> A14 [label="仅催确认、不代承诺", color="#0f766e", fontcolor="#0f766e"];
+  P_RM     -> A4  [label="主责 · 单写者 · 独立窗口", color="#047857", fontcolor="#047857", penwidth=2.4];
+  P_RM     -> A5  [label="落补丁后触发复跑", color="#047857", fontcolor="#047857"];
+  P_RM     -> A7  [label="push --atomic + 对账", color="#047857", fontcolor="#047857"];
+  P_TL     -> A5  [label="测试组评审 / CP-REPIN", color="#047857", fontcolor="#047857", style=dotted];
+  P_PAN    -> A5  [label="第三方正控 / 负控 ×4", color="#16a34a", fontcolor="#15803d"];
+  P_HU     -> A5  [label="交付 r2 载荷 blob a5de76da", color="#16a34a", fontcolor="#15803d"];
+  P_RUAN   -> A5  [label="全链路回归", color="#16a34a", fontcolor="#15803d"];
+  P_YUAN   -> A5  [label="独立核验", color="#16a34a", fontcolor="#15803d"];
+  P_YD     -> A8  [label="主责 · 只读取证", color="#b91c1c", fontcolor="#b91c1c", penwidth=1.8];
+  P_YD     -> A9  [label="提出硬化建议", color="#b91c1c", fontcolor="#b91c1c"];
+  P_RED    -> A8  [label="待命（无任务）", color="#f87171", fontcolor="#b91c1c", style=dotted];
+  P_SUYUN  -> A9  [label="CI owner · 落地", color="#16a34a", fontcolor="#15803d"];
+  P_SONG   -> A10 [label="主责复验", color="#16a34a", fontcolor="#15803d"];
+  P_XIE    -> A10 [label="真机 / 自动化", color="#16a34a", fontcolor="#15803d"];
+  P_WEI    -> A11 [label="主责复跑", color="#16a34a", fontcolor="#15803d"];
+  P_FE     -> A12 [label="提交评审 + 方案建议", color="#0284c7", fontcolor="#0284c7"];
+  P_XIE    -> A12 [label="发现人（P2 非阻断）", color="#16a34a", fontcolor="#15803d"];
+  P_BLUE   -> A12 [label="复算对比度（防御视角）", color="#dc2626", fontcolor="#dc2626", style=dotted];
+}

@@ -56,11 +56,7 @@ public class ConfigStore {
             throw new RuntimeException("Failed to read config file: " + path, e);
         }
         Object loaded;
-        try {
-            loaded = Json.parse(text);
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Config file is not valid JSON: " + path, e);
-        }
+        loaded = Json.parseObject(text);
         if (!(loaded instanceof Map)) {
             throw new IllegalArgumentException("Config file root must be a JSON object: " + path);
         }
@@ -71,31 +67,27 @@ public class ConfigStore {
 
     /** Atomically write the current config to the file. */
     public Path save() {
-        try {
-            Json.atomicWrite(path, Json.stringifyPretty(data));
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to save config: " + path, e);
-        }
+        Json.writeFile(path, data);
         return path;
     }
 
     /** Read the value at the dot path; returns default when it does not exist. */
     public Object get(String key, Object def) {
-        return Json.getByPath(data, key, def);
+        return getByPath(data, key, def);
     }
 
     /** Create or overwrite a key, and save immediately. */
     public Object set(String key, Object value) {
-        Object copied = Json.deepCopy(value);
+        Object copied = deepCopy(value);
         setByPath(data, key, copied);
         save();
-        return Json.deepCopy(copied);
+        return deepCopy(copied);
     }
 
     /** Batch create or overwrite keys; the keys of values also support dot paths. */
     public Map<String, Object> update(Map<String, Object> values) {
         for (Map.Entry<String, Object> e : values.entrySet()) {
-            setByPath(data, e.getKey(), Json.deepCopy(e.getValue()));
+            setByPath(data, e.getKey(), deepCopy(e.getValue()));
         }
         save();
         return data();
@@ -118,6 +110,33 @@ public class ConfigStore {
         current.remove(parts[parts.length - 1]);
         save();
         return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object getByPath(Map<String, Object> root, String key, Object def) {
+        if (key == null) {
+            return def;
+        }
+        Object current = root;
+        for (String part : key.split("\\.")) {
+            if (!(current instanceof Map)) {
+                return def;
+            }
+            current = ((Map<String, Object>) current).get(part);
+            if (current == null) {
+                return def;
+            }
+        }
+        return current;
+    }
+
+    /** 用 JSON 往返做一次深拷贝（不复用对象引用）。 */
+    @SuppressWarnings("unchecked")
+    private static Object deepCopy(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return Json.parseObject(Json.stringify(value));
     }
 
     @SuppressWarnings("unchecked")

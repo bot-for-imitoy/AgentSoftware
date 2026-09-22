@@ -1,26 +1,22 @@
 package com.agent.software.tools.toolkits.email;
 
 import com.agent.software.role.Role;
-
+import com.agent.software.services.MailMessage;
 import com.agent.software.services.MailService;
 import com.agent.software.tools.Tool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * open_mail - open a mail to view its full content (automatically marked as read).
- * message_id comes from the read_mail list.
- */
+/** open_mail：按 message_id 查看邮件全文。 */
 public class OpenMail extends Tool {
 
     private final Role role;
-    private final MailService mailService;
+    private final MailService mail;
 
-    public OpenMail(Role role, MailService mailService) {
-        super();
+    public OpenMail(Role role, MailService mail) {
         this.role = role;
-        this.mailService = mailService;
+        this.mail = mail;
     }
 
     @Override
@@ -31,27 +27,22 @@ public class OpenMail extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("message_id", "The mail id (returned by read_mail).");
+        schema.put("message_id", "id from read_mail");
         return schema;
     }
 
     @Override
+    public String getDescription() {
+        return "Open a mail by its message_id.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        Object omessageId = args.get("message_id");
-        if (!(omessageId instanceof String)) {
-            return omessageId == null
-                    ? "open_mail: Error: needs message_id"
-                    : "open_mail: Error: message_id is not a string";
+        if (role == null || mail == null) {
+            return "open_mail error: mail service unavailable";
         }
-        String messageId = ((String) omessageId).strip();
-        if (messageId.isEmpty()) {
-            return "open_mail: Error: needs message_id";
-        }
-        MailService.MailMessage msg = mailService.read(mailService.emailFor(role), messageId);
-        if (msg == null) {
-            return "open_mail: Error: mail not found: " + messageId
-                    + ". Please call read_mail first to view mails in the current inbox.";
-        }
-        return msg.fullText();
+        String id = args.get("message_id") == null ? "" : String.valueOf(args.get("message_id"));
+        MailMessage m = mail.read(mail.getAddress(role.roleId), id);
+        return m == null ? "open_mail: no mail with id " + id : m.fullText();
     }
 }

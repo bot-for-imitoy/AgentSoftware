@@ -1,0 +1,3 @@
+{
+  "default_toolkits": ["time", "task_view", "pc", "mcp_manager", "skill", "email"]
+}

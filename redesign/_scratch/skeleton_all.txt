@@ -1,0 +1,4611 @@
+=========== src/main/java/com/agent/software/agent/AgentControl.java
+package com.agent.software.agent;
+
+/**
+ * 角色自控能力（少数会改变自身状态的工具使用，例如 take_rest / summary）。
+ *
+ * <p>它把"工具可以改角色状态"这件事限制在一个显式端口上；master 里工具是直接
+ * 拿到 {@code AgentRole} 并写 public 字段的。
+ */
+public interface AgentControl {
+
+    /** 迁移自身状态（由 {@code agent.AgentStateMachine} 校验合法性）。 */
+    void transitionTo(AgentState next);
+
+    /** 关闭第 day 天的对话（下班/总结完成后调用）。 */
+    void closeDayConversation(int day);
+
+    /** 关闭个人电脑（每日总结完成后调用）。 */
+    void powerOffComputer();
+}
+=========== src/main/java/com/agent/software/agent/AgentDirectory.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.agent.role.RoleSpec;
+
+/**
+ * 花名册只读视图。
+ *
+ * <p>工具（list_roles / mail_address_book）与 System Prompt 需要看同事，但不能改；
+ * 只读视图切断了这条越权路径。
+ */
+public interface AgentDirectory {
+
+    Optional<RoleSpec> spec(RoleId id);
+
+    List<RoleSpec> specs();
+
+    Optional<AgentState> stateOf(RoleId id);
+}
+=========== src/main/java/com/agent/software/agent/AgentFactory.java
+package com.agent.software.agent;
+
+import com.agent.software.agent.role.RoleSpec;
+
+/**
+ * 由一个 {@link RoleSpec} 装配出一个 {@link Agent} 的工厂。
+ *
+ * <p>实现放在 bootstrap：那里才知道用哪个 {@code ToolkitCatalog}、哪个 {@code Shell}、
+ * 哪个 {@code LlmClient}。{@link Team} 只依赖这个接口，因此不认识适配器。
+ */
+public interface AgentFactory {
+
+    Agent create(RoleSpec spec);
+}
+=========== src/main/java/com/agent/software/agent/Agent.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.tool.computer.Shell;
+import com.agent.software.tool.spi.Toolbox;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.agent.dialog.ConversationMemory;
+import com.agent.software.agent.dialog.SystemPrompt;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.agent.task.ToolLoop;
+
+/**
+ * 一个角色的门面：只做组合，不含业务实现。
+ *
+ * <p>它把 master {@code AgentRole} 的六个职责分别委托出去：
+ * {@link AgentMailbox}（队列）、{@link AgentStateMachine}（状态）、
+ * {@link WaitCoordinator}（等待）、{@link ConversationMemory}（对话）、
+ * {@link Toolbox}（工具，由 start() 经 {@link ToolboxFactory} 装配）、
+ * {@link TaskRunner}（线程体，由 start() 创建但不由本类持有）。
+ *
+ * <p>对外只暴露窄接口：工具拿到的"自身"能力是 {@link AgentTasks} + {@link AgentControl}。
+ */
+public final class Agent implements AgentTasks, AgentControl {
+
+    private final RoleSpec spec;
+    private final Shell shell;
+    private final AgentMailbox mailbox;
+    private final AgentStateMachine state;
+    private final WaitCoordinator waits;
+    private final ToolboxFactory toolboxFactory;
+    private Toolbox toolbox;
+    private final ConversationMemory conversation;
+    private final ToolLoop toolLoop;
+    private final SystemPrompt prompts;
+    private final LifecycleGate gate;
+
+    private final java.util.List<Task> history = new java.util.ArrayList<>();
+    private volatile Task current;
+    private volatile boolean running;
+    private Thread worker;
+
+    public Agent(RoleSpec spec, Shell shell, AgentMailbox mailbox, AgentStateMachine state,
+                 WaitCoordinator waits, ToolboxFactory toolboxFactory, ConversationMemory conversation,
+                 ToolLoop toolLoop, SystemPrompt prompts, LifecycleGate gate) {
+        this.spec = spec;
+        this.shell = shell;
+        this.mailbox = mailbox;
+        this.state = state;
+        this.waits = waits;
+        this.toolboxFactory = toolboxFactory;
+        this.conversation = conversation;
+        this.toolLoop = toolLoop;
+        this.prompts = prompts;
+        this.gate = gate;
+    }
+
+    // ── 身份与协作者（engine 内部使用） ────────────────────────
+
+    public RoleId id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public RoleSpec spec() {
+        return spec;
+    }
+
+    public Shell shell() {
+        return shell;
+    }
+
+    public AgentMailbox mailbox() {
+        return mailbox;
+    }
+
+    public AgentStateMachine stateMachine() {
+        return state;
+    }
+
+    public WaitCoordinator waits() {
+        return waits;
+    }
+
+    public Toolbox toolbox() {
+        return toolbox;
+    }
+
+    public ConversationMemory conversation() {
+        return conversation;
+    }
+
+    public ToolLoop toolLoop() {
+        return toolLoop;
+    }
+
+    public SystemPrompt prompts() {
+        return prompts;
+    }
+
+    // ── 生命周期 ───────────────────────────────────────────────
+
+    /** 装配工具箱、拉起 worker。 */
+    public synchronized void start() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public synchronized void stop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean isRunning() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── 队列 ───────────────────────────────────────────────────
+
+    /** 投递任务；deferred=true 进入暂存队列（等状态允许再提升）。 */
+    public void submit(Task task, boolean deferred) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 把暂存任务提升为可执行（ShiftDirector 在上班时调用）。 */
+    public void promoteDeferred() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public AgentState state() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean busy() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public int queueDepth() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public Optional<Task> currentTask() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public List<Task> pendingTasks() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Task> history(int limit) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public AgentSnapshot snapshot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── TaskRunner 内部回调 ────────────────────────────────────
+
+    /** 开始执行某任务。 */
+    public void beginTask(Task task) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 任务结束：写入历史、清空当前、状态回到 IDLE。 */
+    public void finishTask(Task task) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── AgentTasks ─────────────────────────────────────────────
+
+    @Override
+    public List<Task> pending() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── AgentControl ───────────────────────────────────────────
+
+    @Override
+    public void transitionTo(AgentState next) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void closeDayConversation(int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void powerOffComputer() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/AgentMailbox.java
+package com.agent.software.agent;
+
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.agent.task.Task;
+
+/**
+ * 每角色优先队列（唯一写者 = 所属 {@link Agent}）。
+ *
+ * <p>按 urgency 降序、同 urgency FIFO。分两个队列，使投递策略的
+ * {@code HOLD} 真正起作用（而不是像 master 那样"算完照样 submit"）：
+ * <ul>
+ *   <li>{@code ready} —— 立即可执行；</li>
+ *   <li>{@code deferred} —— 暂存（下班 / 收尾 / 等待中收到普通事件），
+ *       状态允许后由 {@link #promoteDeferred()} 提升。</li>
+ * </ul>
+ */
+public final class AgentMailbox {
+
+    /** 入队；deferred=true 表示进入暂存队列。 */
+    public void push(Task task, boolean deferred) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 查看可执行队首（不弹出）。 */
+    public Optional<Task> peek() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 弹出可执行队首。 */
+    public Optional<Task> pop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 上班 / 状态允许时，把暂存任务全部提升为可执行。 */
+    public void promoteDeferred() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public int readyDepth() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public int deferredDepth() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 加锁快照（ready + deferred）。 */
+    public List<Task> snapshot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/AgentSnapshot.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+/** 单个角色的只读状态快照（供 Web / 控制台展示）。 */
+public record AgentSnapshot(RoleId id, String name, AgentState state, boolean busy,
+                            int queueDepth, String currentTask) {
+}
+=========== src/main/java/com/agent/software/agent/AgentState.java
+package com.agent.software.agent;
+
+/**
+ * 角色生命周期状态。
+ *
+ * <p>"某个状态下能否接普通工作"的规则内聚在这里，替代 master 中散落在
+ * {@code EventDispatcher} / {@code AgentRole.evaluateEvent} / {@code RolePool.roleLoop}
+ * 三处的状态判断。
+ */
+public enum AgentState {
+
+    /** 下班：上下文已冲刷，普通工作排队等待下一班。 */
+    OFF_DUTY,
+
+    /** 在岗空闲：等待事件。 */
+    ON_DUTY_IDLE,
+
+    /** 在岗忙碌：正在执行任务。 */
+    ON_DUTY_BUSY,
+
+    /** 收尾中：班次结束、总结未完成。 */
+    WRAPPING_UP,
+
+    /** 同步等待同事回复（talk wait=true）。 */
+    WAITING;
+
+    /** 是否在岗（非 OFF_DUTY）。 */
+    public boolean onDuty() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 普通（非 EMERGENCY）事件是否应暂存而不是立即执行。 */
+    public boolean holdsOrdinaryWork() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** EMERGENCY 是否永远穿透。 */
+    public boolean acceptsEmergency() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/AgentStateMachine.java
+package com.agent.software.agent;
+
+/**
+ * 角色状态的唯一所有者，只允许合法迁移。
+ *
+ * <p>master 的 {@code AgentState} 有六个写者（runtime、lifecycle、team、restore、
+ * 以及两个注入工具的回调），且 {@code WRAPPING_UP} 从未被赋值。这里收成一个状态机。
+ */
+public final class AgentStateMachine {
+
+    public AgentState state() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 迁移到新状态；非法迁移抛 {@code kernel.DomainError}。 */
+    public void to(AgentState next) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void toIdle() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void toOffDuty() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void toWaiting() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 读档时直接覆盖状态（不做迁移校验）。 */
+    public void restore(AgentState state) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/AgentTasks.java
+package com.agent.software.agent;
+
+
+import java.util.List;
+import com.agent.software.agent.task.Task;
+
+/**
+ * 只读的任务视图（{@code my_tasks} 工具用）。
+ *
+ * <p>agent 自己实现这个端口；工具不需要拿到运行时对象。
+ */
+public interface AgentTasks {
+
+    List<Task> pending();
+
+    /** 最近 limit 条已结束任务；limit<=0 表示全部。 */
+    List<Task> history(int limit);
+}
+=========== src/main/java/com/agent/software/agent/dialog/ConversationMemory.java
+package com.agent.software.agent.dialog;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.llm.LlmClient;
+import com.agent.software.llm.Message;
+
+import java.util.List;
+
+/**
+ * 角色 ↔ LLM 的当日对话记忆。
+ *
+ * <p>职责：跨任务连续性（历史 + 新任务）、超预算压缩、下班关闭当日上下文、随快照持久化。
+ * 对应 master 的 {@code Conversation} + {@code ConversationManager}；但不再有进程级
+ * 默认 manager，每个角色（{@code agent.Agent}）各持一份。
+ */
+public final class ConversationMemory {
+
+    public ConversationMemory(RoleId agent, ConversationPolicy policy) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 组装本次任务请求：[system prompt, ...历史, 当前任务]。 */
+    public List<Message> prepare(String systemPrompt, String taskDescription, int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 任务完成后提交这一轮交换；超预算则触发压缩。 */
+    public void commit(int day, String userText, String assistantText, LlmClient llm) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 下班关闭当日对话（上下文冲刷）。 */
+    public void closeDay(int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean isEmpty() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public int historySize() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public State snapshot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void restore(State state) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 持久化形状。 */
+    public record State(int day, int closedDay, List<Message> messages) {
+    }
+}
+=========== src/main/java/com/agent/software/agent/dialog/ConversationPolicy.java
+package com.agent.software.agent.dialog;
+
+/**
+ * 对话历史的压缩策略。
+ *
+ * <p>master 把这些魔数写在 {@code Conversation} 里（24000 字符预算 / 12000 摘要上限 /
+ * 6 条工具回执）。抽出来后与状态分离，可单测、可配置。
+ */
+public record ConversationPolicy(int maxHistoryChars, int maxSummaryChars, int toolRecapLimit) {
+
+    public static ConversationPolicy defaults() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean shouldCompact(long totalChars) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 压缩失败时至少保留的最近消息条数。 */
+    public int keepMessages() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/dialog/DailySummary.java
+package com.agent.software.agent.dialog;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.Optional;
+
+/**
+ * 提示词需要的一小块“昨天”数据。
+ *
+ * <p>为什么不让 {@link SystemPrompt} 直接用 {@code tool.note.NoteBook}：
+ * 那样 {@code agent.dialog → tool.note}，而 {@code tool.note.MemoryToolkit}
+ * 又要拿 {@code agent.AgentControl}，两个 feature 就互相依赖了。
+ * 这里按“需要什么声明什么”开一个窄口子，实现方仍是
+ * {@code tool.note.JsonNoteBook}（跨包 implements，属于正常的接缝）。
+ */
+@FunctionalInterface
+public interface DailySummary {
+
+    /** 该角色 {@code beforeDay} 之前最近一份总结；没有就返回空。 */
+    Optional<String> latestSummary(RoleId owner, int beforeDay);
+}
+=========== src/main/java/com/agent/software/agent/dialog/SystemPrompt.java
+package com.agent.software.agent.dialog;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.clock.Clock;
+
+/**
+ * System Prompt 组装器。
+ *
+ * <p>从 master {@code AgentRole.buildSystemPrompt()}（约 55 行、混在角色对象里）抽出：
+ * 只依赖只读的时钟与一份 {@link DailySummary}，因此可单测，也不让
+ * {@code agent.Agent} 继续变胖。
+ *
+ * <p>注意这里不依赖 {@code tool.note.NoteBook}：agent 包只认自己声明的窄端口，
+ * 不认任何具体工具包（实现在 tool 侧，见 PLAN §3 依赖规则）。
+ */
+public final class SystemPrompt {
+
+    private final Clock clock;
+    private final DailySummary summaries;
+
+    public SystemPrompt(Clock clock, DailySummary summaries) {
+        this.clock = clock;
+        this.summaries = summaries;
+    }
+
+    /** 组装该角色的完整 System Prompt（人设 / 时间 / 云盘与 Git 规则 / 昨日总结）。 */
+    public String build(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/DefaultDeliveryPolicy.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.dispatch.DeliveryPolicy.DeliveryContext;
+import com.agent.software.agent.dispatch.DeliveryPolicy.DeliveryDecision;
+/**
+ * 默认投递策略。
+ *
+ * <p>规则（对齐 master 语义，但收拢到一处）：
+ * <ul>
+ *   <li>EMERGENCY：任何状态都 DELIVER；</li>
+ *   <li>定向的定时任务提醒：即使 off-duty / waiting 也 DELIVER（只触发一次，丢了就永远丢了）；</li>
+ *   <li>广播事件：先过 {@link SaliencePolicy}，不通过则 DROP；</li>
+ *   <li>通过后若角色 off-duty / wrapping-up / waiting，则 HOLD，否则 DELIVER。</li>
+ * </ul>
+ */
+public final class DefaultDeliveryPolicy implements DeliveryPolicy {
+
+    public DefaultDeliveryPolicy(SaliencePolicy salience) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public DeliveryDecision decide(DeliveryContext context) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/DeliveryPolicy.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.AgentState;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
+
+/**
+ * 投递决策：一个事件现在能不能进入某个角色的队列。
+ *
+ * <p>这是全系统唯一的投递判断点。master 把同一件事拆成了三份：
+ * {@code EventDispatcher} 的定向/定时特例 + {@code AgentRole.evaluateEvent} 的状态掩码
+ * + {@code RolePool.roleLoop} 的下班保留。本接口只做决策，不碰队列与线程。
+ */
+public interface DeliveryPolicy {
+
+    DeliveryDecision decide(DeliveryContext context);
+
+    /** 决策所需事实。 */
+    record DeliveryContext(AgentEvent event, RoleSpec spec, AgentState state,
+                           boolean scheduledReminder) {
+    }
+
+    enum DeliveryVerdict {
+        /** 立即转成任务并投递。 */
+        DELIVER,
+        /** 进入队列但 worker 暂不执行（下班 / 收尾 / 等待中）。 */
+        HOLD,
+        /** 直接丢弃（例如定向事件的目标不存在）。 */
+        DROP
+    }
+
+    record DeliveryDecision(DeliveryVerdict verdict, String reason) {
+
+        public static DeliveryDecision deliver(String why) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public static DeliveryDecision hold(String why) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public static DeliveryDecision drop(String why) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/EventRouter.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.Team;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TaskId;
+import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.sim.event.EventSink;
+import com.agent.software.transcript.Transcript;
+
+import java.util.Map;
+import com.agent.software.agent.dispatch.DeliveryPolicy.DeliveryVerdict;
+
+/**
+ * 事件唯一入口与投递器。
+ *
+ * <p>流程：解析收件人 → 逐个问 {@link DeliveryPolicy} → {@code DELIVER/HOLD} 经
+ * {@link TaskFactory} 变成任务投给角色（HOLD 进暂存队列），{@code DROP} 只记日志。
+ * master 把这段拆在 {@code EventDispatcher} 与被调用的 {@code AgentRole} 里。
+ */
+public final class EventRouter implements EventSink {
+
+    private final Team team;
+    private final DeliveryPolicy delivery;
+    private final TaskFactory tasks;
+    private final Transcript transcript;
+
+    public EventRouter(Team team, DeliveryPolicy delivery, TaskFactory tasks, Transcript transcript) {
+        this.team = team;
+        this.delivery = delivery;
+        this.tasks = tasks;
+        this.transcript = transcript;
+    }
+
+    @Override
+    public void publish(AgentEvent event) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 与 {@link #publish} 相同，但返回每个角色的取舍，供 demo/测试观察。 */
+    public Map<RoleId, Routed> publishAndReport(AgentEvent event) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public record Routed(DeliveryPolicy.DeliveryVerdict verdict, String reason, TaskId taskId) {
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/KeywordSaliencePolicy.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.agent.dispatch.SaliencePolicy.SalienceDecision;
+
+/**
+ * 关键词显著性策略（master {@code AgentRole.evaluateEvent} Layer 2 的等价物）。
+ *
+ * <p>打分 = 基础分 + 关键词命中 + 技能命中奖励 + 紧急词奖励，再与
+ * {@link RoleSpec#salienceThreshold()} 比较。权重全部来自构造参数，便于调参。
+ */
+public final class KeywordSaliencePolicy implements SaliencePolicy {
+
+    public KeywordSaliencePolicy(double baseRelevance, double keywordStep,
+                                 double skillBonus, double urgencyBonus) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public SalienceDecision score(RoleSpec spec, AgentEvent event) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/SaliencePolicy.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.event.AgentEvent;
+
+/**
+ * 内容相关性打分（master {@code AgentRole.evaluateEvent} 的 Layer 2）。
+ *
+ * <p>只对广播事件生效；定向事件不做内容过滤。纯函数，便于单测与调参。
+ */
+public interface SaliencePolicy {
+
+    SalienceDecision score(RoleSpec spec, AgentEvent event);
+
+    record SalienceDecision(boolean pass, double score, double relevance, String reason) {
+    }
+}
+=========== src/main/java/com/agent/software/agent/dispatch/TaskFactory.java
+package com.agent.software.agent.dispatch;
+
+import com.agent.software.agent.task.Task;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.sim.clock.ScheduleTable;
+import com.agent.software.sim.event.AgentEvent;
+
+/**
+ * 事件 → 任务 的唯一转换点。
+ *
+ * <p>紧急度映射、任务描述、上下文装配都在这里；替代 master
+ * {@code AgentRole.eventToTask} 与其分散的 urgency 映射。
+ */
+public final class TaskFactory {
+
+    private final ScheduleTable schedule;
+
+    public TaskFactory(ScheduleTable schedule) {
+        this.schedule = schedule;
+    }
+
+    /** 由一个已通过投递决策的事件生成任务。 */
+    public Task from(AgentEvent event, RoleId assignee) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/LifecycleGate.java
+package com.agent.software.agent;
+
+
+import java.time.Duration;
+
+/**
+ * 全局暂停的唯一所有者。
+ *
+ * <p>master 把"暂停"存在 {@code AgentSystem} 的私有字段里，再用
+ * {@code llm.setPauseGate(owner::isPaused)} 反向注入给 LLM 适配器；
+ * 这里改为一个只读门：{@link TaskRunner} 与 LLM 适配器都只问它。
+ */
+public final class LifecycleGate {
+
+    /** 暂停整个系统；重复调用只刷新原因。 */
+    public void pause(String reason) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void resume() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean paused() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public String reason() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 被暂停时挂起调用线程，直到恢复。 */
+    public void awaitRunning(Duration poll) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/role/RoleSpec.java
+package com.agent.software.agent.role;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * 一个角色的不可变定义（人设 + 配置）。
+ *
+ * <p>这是 master {@code AgentRole} 中"非运行时"的那一半：只有身份、人设、事件过滤参数、
+ * 电脑规格与工具包选择；不含队列、线程、状态机、工具实例与任何 I/O。
+ * 运行时对象是 {@code agent.Agent}。
+ */
+public record RoleSpec(
+        RoleId id,
+        String name,
+        String username,
+        int uid,
+        String title,
+        String responsibilities,
+        String personality,
+        List<String> skills,
+        String group,
+        String email,
+        String promptExtra,
+        Set<String> interestKeywords,
+        double salienceThreshold,
+        ComputerSpec computer,
+        Set<String> toolkits,
+        boolean defaultRole) {
+
+    /** 个人电脑的创建参数（kind: podman | local | ssh）。 */
+    public record ComputerSpec(String kind, Map<String, String> options) {
+    }
+
+    /** 是否属于某个组；talk 的组内限制、System Prompt 的邮件规则都依赖它。 */
+    public boolean hasGroup() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public static Builder builder() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 16 字段的防御式构造器；同时是模板 JSON / 快照 JSON 的装配点。 */
+    public static final class Builder {
+        public Builder id(RoleId v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder name(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder username(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder uid(int v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder title(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder responsibilities(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder personality(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder skills(List<String> v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder group(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder email(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder promptExtra(String v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder interestKeywords(Set<String> v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder salienceThreshold(double v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder computer(ComputerSpec v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder toolkits(Set<String> v) { throw new UnsupportedOperationException("skeleton"); }
+        public Builder defaultRole(boolean v) { throw new UnsupportedOperationException("skeleton"); }
+        public RoleSpec build() { throw new UnsupportedOperationException("skeleton"); }
+    }
+}
+=========== src/main/java/com/agent/software/agent/RoleSnapshot.java
+package com.agent.software.agent;
+
+import com.agent.software.llm.Message;
+
+import java.util.List;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.agent.task.Task.TaskRecord;
+
+/**
+ * 单个角色的快照：定义 + 生命周期状态 + 队列/历史 + 当日对话。
+ *
+ * <p>master 把这些分散在 {@code StateStore.roleToDict} 与 {@code AgentRole} 的多个
+ * public 字段里。
+ */
+public record RoleSnapshot(RoleSpec spec, AgentState state,
+                           List<Task.TaskRecord> pending, List<Task.TaskRecord> history,
+                           int conversationDay, List<Message> conversation) {
+}
+=========== src/main/java/com/agent/software/agent/Staffing.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import com.agent.software.agent.role.RoleSpec;
+
+/**
+ * 人员进出动作（"创建 Agent 并登记"这件事的唯一所有者）。
+ *
+ * <p>它与 {@link Team} 分开，正是为了打断构造环：Team 先于工具包存在，
+ * {@link AgentFactory} 由 bootstrap 在工具包就绪后注入。
+ */
+public final class Staffing {
+
+    private final Team team;
+    private final AgentFactory factory;
+
+    public Staffing(Team team, AgentFactory factory) {
+        this.team = team;
+        this.factory = factory;
+    }
+
+    /** 创建并登记（不启动）；批量启动交给 {@link Team#startAll()}。 */
+    public Agent hire(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 动态入职：创建 + 登记 + 立即启动（HR 招聘用）。 */
+    public Agent onboard(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean resign(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 从快照恢复人员与队列/历史（返回恢复数量）。 */
+    public int restore(List<RoleSnapshot> roles) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/task/Task.java
+package com.agent.software.agent.task;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TaskId;
+import com.agent.software.kernel.Payload;
+import com.agent.software.sim.event.AgentEvent;
+import com.agent.software.sim.event.EventKind;
+import com.agent.software.sim.event.Priority;
+
+import java.time.Instant;
+
+/**
+ * 一个待执行任务。
+ *
+ * <p>定义部分不可变（id/紧急度/描述/来源/上下文/创建时刻/负责人）；执行结果只能通过
+ * {@link #markRunning()} / {@link #complete} / {@link #fail} 显式迁移写入，
+ * 唯一写者是执行它的 {@code agent.Agent}。
+ *
+ * <p>{@link TaskRecord} 是它唯一的持久化形状，避免 master 那种 {@code Task} ⇄
+ * {@code TaskSnapshot} ⇄ {@code Map} 的两跳 DTO 链。
+ */
+public final class Task {
+
+    private final TaskId id;
+    private final Priority urgency;
+    private final String description;
+    private final EventKind source;
+    private final Payload context;
+    private final Instant createdAt;
+    private final RoleId assignee;
+
+    private TaskStatus status = TaskStatus.PENDING;
+    private String result = "";
+    private int tokens = 0;
+
+    public Task(TaskId id, Priority urgency, String description, EventKind source,
+                Payload context, Instant createdAt, RoleId assignee) {
+        this.id = id;
+        this.urgency = urgency;
+        this.description = description;
+        this.source = source;
+        this.context = context;
+        this.createdAt = createdAt;
+        this.assignee = assignee;
+    }
+
+    /** 由通过投递决策的事件生成任务。 */
+    public static Task fromEvent(AgentEvent event, RoleId assignee) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public TaskId id() {
+        return id;
+    }
+
+    public Priority urgency() {
+        return urgency;
+    }
+
+    public String description() {
+        return description;
+    }
+
+    public EventKind source() {
+        return source;
+    }
+
+    public Payload context() {
+        return context;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
+    }
+
+    public RoleId assignee() {
+        return assignee;
+    }
+
+    public TaskStatus status() {
+        return status;
+    }
+
+    public String result() {
+        return result;
+    }
+
+    public int tokens() {
+        return tokens;
+    }
+
+    /** PENDING → RUNNING。 */
+    public void markRunning() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** RUNNING → DONE，并记录结果与 token 消耗。 */
+    public void complete(String result, int tokens) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** RUNNING → FAILED。 */
+    public void fail(String reason) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean isOpen() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 转为持久化记录（含执行结果）。 */
+    public TaskRecord toRecord() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 从持久化记录还原。 */
+    public static Task fromRecord(TaskRecord record) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 任务在磁盘上的唯一形状。 */
+    public record TaskRecord(
+            String id,
+            int urgency,
+            String description,
+            String source,
+            java.util.Map<String, Object> context,
+            String status,
+            String result,
+            int tokens,
+            double createdAt,
+            String assignee) {
+    }
+}
+=========== src/main/java/com/agent/software/agent/task/TaskRunner.java
+package com.agent.software.agent.task;
+
+import com.agent.software.agent.AgentControl;
+import com.agent.software.agent.AgentMailbox;
+import com.agent.software.agent.AgentTasks;
+import com.agent.software.agent.LifecycleGate;
+import com.agent.software.transcript.Transcript;
+
+/**
+ * 单角色常驻工作循环（从 master {@code RolePool.roleLoop} 抽出）。
+ *
+ * <p>有序的等待链：全局暂停 → 可执行队列取任务 → 交给 {@link ToolLoop} →
+ * 落结果 → 写轨迹。
+ *
+ * <p>注意它只认三个接口（{@link AgentTasks} / {@link AgentControl} /
+ * {@link AgentMailbox}），不认识 {@code agent.Agent}：
+ * master 的 {@code RolePool} 拿到了整个角色对象，于是"取任务"这件小事
+ * 也能顺手改状态、读私账，环就是这么来的。
+ */
+public final class TaskRunner implements Runnable {
+
+    private final AgentMailbox mailbox;
+    private final AgentTasks tasks;
+    private final AgentControl control;
+    private final ToolLoop toolLoop;
+    private final Transcript transcript;
+    private final LifecycleGate gate;
+
+    public TaskRunner(AgentMailbox mailbox, AgentTasks tasks, AgentControl control,
+                      ToolLoop toolLoop, Transcript transcript, LifecycleGate gate) {
+        this.mailbox = mailbox;
+        this.tasks = tasks;
+        this.control = control;
+        this.toolLoop = toolLoop;
+        this.transcript = transcript;
+        this.gate = gate;
+    }
+
+    @Override
+    public void run() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void requestStop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/task/TaskStatus.java
+package com.agent.software.agent.task;
+
+/** 任务状态。 */
+public enum TaskStatus {
+
+    PENDING,
+    RUNNING,
+    DONE,
+    FAILED;
+
+    /** 是否已结束（DONE / FAILED）。 */
+    public boolean terminal() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/task/ToolLoop.java
+package com.agent.software.agent.task;
+
+import com.agent.software.agent.dialog.ConversationMemory;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.llm.LlmClient;
+import com.agent.software.tool.spi.Toolbox;
+import com.agent.software.transcript.Transcript;
+
+/**
+ * 一轮任务里的 LLM ↔ 工具循环（从 master {@code AgentRole.executeWithTools} 抽出）。
+ *
+ * <p>只负责循环本身：请求 → 执行工具 → 回填 tool 消息 → 直到不再有工具调用；
+ * 上限与失败策略来自 {@link ToolLoopPolicy}，轨迹写 {@link Transcript}。
+ */
+public final class ToolLoop {
+
+    private final LlmClient llm;
+    private final Toolbox toolbox;
+    private final Transcript transcript;
+    private final ToolLoopPolicy policy;
+
+    public ToolLoop(LlmClient llm, Toolbox toolbox, Transcript transcript, ToolLoopPolicy policy) {
+        this.llm = llm;
+        this.toolbox = toolbox;
+        this.transcript = transcript;
+        this.policy = policy;
+    }
+
+    public Outcome run(RoleId agent, String systemPrompt, Task task,
+                       ConversationMemory memory, int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public record Outcome(String answer, int tokens, boolean failed) {
+    }
+}
+=========== src/main/java/com/agent/software/agent/task/ToolLoopPolicy.java
+package com.agent.software.agent.task;
+
+/**
+ * 工具循环的上限与失败策略。
+ *
+ * <p>master 对应 {@code AgentRole.MAX_TOOL_ROUNDS} / {@code MAX_TOOL_TOTAL_TOKENS}
+ * （后者当时被注释掉，导致循环没有真正的 token 预算）。
+ */
+public record ToolLoopPolicy(int maxRounds, int maxTotalTokens, boolean failOnLlmError) {
+
+    public static ToolLoopPolicy defaults() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean roundBudgetExceeded(int round) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean tokenBudgetExceeded(int tokens) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/Team.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.sim.clock.Sensors;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.agent.role.RoleSpec;
+
+/**
+ * 花名册唯一所有者：只保管 {@link Agent} 集合、批量启停、只读快照。
+ *
+ * <p>**为什么 Team 不认识 AgentFactory**：如果把"创建 Agent"也放进 Team，
+ * 装配链会形成构造环
+ * {@code Team → AgentFactory → ToolkitCatalog → TalkToolkit → TeamChannel → Team}。
+ * 拆分后：{@code Team} 无依赖即可先建，工具包随后注入，创建 Agent 的动作归
+ * {@link Staffing}。master 的 {@code RolePool} 正是把"花名册 + 创建 + LLM 工厂 +
+ * 工具装配 + worker"揉在一起，才必须靠 setter 回填。
+ *
+ * <p>同时实现只读视图 {@link AgentDirectory} 与时钟感知 {@link Sensors}。
+ */
+public final class Team implements AgentDirectory, Sensors {
+
+    private final java.util.Map<RoleId, Agent> byId = new java.util.LinkedHashMap<>();
+
+    public Team() {
+    }
+
+    /** 注册一个已装配好的角色（不启动）。 */
+    public void register(Agent agent) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 离职：停止 worker 并移除。 */
+    public boolean resign(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public Optional<Agent> agent(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public List<Agent> agents() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void startAll() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void stopAll() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public List<AgentSnapshot> snapshots() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── AgentDirectory ─────────────────────────────────────────
+
+    @Override
+    public Optional<RoleSpec> spec(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<RoleSpec> specs() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<AgentState> stateOf(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── Sensors ────────────────────────────────────────────────
+
+    @Override
+    public boolean anyBusy() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean allIdle() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean allOffDuty() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/agent/ToolboxFactory.java
+package com.agent.software.agent;
+
+import com.agent.software.tool.spi.Toolbox;
+import com.agent.software.agent.role.RoleSpec;
+
+/**
+ * 为一个角色装配 {@link Toolbox} 的工厂（实现放在 bootstrap）。
+ *
+ * <p>为什么不直接把 Toolbox 注入 {@link Agent} 的构造器：有一部分能力
+ * （{@link AgentTasks}、{@link AgentControl}）由 {@link Agent} 自己实现，
+ * 只有 Agent 存在之后才拿得到。用工厂把装配推迟到 {@link Agent#start()}，
+ * 装配链上既没有环，也不需要可变的 setter 回填。
+ */
+@FunctionalInterface
+public interface ToolboxFactory {
+
+    /** 用该角色的定义与"自身"窄视图装配工具集合。 */
+    Toolbox create(RoleSpec spec, AgentTasks tasks, AgentControl control);
+}
+=========== src/main/java/com/agent/software/agent/WaitCoordinator.java
+package com.agent.software.agent;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+import java.util.Optional;
+
+/**
+ * talk wait=true 的同步等待协议（master {@code AgentRole} 里的 Condition 协议）。
+ *
+ * <p>从角色对象里独立出来：等待状态、回复信箱、被系统解阻塞，都是清楚的一小块。
+ */
+public final class WaitCoordinator {
+
+    /** 进入等待，记录在等谁。 */
+    public void begin(RoleId target) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /**
+     * 阻塞直到收到回复 / 被 abort / 超时。
+     *
+     * @param timeoutOrNull null 表示一直等
+     */
+    public Optional<String> await(Duration timeoutOrNull) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 同事回复到达。 */
+    public void deliver(String reply) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 系统解阻塞（下班 / 收尾超时）：用一个合成回复唤醒等待者。 */
+    public void abort(String syntheticReply) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 结束等待。 */
+    public void end() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean waiting() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public Optional<RoleId> waitingFor() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/bootstrap/CompanyBuilder.java
+package com.agent.software.bootstrap;
+
+import com.agent.software.company.Company;
+import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.infra.json.JsonCodec;
+import com.agent.software.llm.LlmClient;
+import com.agent.software.tool.client.ClientChannel;
+import com.agent.software.transcript.Transcript;
+import com.agent.software.transcript.Transcript.Feed;
+
+/**
+ * 组合根：唯一允许"认识所有东西"的地方。
+ *
+ * <p>目标装配顺序（无 setter、无 holder、无环）：
+ * <pre>
+ * AppPaths / JsonCodec / Transcript.Feed
+ *   → Team（无依赖，先建）
+ *   → TalkService(Team) / 各 adapter
+ *   → ToolkitCatalog（注入各工具包的共享能力与该角色的每角色能力）
+ *   → AgentFactory(Team 只读视图 + ShellRegistry + ToolboxFactory + Llm + gate)
+ *   → Staffing(Team, AgentFactory)
+ *   → HiringService / EventRouter / TaskFactory / ScheduleTable / ClockDriver / ShiftDirector
+ *   → Company(...)
+ * </pre>
+ * 对比 master：{@code AgentSystem} 既当组合根又当运行时，还要用 setter 把
+ * clock/pool/dispatcher/mail 互相回填。
+ */
+public final class CompanyBuilder {
+
+    private final AppConfig config;
+    private final AppPaths paths;
+    private final JsonCodec json;
+
+    private LlmClient llmOverride;
+    private ClientChannel clientChannel;
+    private Transcript.Feed transcript;
+
+    public CompanyBuilder(AppConfig config, AppPaths paths, JsonCodec json) {
+        this.config = config;
+        this.paths = paths;
+        this.json = json;
+    }
+
+    /** 用外部 LLM 覆盖配置（测试 / 嵌入）。 */
+    public CompanyBuilder withLlm(LlmClient llm) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 指定客户输入通道（控制台或 Web）。 */
+    public CompanyBuilder withClientChannel(ClientChannel channel) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 指定轨迹实现（默认内存 ChatFeed；测试可换成 fake）。 */
+    public CompanyBuilder withTranscript(Transcript.Feed feed) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 组装出可运行的 {@link Company}（含 Web 输入通道所需的 feed）。 */
+    public Company build() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/bootstrap/Main.java
+package com.agent.software.bootstrap;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.company.Company;
+import com.agent.software.infra.config.AppConfig;
+
+import java.util.List;
+
+/**
+ * 入口：加载配置 → 组装公司 → 招聘默认团队 → 读档 → 启动 → 日循环 → 退出落盘。
+ *
+ * <p>对应 master {@code Main}，但业务步骤全部下移到 {@link Company}，
+ * 这里只做"驱动一次模拟"的编排。
+ */
+public final class Main {
+
+    private Main() {
+    }
+
+    public static void main(String[] args) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 由配置构建一个公司（供 main 与测试复用）。 */
+    static Company buildCompany(AppConfig config) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 从 classpath 角色模板加载默认团队。 */
+    static List<RoleSpec> defaultTeam(AppConfig config) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/bootstrap/ToolkitCatalog.java
+package com.agent.software.bootstrap;
+
+import com.agent.software.agent.AgentControl;
+import com.agent.software.agent.AgentTasks;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.tool.computer.Shell;
+import com.agent.software.tool.spi.Toolbox;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+import java.util.function.Function;
+
+/**
+ * 工具目录：按 {@link RoleSpec#toolkits()} 选包，装配出该角色的 {@link Toolbox}。
+ *
+ * <p>每个角色一份。工具包在构造期就拿到自己需要的能力：共享能力（NoteBook / Mailbox /
+ * Clock …）来自 {@link Deps} 之外的共享实例，每角色能力来自 {@link Deps}。
+ * 因此 {@code tool.spi} 只依赖 {@code kernel}，不需要任何"工具上下文对象"。
+ */
+public final class ToolkitCatalog {
+
+    /** 每个角色装配工具包时可见的能力集合。 */
+    public record Deps(RoleSpec spec, Shell shell, AgentTasks tasks, AgentControl control) {
+    }
+
+    /** 注册一个工具包工厂；id 与 {@code RoleSpec.toolkits} 中的名字对应。 */
+    public ToolkitCatalog register(String id, Function<Deps, Toolkit> factory) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 已注册的全部工具包 id。 */
+    public List<String> ids() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 按 spec 指定的工具包逐个装配并合成一个 Toolbox。 */
+    public Toolbox build(RoleSpec spec, Shell shell, AgentTasks tasks, AgentControl control) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/company/Company.java
+package com.agent.software.company;
+
+import com.agent.software.agent.LifecycleGate;
+import com.agent.software.agent.Staffing;
+import com.agent.software.agent.Team;
+import com.agent.software.agent.dispatch.EventRouter;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.sim.clock.ClockDriver;
+import com.agent.software.sim.clock.ScheduleTable;
+import com.agent.software.sim.clock.SimClock;
+import com.agent.software.sim.event.AgentEvent;
+
+import java.util.List;
+import com.agent.software.company.store.SnapshotStore;
+
+/**
+ * 顶层编排门面（薄）。
+ *
+ * <p>它只做组合与生命周期排序，不实现任何业务规则：
+ * <ul>
+ *   <li>{@code start()}：先起 worker，再起时钟（保证 SHIFT_START 有消费者）；</li>
+ *   <li>{@code stop()}：先停时钟，再停 worker，最后落快照；</li>
+ *   <li>{@code save()/restore()}：组装/应用 {@code CompanySnapshot}；</li>
+ *   <li>实现 {@link CompanyView}，让 Web/控制台不依赖 engine。</li>
+ * </ul>
+ * master 的 {@code AgentSystem} 在同样位置混入了通知、邮件、暂停细节与数据目录。
+ */
+public final class Company implements CompanyView {
+
+    private final Team team;
+    private final SimClock clock;
+    private final ClockDriver driver;
+    private final EventRouter router;
+    private final ScheduleTable schedule;
+    private final ShiftDirector director;
+    private final LifecycleGate gate;
+    private final Staffing staffing;
+    private final SnapshotStore snapshots;
+
+    public Company(Team team, SimClock clock, ClockDriver driver, EventRouter router,
+                   ScheduleTable schedule, ShiftDirector director, LifecycleGate gate,
+                   Staffing staffing, SnapshotStore snapshots) {
+        this.team = team;
+        this.clock = clock;
+        this.driver = driver;
+        this.router = router;
+        this.schedule = schedule;
+        this.director = director;
+        this.gate = gate;
+        this.staffing = staffing;
+        this.snapshots = snapshots;
+    }
+
+    public void start() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void stop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 外部事件入口（客户消息、邮件通知、测试注入）。 */
+    public void publish(AgentEvent event) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 落快照。 */
+    public void save() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 读快照；返回恢复的角色数。 */
+    public int restore() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean paused() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public String pauseReason() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public SimClock clock() {
+        return clock;
+    }
+
+    public Team team() {
+        return team;
+    }
+
+    public ScheduleTable schedule() {
+        return schedule;
+    }
+
+    // ── CompanyView ────────────────────────────────────────────
+
+    @Override
+    public CompanyStatus status() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<RoleSpec> roster() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void pause(String reason) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void resume() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/company/CompanyStatus.java
+package com.agent.software.company;
+
+import com.agent.software.agent.AgentSnapshot;
+import com.agent.software.kernel.DayTick;
+
+import java.util.List;
+
+/** 整个公司的只读状态快照（供 Web / 控制台展示）。 */
+public record CompanyStatus(DayTick clock, String dateTime, String describe,
+                            boolean paused, String pauseReason,
+                            List<AgentSnapshot> agents) {
+}
+=========== src/main/java/com/agent/software/company/CompanyView.java
+package com.agent.software.company;
+
+import com.agent.software.agent.role.RoleSpec;
+
+import java.util.List;
+
+/**
+ * 公司只读视图 + 全局暂停控制（Web / 控制台适配器使用的窄接口）。
+ *
+ * <p>存在的理由：让 {@code web} 能读取状态、暂停/恢复，
+ * 而**不必依赖 company.Company**；{@code company.Company} 实现它。
+ */
+public interface CompanyView {
+
+    CompanyStatus status();
+
+    /** 当前在册角色（Web 分组列表用）。 */
+    List<RoleSpec> roster();
+
+    void pause(String reason);
+
+    void resume();
+}
+=========== src/main/java/com/agent/software/company/ShiftDirector.java
+package com.agent.software.company;
+
+import com.agent.software.agent.LifecycleGate;
+import com.agent.software.agent.Team;
+import com.agent.software.sim.clock.Clock;
+import com.agent.software.kernel.Tick;
+import com.agent.software.sim.clock.TickObserver;
+
+/**
+ * 班次反应唯一处。
+ *
+ * <p>对应 master {@code AgentSystem.onTimeEvent} + {@code allRolesIdle} +
+ * {@code dayRolloverReady} + {@code forceWrapUp} 这一堆散落逻辑：
+ * <ul>
+ *   <li>SHIFT_START：全员上岗、开机、提升暂存任务、装载当天日程；</li>
+ *   <li>SHIFT_END：解阻塞等待中的角色、要求各自写总结（WRAPPING_UP）；</li>
+ *   <li>forceWrapUp：收尾超时兜底，把仍未下班的角色强制 OFF_DUTY。</li>
+ * </ul>
+ */
+public final class ShiftDirector implements TickObserver {
+
+    private final Team team;
+    private final Clock clock;
+    private final LifecycleGate gate;
+
+    public ShiftDirector(Team team, Clock clock, LifecycleGate gate) {
+        this.team = team;
+        this.clock = clock;
+        this.gate = gate;
+    }
+
+    /** 时钟每步调用；内部只在班次边界动作。 */
+    @Override
+    public void onTick(Tick now) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void onShiftStart() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void onShiftEnd() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void forceWrapUp() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/company/store/CompanySnapshot.java
+package com.agent.software.company.store;
+
+import com.agent.software.agent.RoleSnapshot;
+import com.agent.software.kernel.DayTick;
+
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * 整公司的持久化快照——运行时与磁盘之间唯一的交界。
+ *
+ * <p>由 {@code company.Company.save()} 组装，交给 {@code company.store.SnapshotStore} 落盘；
+ * 快照里只有 model 类型，不含任何运行时对象。
+ */
+public record CompanySnapshot(int version, java.time.Instant savedAt,
+                              DayTick clock, LocalDate baseDate,
+                              List<RoleSnapshot> roles) {
+}
+=========== src/main/java/com/agent/software/company/store/JsonSnapshotStore.java
+package com.agent.software.company.store;
+
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.infra.json.JsonCodec;
+
+import java.util.Optional;
+
+/**
+ * JSON 快照存储：原子写 state.json，并在读取时兼容旧档。
+ */
+public final class JsonSnapshotStore implements SnapshotStore {
+
+    /** 绑定数据路径与 JSON 编解码器。 */
+    public JsonSnapshotStore(AppPaths paths, JsonCodec json) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<CompanySnapshot> load() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void save(CompanySnapshot snapshot) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/company/store/SnapshotStore.java
+package com.agent.software.company.store;
+
+import java.util.Optional;
+
+/** 快照持久化能力。 */
+public interface SnapshotStore {
+
+    Optional<CompanySnapshot> load();
+
+    void save(CompanySnapshot snapshot);
+}
+=========== src/main/java/com/agent/software/infra/config/AppConfig.java
+package com.agent.software.infra.config;
+
+import java.util.Set;
+
+/**
+ * 全局配置的不可变快照：LLM、排班、存储、Web、邮件、工具包六块配置的唯一载体。
+ */
+public record AppConfig(Llm llm, Schedule schedule, Storage storage, Web web, Mail mail, Toolkits toolkits) {
+
+    /** 代码内置默认配置（env 与 config.json 均未提供时的兜底）。 */
+    public static AppConfig defaults() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** LLM 接入配置。 */
+    public record Llm(String providerId, String model, String apiKey, String baseUrl, Retry retry) {
+
+        /** LLM 调用重试与超时配置。 */
+        public record Retry(int maxAttempts, double delaySeconds, int timeoutSeconds) {
+        }
+    }
+
+    /** 时间推进与班次配置。 */
+    public record Schedule(double secondsPerTick, int shiftStartHour, int shiftEndHour,
+                           long fastForwardIdleMillis, double simSecondsPerRealSecond,
+                           long wrapUpGraceMillis) {
+    }
+
+    /** 存储目录配置。 */
+    public record Storage(String dataDir) {
+    }
+
+    /** Web 服务配置。 */
+    public record Web(String host, int port, long replyTimeoutMillis) {
+    }
+
+    /** 公司邮箱配置：虚拟邮箱后缀 + 可选真实 SMTP。 */
+    public record Mail(String suffix, Smtp smtp) {
+
+        /** 真实 SMTP 发送配置。 */
+        public record Smtp(String host, int port, String user, String password, String from, boolean useSsl) {
+        }
+    }
+
+    /** 默认装配的工具包集合。 */
+    public record Toolkits(Set<String> defaults) {
+    }
+}
+=========== src/main/java/com/agent/software/infra/config/AppPaths.java
+package com.agent.software.infra.config;
+
+import java.nio.file.Path;
+import com.agent.software.infra.config.AppConfig.Storage;
+
+/**
+ * 所有磁盘路径的唯一来源：解析数据/配置目录并按需创建父目录（XDG/Windows/macOS）。
+ */
+public final class AppPaths {
+
+    /** 由存储配置解析出跨平台路径集合。 */
+    public static AppPaths resolve(AppConfig.Storage storage) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 数据根目录。 */
+    public Path dataDir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 数据根目录下拼接出的文件路径。 */
+    public Path dataFile(String... parts) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 配置目录下拼接出的文件路径。 */
+    public Path configFile(String... parts) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 确保路径的父目录存在并返回该路径。 */
+    public Path ensure(Path path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/infra/config/ConfigLoader.java
+package com.agent.software.infra.config;
+
+/**
+ * 唯一配置入口，优先级 env &gt; config.json &gt; 代码默认。
+ */
+public final class ConfigLoader {
+
+    /** 加载并按优先级合并三层配置。 */
+    public AppConfig load() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/infra/json/JacksonJsonCodec.java
+package com.agent.software.infra.json;
+
+import java.util.Map;
+
+/**
+ * 基于 Jackson 的 JSON 编解码器：全系统唯一出现 Map&lt;String,Object&gt; 的边界之一。
+ */
+public final class JacksonJsonCodec implements JsonCodec {
+
+    @Override
+    public String write(Object value) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Map<String, Object> readMap(String json) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public <T> T read(String json, Class<T> type) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/infra/json/JsonCodec.java
+package com.agent.software.infra.json;
+
+import java.util.Map;
+
+/**
+ * JSON 编解码能力。
+ *
+ * <p>放在 ports 是为了让 model/policy/engine 不依赖 Jackson；只有适配器实现它，
+ * {@code Map<String,Object>} 也只允许在这里出现。
+ */
+public interface JsonCodec {
+
+    String write(Object value);
+
+    Map<String, Object> readMap(String json);
+
+    <T> T read(String json, Class<T> type);
+}
+=========== src/main/java/com/agent/software/kernel/DayTick.java
+package com.agent.software.kernel;
+
+/** 日历坐标：第几天 + 当天第几 tick。 */
+public record DayTick(int day, int tickOfDay) {
+}
+=========== src/main/java/com/agent/software/kernel/DomainError.java
+package com.agent.software.kernel;
+
+/**
+ * 领域层统一非受检异常。
+ *
+ * <p>目的：失败必须用"类型 + code"表达，禁止再用 {@code "[API error:"} 之类的字符串前缀嗅探
+ * （master 的 {@code LLM.LLM_ERROR_MARKERS} / {@code Types.isFailureText} 即此问题）。
+ */
+public final class DomainError extends RuntimeException {
+
+    /** 机器可读的错误分类，例：{@code "llm.timeout"} / {@code "tool.not-found"}。 */
+    private final String code;
+
+    public DomainError(String code, String message) {
+        super(message);
+        this.code = code;
+    }
+
+    public DomainError(String code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+    }
+
+    public String code() {
+        return code;
+    }
+}
+=========== src/main/java/com/agent/software/kernel/Ids.java
+package com.agent.software.kernel;
+
+/**
+ * 领域标识（Identity）集合。
+ *
+ * <p>规则：标识只包装一个非空字符串，全部为不可变 {@code record}（值语义由 record 自动提供）；
+ * 跨层传递必须使用具体标识类型，禁止裸 {@code String} 冒充 id。
+ *
+ * <p>骨架说明：紧凑构造器中的非空校验、{@code generate()} 的随机生成逻辑留待实现。
+ */
+public final class Ids {
+
+    private Ids() {
+    }
+
+    /** 所有标识的公共只读视图。 */
+    public interface Id {
+        String value();
+    }
+
+    /** 角色标识（对应 master 的 role_id，也是容器/目录/uid 的派生源）。 */
+    public record RoleId(String value) implements Id {
+    }
+
+    /** 任务标识。 */
+    public record TaskId(String value) implements Id {
+        /** 生成一个新的随机任务标识。 */
+        public static TaskId generate() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+
+    /** 事件标识。 */
+    public record EventId(String value) implements Id {
+        public static EventId generate() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+
+    /** 定时表条目标识。 */
+    public record ScheduleId(String value) implements Id {
+        public static ScheduleId generate() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+
+    /** 邮件标识。 */
+    public record MailId(String value) implements Id {
+        public static MailId generate() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+
+    /** 待办标识。 */
+    public record TodoId(String value) implements Id {
+    }
+
+    /** 技能标识。 */
+    public record SkillId(String value) implements Id {
+    }
+
+    /** 笔记标识（标题即业务主键，id 仅用于持久化）。 */
+    public record NoteId(String value) implements Id {
+    }
+}
+=========== src/main/java/com/agent/software/kernel/JsonSchema.java
+package com.agent.software.kernel;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 类型化 JSON Schema 构造器。
+ *
+ * <p>目的：工具参数声明的唯一来源，替代 master {@code Tool.getSchema()} 的
+ * {@code name → 描述字符串} 扁平 Map——那种写法无法表达 required / integer / enum，
+ * 导致 handler 里到处做字符串转数字。
+ *
+ * <p>示例形态：{@code JsonSchema.object().string("title","笔记标题").required("title")}。
+ */
+public final class JsonSchema {
+
+    private JsonSchema() {
+    }
+
+    /** 新建一个 object 根 schema。 */
+    public static Builder object() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 链式构造器（每个方法返回自身以便串联）。 */
+    public static final class Builder {
+
+        public Builder string(String name, String description) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public Builder integer(String name, String description) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public Builder bool(String name, String description) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public Builder enumeration(String name, String description, List<String> values) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public Builder required(String... names) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        /** 输出 OpenAI / MCP 兼容的 JSON Schema Map（仅在适配器边界使用）。 */
+        public Map<String, Object> toMap() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+}
+=========== src/main/java/com/agent/software/kernel/Payload.java
+package com.agent.software.kernel;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+
+/**
+ * 不可变、带类型访问器的事件/任务负载。
+ *
+ * <p>替代裸 {@code Map<String,Object>} 跨层传递；{@link #asMap()} 只允许在
+ * 适配器（JSON 编解码）边界调用。
+ */
+public final class Payload {
+
+    private final Map<String, Object> values;
+
+    private Payload(Map<String, Object> values) {
+        this.values = Map.copyOf(values);
+    }
+
+    public static Payload empty() {
+        return new Payload(Map.of());
+    }
+
+    /** 单键负载。 */
+    public static Payload of(String key, Object value) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 追加/覆盖一个键，返回新实例。 */
+    public Payload with(String key, Object value) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public Optional<String> string(String key) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public String stringOr(String key, String fallback) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public OptionalInt intValue(String key) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 仅供持久化 / JSON 适配器使用。 */
+    public Map<String, Object> asMap() {
+        return values;
+    }
+
+    // ── 常用键的语义化访问器，避免各处硬编码 key ──────────────────────
+
+    /** 事件标题（事件转任务时用作描述）。 */
+    public String title() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 正文/消息文本。 */
+    public String text() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 邮件主题等。 */
+    public String subject() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/kernel/Text.java
+package com.agent.software.kernel;
+
+/**
+ * 纯文本工具：截断、空白归一化、空判定。
+ *
+ * <p>目的：消灭 master 各处重复的 private {@code truncate(String,int)} / 归一化片段，
+ * 让"展示用的截断"只有一个实现。
+ */
+public final class Text {
+
+    private Text() {
+    }
+
+    /** 截断到 max 个字符（null 视为空串）。 */
+    public static String truncate(String s, int max) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 把任意连续空白折成单个空格并去掉首尾空白。 */
+    public static String squashWhitespace(String s) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** null → ""。 */
+    public static String orEmpty(String s) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** null / 空串 / 全空白 → true。 */
+    public static boolean isBlank(String s) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 用分隔符连接非空白片段。 */
+    public static String joinNonBlank(String separator, String... parts) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/kernel/Tick.java
+package com.agent.software.kernel;
+
+/** 绝对 tick（从第 1 天 08:00 起累计）。 */
+public record Tick(long value) {
+
+    public Tick plus(long ticks) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean before(Tick other) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean after(Tick other) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/llm/LlmClient.java
+package com.agent.software.llm;
+
+import com.agent.software.tool.spi.ToolSpec;
+
+import java.util.List;
+
+/**
+ * LLM 能力。
+ *
+ * <p>唯一实现是 {@code llm.OpenAiClient}。失败通过 {@link ChatReply#failed()}
+ * 或 {@code kernel.DomainError} 表达，不再用 {@code "[API error:"} 前缀。
+ */
+public interface LlmClient {
+
+    ChatReply chat(ChatRequest request);
+
+    ToolReply chatWithTools(ToolChatRequest request);
+
+    ChatReply summarize(String text, double temperature, int maxTokens);
+
+    record ChatRequest(String system, String user, double temperature, Integer maxTokens) {
+    }
+
+    record ChatReply(String text, String reasoning, int tokens) {
+
+        public boolean failed() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+
+    record ToolChatRequest(List<Message> messages, List<ToolSpec> tools,
+                           double temperature, Integer maxTokens) {
+    }
+
+    record ToolReply(String content, String reasoning,
+                     List<com.agent.software.llm.ToolCallRequest> toolCalls, int totalTokens) {
+    }
+}
+=========== src/main/java/com/agent/software/llm/Message.java
+package com.agent.software.llm;
+
+import java.util.List;
+
+/**
+ * 一条 LLM 对话消息（system / user / assistant / tool）。
+ *
+ * <p>替代 master 中贯穿 {@code LLM}/{@code Conversation}/{@code OpenAICompatLLM} 的
+ * {@code Map<String,Object>} 消息。
+ */
+public record Message(Role role, String content, List<ToolCallRequest> toolCalls, String toolCallId) {
+
+    public enum Role {
+        SYSTEM,
+        USER,
+        ASSISTANT,
+        TOOL
+    }
+
+    public static Message system(String text) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public static Message user(String text) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public static Message assistant(String text, List<ToolCallRequest> toolCalls) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 工具执行结果，通过 toolCallId 与请求关联。 */
+    public static Message tool(String toolCallId, String content) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/llm/OpenAiClient.java
+package com.agent.software.llm;
+
+import com.agent.software.infra.config.AppConfig;
+
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import com.agent.software.infra.config.AppConfig.Llm;
+import com.agent.software.llm.LlmClient.ChatReply;
+import com.agent.software.llm.LlmClient.ChatRequest;
+import com.agent.software.llm.LlmClient.ToolChatRequest;
+import com.agent.software.llm.LlmClient.ToolReply;
+import com.agent.software.llm.ProviderResolver.Endpoint;
+import com.agent.software.infra.config.AppConfig.Llm.Retry;
+
+/**
+ * 唯一 LLM 实现：OpenAI 兼容 chat/completions，内置重试、限流排队与余额不足处理。
+ */
+public final class OpenAiClient implements LlmClient {
+
+    /** 以解析好的 endpoint、重试配置与共享仲裁器构造。 */
+    public OpenAiClient(ProviderResolver.Endpoint endpoint, AppConfig.Llm.Retry retry, RetryArbiter arbiter) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ChatReply chat(ChatRequest request) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ToolReply chatWithTools(ToolChatRequest request) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ChatReply summarize(String text, double temperature, int maxTokens) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 注入全局暂停门：返回 true 时等待而不发起请求。 */
+    public void setPausedGate(Supplier<Boolean> gate) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 注入余额不足通知（例如暂停公司并提示充值）。 */
+    public void setOnInsufficientBalance(Consumer<String> listener) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/llm/ProviderCatalog.java
+package com.agent.software.llm;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 供应商目录：从 classpath 的 providers.default.json 加载，并叠加可选的本地覆盖文件。
+ */
+public final class ProviderCatalog {
+
+    /** 全部供应商定义（本地覆盖合并后的结果）。 */
+    public List<ProviderDef> all() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 按 id 查找供应商。 */
+    public Optional<ProviderDef> find(String id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 一个供应商的静态定义。 */
+    public record ProviderDef(String id, String name, String baseUrl, String apiKeyEnv,
+                              String defaultModel, boolean enabled) {
+    }
+}
+=========== src/main/java/com/agent/software/llm/ProviderResolver.java
+package com.agent.software.llm;
+
+import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppConfig.Llm;
+
+/**
+ * 供应商解析：把 providerId + model + apiKey 组合成可直接调用的 Endpoint。
+ */
+public final class ProviderResolver {
+
+    /** 解析出 base URL、API key 与最终模型名。 */
+    public static Endpoint resolve(AppConfig.Llm llm, ProviderCatalog catalog) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 一次 LLM 调用所需的连接三元组。 */
+    public record Endpoint(String baseUrl, String apiKey, String model) {
+    }
+}
+=========== src/main/java/com/agent/software/llm/RetryArbiter.java
+package com.agent.software.llm;
+
+import java.util.function.BooleanSupplier;
+
+/**
+ * 每 endpoint 的限流排队，重试次数多者优先。
+ */
+public final class RetryArbiter {
+
+    /** 取得（或创建）某 endpoint 在 JVM 内共享的仲裁器。 */
+    public static RetryArbiter forEndpoint(String endpointKey) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 清空全部共享仲裁器（测试隔离用）。 */
+    public static void clearShared() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 为一次尝试获取排队名额；keepWaiting 为假或线程中断时返回 null 表示放弃本次尝试。 */
+    public Slot acquire(int retries, long pollMillis, BooleanSupplier keepWaiting) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 上报一次可重试的 429/5xx，使 endpoint 进入拥塞排队状态。 */
+    public void throttled(String cause) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 当前 endpoint 是否处于拥塞状态。 */
+    public boolean isCongested() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 一次尝试占用的名额，用完必须释放。 */
+    public final class Slot implements AutoCloseable {
+
+        /** 归名额并声明本次尝试是否成功（成功且无人排队时解除拥塞）。 */
+        public void release(boolean succeeded) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        /** 默认按未成功释放。 */
+        @Override
+        public void close() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+}
+=========== src/main/java/com/agent/software/llm/ToolCallRequest.java
+package com.agent.software.llm;
+
+import com.agent.software.kernel.Payload;
+
+/**
+ * 一次工具调用请求（LLM 产生的 function call）。
+ *
+ * @param callId   provider 给出的调用标识，用于把结果回填成 tool 消息
+ * @param toolName 工具名
+ * @param arguments 类型化参数
+ */
+public record ToolCallRequest(String callId, String toolName, Payload arguments) {
+}
+=========== src/main/java/com/agent/software/sim/clock/ClockDriver.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.sim.event.EventSink;
+
+import java.util.Optional;
+import com.agent.software.kernel.Tick;
+
+/**
+ * 时钟线程的唯一所有者。
+ *
+ * <p>一轮循环：采集 {@link Sensors} 事实 → 问 {@link ClockPolicy} → 应用
+ * {@code ClockAction} → 通知 {@link TickObserver}（班次反应）→ 投递到期事件 → 睡眠。master 的 {@code TimeEventBus.tickLoop}
+ * 把感知、决策、日历、调度、生命周期兜底全混在一个 920 行类里。
+ *
+ * <p>{@link #tickOnce()} 让测试可以单步驱动，无需真实等待。
+ */
+public final class ClockDriver {
+
+    private final SimClock clock;
+    private final ScheduleTable schedule;
+    private final ClockPolicy policy;
+    private final EventSink sink;
+    private final Sensors sensors;
+    private final TickObserver observer;
+    private final ClockOptions options;
+
+    public ClockDriver(SimClock clock, ScheduleTable schedule, ClockPolicy policy,
+                       EventSink sink, Sensors sensors, TickObserver observer,
+                       ClockOptions options) {
+        this.clock = clock;
+        this.schedule = schedule;
+        this.policy = policy;
+        this.sink = sink;
+        this.sensors = sensors;
+        this.observer = observer;
+        this.options = options;
+    }
+
+    public void start() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void stop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void pause() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public void resume() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean paused() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 单步推进（测试入口，也是线程体每次循环的核心）。 */
+    public void tickOnce() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 供策略判断的"下一个事件触发点"（含班次结束 / 下一班次起点门控）。 */
+    public Optional<Tick> nextFireTick() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public record ClockOptions(long busyPollMillis, long idlePollMillis, long wrapUpGraceMillis) {
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/Clock.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
+/**
+ * 只读时钟视图。
+ *
+ * <p>给工具与 System Prompt 用；它们只能读时间，不能推进时间。推进能力只属于
+ * {@code sim.clock.ClockDriver} + {@code sim.clock.SimClock}。
+ */
+public interface Clock {
+
+    Tick now();
+
+    DayTick nowDay();
+
+    ShiftCalendar calendar();
+
+    /** 例："2026-09-16 09:30:00"。 */
+    String currentDateTime();
+
+    /** 给 LLM 的一句话时间与班次描述。 */
+    String describe();
+}
+=========== src/main/java/com/agent/software/sim/clock/ClockPolicy.java
+package com.agent.software.sim.clock;
+
+import java.util.Optional;
+import com.agent.software.kernel.Tick;
+
+/**
+ * 时钟决策：时钟线程下一步该做什么。
+ *
+ * <p>把 master {@code TimeEventBus.tickLoop} 里"有人在忙就推进 / 全员空闲就快进 /
+ * 收尾超时强制跨天"的判断抽成纯函数。注意这里只接收 {@code Optional<Tick> nextFireTick}
+ * 而不是调度表对象，因此 policy 不依赖 engine。
+ */
+public interface ClockPolicy {
+
+    ClockAction next(ClockSignals signals, ShiftCalendar calendar, Tick now,
+                     Optional<Tick> nextFireTick);
+
+    /** 决策所需事实，由 {@code sim.clock.Sensors} 采集。 */
+    record ClockSignals(boolean anyBusy, boolean allIdle, boolean allOffDuty,
+                        boolean wrapUpOverdue, long idleMillis) {
+    }
+
+    /** 时钟动作。 */
+    sealed interface ClockAction {
+
+        /** 有人在干活：按真实耗时推进相应模拟秒数。 */
+        record Advance(double simulatedSeconds) implements ClockAction {
+        }
+
+        /** 全员空闲足够久：直接跳到下一个事件触发点。 */
+        record FastForwardTo(Tick target) implements ClockAction {
+        }
+
+        /** 无事可做：停在原地。 */
+        record Hold() implements ClockAction {
+        }
+
+        /** 收尾超时：触发强制下班兜底。 */
+        record ForceWrapUp() implements ClockAction {
+        }
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/DefaultClockPolicy.java
+package com.agent.software.sim.clock;
+
+import java.util.Optional;
+import com.agent.software.kernel.Tick;
+import com.agent.software.sim.clock.ClockPolicy.ClockAction;
+import com.agent.software.sim.clock.ClockPolicy.ClockSignals;
+
+/**
+ * 默认时钟策略。
+ *
+ * <p>优先级：收尾超时兜底 > 忙碌推进 > 全员空闲快进 > 原地等待。
+ * 快进目标只取"下一个事件触发点"；班次结束后的下一个班次起点是否可达，
+ * 由调用方在提供 {@code nextFireTick} 时决定（对齐 master 的 dayRolloverReady 门）。
+ */
+public final class DefaultClockPolicy implements ClockPolicy {
+
+    public DefaultClockPolicy(long fastForwardIdleMillis) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ClockAction next(ClockSignals signals, ShiftCalendar calendar, Tick now,
+                            Optional<Tick> nextFireTick) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/ReminderScheduler.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.ScheduleId;
+import com.agent.software.kernel.Payload;
+import com.agent.software.kernel.DayTick;
+
+/**
+ * 定时提醒能力（笔记提醒等）。
+ *
+ * <p>由 {@code sim.clock.ScheduleTable} 实现；工具通过它注册提醒，不需要认识调度表全貌。
+ */
+public interface ReminderScheduler {
+
+    ScheduleId schedule(String description, RoleId owner, DayTick at, Payload payload);
+
+    boolean cancel(ScheduleId id);
+}
+=========== src/main/java/com/agent/software/sim/clock/ScheduleTable.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.ScheduleId;
+import com.agent.software.kernel.Payload;
+import com.agent.software.sim.event.AgentEvent;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
+
+/**
+ * 定时事件 / 任务提醒表。
+ *
+ * <p>对应 master {@code TimeEventBus} 的调度那半 + {@code NoteStore.scheduleReminder}。
+ * 表本身不含线程：到期事件由 {@link ClockDriver} 弹出后交给 {@code EventSink}。
+ */
+public final class ScheduleTable implements ReminderScheduler {
+
+    @Override
+    public ScheduleId schedule(String description, RoleId owner, DayTick at, Payload payload) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean cancel(ScheduleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 改期（编辑提醒）。 */
+    public ScheduledEntry reschedule(ScheduleId id, DayTick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 列出未触发项；owner 为 null 时列出全部。 */
+    public List<ScheduledEntry> list(RoleId owner) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 弹出所有到期项，转成 TASK_DUE 事件。 */
+    public List<AgentEvent> due(Tick now) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 下一个触发点（供时钟快进）。 */
+    public Optional<Tick> nextFireTick(Tick now) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 新班次开始：把当天应触发的任务装入日程。 */
+    public void activateDay(int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public record ScheduledEntry(ScheduleId id, String description, RoleId owner,
+                                 DayTick at, Payload payload, boolean fired) {
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/Sensors.java
+package com.agent.software.sim.clock;
+
+/**
+ * ClockDriver 观察 roster 的窄接口。
+ *
+ * <p>存在的理由：master 的时钟反向调用 {@code AgentSystem.allRolesIdle()} /
+ * {@code dayRolloverReady()}，导致时钟依赖整个系统。这里改为读一个三方法的只读视图。
+ * "空闲了多久""收尾是否超时"由 {@link ClockDriver} 自己计时，不放进本接口。
+ */
+public interface Sensors {
+
+    /** 是否至少有一个角色在忙。 */
+    boolean anyBusy();
+
+    /** 是否全员空闲。 */
+    boolean allIdle();
+
+    /** 是否全员 OFF_DUTY（可以跨天）。 */
+    boolean allOffDuty();
+}
+=========== src/main/java/com/agent/software/sim/clock/ShiftCalendar.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
+/**
+ * 纯日历换算：tick ↔ 时钟文本、班次边界、下一班次起点。
+ *
+ * <p>无状态、可单测。master 中这些算术与时钟线程、事件调度、生命周期判断全混在
+ * {@code TimeEventBus} 里。
+ */
+public record ShiftCalendar(double secondsPerTick, int shiftStartHour, int shiftEndHour) {
+
+    public static ShiftCalendar of(double secondsPerTick, int shiftStartHour, int shiftEndHour) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 一天的总 tick 数。 */
+    public int ticksPerDay() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 班次结束对应的当天 tick。 */
+    public int shiftEndTick() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 绝对 tick → (第几天, 当天 tick)。 */
+    public DayTick locate(Tick absolute) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** (第几天, 当天 tick) → 绝对 tick。 */
+    public Tick at(int day, int tickOfDay) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 是否在上班时段内。 */
+    public boolean withinShift(DayTick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 当天 tick → "HH:MM:SS"。 */
+    public String clockTime(DayTick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 下一个班次起点（跨天 08:00）。 */
+    public Tick nextShiftStart(DayTick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public int ticksUntilShiftEnd(DayTick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 给 LLM / 日志 / Web 的一句话时间描述。 */
+    public String describe(Tick absolute) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/SimClock.java
+package com.agent.software.sim.clock;
+
+import java.time.LocalDate;
+import com.agent.software.kernel.Tick;
+import com.agent.software.kernel.DayTick;
+
+/**
+ * 模拟时钟状态的唯一所有者（纯内存、无线程）。
+ *
+ * <p>推进能力只暴露给 {@link ClockDriver}；其余人通过 {@link Clock} 只读视图访问。
+ * master 把时钟状态、日历换算、调度表与时钟线程全塞在 {@code TimeEventBus}。
+ */
+public final class SimClock implements Clock {
+
+    private final ShiftCalendar calendar;
+    private LocalDate baseDate;
+    private long tick;
+
+    public SimClock(ShiftCalendar calendar, LocalDate baseDate) {
+        this.calendar = calendar;
+        this.baseDate = baseDate;
+        this.tick = 0;
+    }
+
+    // ── 推进（仅 ClockDriver 调用） ─────────────────────────────
+
+    /** 前进若干 tick。 */
+    public void advanceTicks(long ticks) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 跳到指定绝对 tick（快进 / 跨天）。 */
+    public void jumpTo(Tick target) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 恢复到某个日历坐标（读档）。 */
+    public void resetTo(DayTick position) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 设置第 1 天的日历基准日。 */
+    public void setBaseDate(LocalDate date) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    // ── Clock 只读视图 ─────────────────────────────────────────
+
+    @Override
+    public Tick now() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public DayTick nowDay() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ShiftCalendar calendar() {
+        return calendar;
+    }
+
+    @Override
+    public String currentDateTime() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String describe() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/sim/clock/TickObserver.java
+package com.agent.software.sim.clock;
+
+import com.agent.software.kernel.Tick;
+/**
+ * 时钟每步的观察者。
+ *
+ * <p>时钟只认识时间，不认识公司：班次反应（上下班、收尾兜底）由 {@code company.ShiftDirector}
+ * 作为观察者实现，bootstrap 负责注册。这样 {@code sim} 不需要依赖 {@code agent}。
+ */
+@FunctionalInterface
+public interface TickObserver {
+
+    /** 时钟每推进一次调用；实现方自行判断是否处在班次边界。 */
+    void onTick(Tick now);
+}
+=========== src/main/java/com/agent/software/sim/event/AgentEvent.java
+package com.agent.software.sim.event;
+
+import com.agent.software.kernel.Ids.EventId;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Payload;
+import com.agent.software.kernel.Tick;
+
+import java.time.Instant;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * 不可变事件。
+ *
+ * <p>关键变化：收件人显式化（空集 = 广播），可选触发时刻；替代 master 中可变、字段公开的
+ * {@code Types.Event}。是否投递由 {@code sim.event.DeliveryPolicy} 决定，事件本身不自带过滤逻辑。
+ */
+public record AgentEvent(
+        EventId id,
+        EventKind kind,
+        Priority priority,
+        Set<RoleId> recipients,
+        Payload payload,
+        Optional<Tick> fireAt,
+        Instant occurredAt) {
+
+    /** 广播事件（所有角色参与投递决策）。 */
+    public static AgentEvent broadcast(EventKind kind, Priority priority, Payload payload) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 定向事件（只投递给一个角色）。 */
+    public static AgentEvent toRole(RoleId target, EventKind kind, Priority priority, Payload payload) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 定时事件（到点后由调度表弹出）。 */
+    public static AgentEvent scheduled(EventKind kind, Priority priority, Payload payload, Tick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean targeted() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public boolean broadcast() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 返回一个"改到指定时刻触发"的副本（编辑定时任务时使用）。 */
+    public AgentEvent rescheduledTo(Tick at) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/sim/event/EventKind.java
+package com.agent.software.sim.event;
+
+/**
+ * 事件类型 =（来源, 名称）。
+ *
+ * <p>替代 master 中裸 {@code String source} + {@code String eventType}；常用类型在此集中声明，
+ * 外部系统仍可构造新的 EventKind。
+ */
+public record EventKind(String source, String name) {
+
+    public static final EventKind SHIFT_START = new EventKind("time", "SHIFT_START");
+    public static final EventKind SHIFT_END = new EventKind("time", "SHIFT_END");
+    public static final EventKind TASK_DUE = new EventKind("task", "TASK_DUE");
+    public static final EventKind NEW_MAIL = new EventKind("email", "NEW_MAIL");
+
+    /** 供日志与持久化使用的 "source/name" 文本。 */
+    public String wire() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/sim/event/EventSink.java
+package com.agent.software.sim.event;
+
+/**
+ * 事件入口。
+ *
+ * <p>外部事件（客户/邮件/Web/时钟）都只通过 {@link #publish} 进入系统；
+ * 由 {@code agent.dispatch.EventRouter} 实现。
+ */
+public interface EventSink {
+
+    void publish(AgentEvent event);
+}
+=========== src/main/java/com/agent/software/sim/event/Priority.java
+package com.agent.software.sim.event;
+
+/**
+ * 事件与任务的紧急度——全系统唯一来源。
+ *
+ * <p>消灭 master 的三份重复模型：{@code Types.Priority}、{@code AgentRole.Urgency}、
+ * {@code Task.urgency:int}。
+ */
+public enum Priority {
+
+    LOW,
+    NORMAL,
+    HIGH,
+    EMERGENCY;
+
+    /** 数值权重，用于队列排序与显著性打分。 */
+    public int weight() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 由权重反查；未知权重回退 NORMAL。 */
+    public static Priority ofWeight(int weight) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/client/ClientChannel.java
+package com.agent.software.tool.client;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+
+/**
+ * 与"客户/用户"对话的通道（控制台或 Web 二选一）。
+ *
+ * <p>互斥（同一时刻只能有一位组长在找客户）由实现内部保证；
+ * master 是一个全局单例 {@code ClientCommunicationLock}。
+ */
+public interface ClientChannel {
+
+    /** 是否可用（Web 通道需要浏览器心跳；控制台需要 stdin）。 */
+    boolean interactive();
+
+    ClientReply ask(ClientQuestion question, Duration timeout);
+
+    record ClientQuestion(RoleId asker, String askerName, String group, String text) {
+    }
+
+    record ClientReply(boolean delivered, String text, String reason) {
+
+        public static ClientReply of(String text) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public static ClientReply unavailable(String reason) {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+}
+=========== src/main/java/com/agent/software/tool/client/ClientToolkit.java
+package com.agent.software.tool.client;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+import com.agent.software.transcript.Transcript;
+
+import java.util.List;
+
+/**
+ * 客户沟通工具包（id {@code "client"}），暴露工具：talk_to_client（全局互斥的客户/用户对话通道）。
+ */
+public final class ClientToolkit implements Toolkit {
+
+    private final ClientChannel client;
+    private final Transcript transcript;
+
+    public ClientToolkit(ClientChannel client, Transcript transcript) {
+        this.client = client;
+        this.transcript = transcript;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/client/ConsoleClientChannel.java
+package com.agent.software.tool.client;
+
+import java.time.Duration;
+import com.agent.software.tool.client.ClientChannel.ClientQuestion;
+import com.agent.software.tool.client.ClientChannel.ClientReply;
+
+/**
+ * 控制台客户通道：从 stdin 读取客户问题与回复，stdin 不可交互时视为离线。
+ */
+public final class ConsoleClientChannel implements ClientChannel {
+
+    @Override
+    public boolean interactive() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ClientReply ask(ClientQuestion question, Duration timeout) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/client/WebClientChannel.java
+package com.agent.software.tool.client;
+
+import com.agent.software.transcript.ChatFeed;
+
+import java.time.Duration;
+import com.agent.software.tool.client.ClientChannel.ClientQuestion;
+import com.agent.software.tool.client.ClientChannel.ClientReply;
+
+/**
+ * Web 客户通道：经 ChatFeed 的等待/回复会合点与浏览器交换客户消息。
+ */
+public final class WebClientChannel implements ClientChannel {
+
+    /** 绑定 Web 端的轨迹与会合点。 */
+    public WebClientChannel(ChatFeed feed) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean interactive() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public ClientReply ask(ClientQuestion question, Duration timeout) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/HermesToolkit.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * Hermes 工具包（id {@code "hermes"}，默认不装配），暴露工具：hermes_send / hermes_new_conversation（经由构造期注入的 {@link Shell} 调用外部 Hermes 通道）。
+ */
+public final class HermesToolkit implements Toolkit {
+
+    private final Shell shell;
+
+    public HermesToolkit(Shell shell) {
+        this.shell = shell;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/LocalShell.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
+
+/**
+ * 本地目录形态的个人电脑：直接以宿主文件系统为工作目录，命令经子进程执行。
+ */
+public final class LocalShell implements Shell {
+
+    /** 记录角色、目录规格与路径解析器。 */
+    public LocalShell(RoleId roleId, RoleSpec.ComputerSpec spec, AppPaths paths) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOff() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean poweredOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public CommandResult run(String command, Duration timeout, int maxOutputChars) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String readFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void writeFile(String path, String content) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<String> listDir(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void deleteFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String workdir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String driveRoot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String hostDir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String describe() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/PcToolkit.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 个人电脑工具包（id {@code "pc"}），暴露工具：run_command / computer_status / lan_devices / reboot（经由构造期注入的 {@link Shell} 操作电脑）。
+ */
+public final class PcToolkit implements Toolkit {
+
+    private final Shell shell;
+
+    public PcToolkit(Shell shell) {
+        this.shell = shell;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/PodmanShell.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
+
+/**
+ * Podman 容器形态的个人电脑：每角色一个容器，命令经 podman exec 执行。
+ */
+public final class PodmanShell implements Shell {
+
+    /** 记录角色、容器规格、路径解析器与共享网络名。 */
+    public PodmanShell(RoleId roleId, RoleSpec.ComputerSpec spec, AppPaths paths, String networkName) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOff() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean poweredOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public CommandResult run(String command, Duration timeout, int maxOutputChars) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String readFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void writeFile(String path, String content) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<String> listDir(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void deleteFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String workdir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String driveRoot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String hostDir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String describe() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/Shell.java
+package com.agent.software.tool.computer;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * 个人电脑能力（podman 容器 / 本地目录 / SSH 三种实现共用）。
+ *
+ * <p>注意：这里不再出现 MCP。master 的 {@code Computer} 直接持有
+ * {@code MCPServer} 与 {@code ToolRegistry.ToolDef}，使"电脑"这个基础设施概念
+ * 反向依赖了工具系统；MCP 已移到 {@code tool.mcp} 包，两边互不认识。
+ */
+public interface Shell {
+
+    String powerOn();
+
+    String powerOff();
+
+    boolean poweredOn();
+
+    /** 在电脑上执行一条命令。 */
+    CommandResult run(String command, Duration timeout, int maxOutputChars);
+
+    String readFile(String path);
+
+    void writeFile(String path, String content);
+
+    List<String> listDir(String path);
+
+    void deleteFile(String path);
+
+    /** 电脑内的工作目录（容器内路径或本地目录）。 */
+    String workdir();
+
+    /** 共享云盘挂载根。 */
+    String driveRoot();
+
+    /** 宿主机上映射的目录（用于宿主机侧读取模拟产出的文件）。 */
+    String hostDir();
+
+    /** 给 LLM 的状态描述。 */
+    String describe();
+
+    /** 命令执行结果三元组（替代 master 的 "[exit N] ..." 字符串再解析）。 */
+    record CommandResult(int exitCode, String stdout, String stderr) {
+
+        public boolean ok() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+
+        public String combined() {
+            throw new UnsupportedOperationException("skeleton");
+        }
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/ShellRegistry.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+
+/**
+ * 角色电脑注册表：按 ComputerSpec 创建/销毁 Shell，维护 roleId → Shell 映射。
+ */
+public final class ShellRegistry {
+
+    /** 绑定路径解析器与容器共享网络名。 */
+    public ShellRegistry(AppPaths paths, String networkName) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 按角色定义创建（或复用）其个人电脑。 */
+    public Shell create(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 销毁并移除某角色的电脑。 */
+    public void destroy(RoleId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 当前全部电脑。 */
+    public List<Shell> all() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/computer/SshShell.java
+package com.agent.software.tool.computer;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+import java.util.List;
+import com.agent.software.agent.role.RoleSpec.ComputerSpec;
+import com.agent.software.tool.computer.Shell.CommandResult;
+
+/**
+ * SSH 远程主机形态的个人电脑：命令与文件操作都经 SSH 通道完成。
+ */
+public final class SshShell implements Shell {
+
+    /** 记录角色与 SSH 连接规格。 */
+    public SshShell(RoleId roleId, RoleSpec.ComputerSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String powerOff() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean poweredOn() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public CommandResult run(String command, Duration timeout, int maxOutputChars) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String readFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void writeFile(String path, String content) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<String> listDir(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void deleteFile(String path) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String workdir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String driveRoot() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String hostDir() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String describe() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/hr/HiringService.java
+package com.agent.software.tool.hr;
+
+import com.agent.software.agent.Staffing;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.llm.LlmClient;
+
+import java.util.List;
+
+/**
+ * LLM 驱动的招聘（master {@code RoleFactory} + HR 工具的上岗流程）。
+ *
+ * <p>{@link #draft(String)} 只产出 {@link RoleSpec}（纯决策，不落库）；
+ * {@link #onboard(RoleSpec)} 才真正注册并启动，是唯一产生副作用的动作。
+ */
+public final class HiringService implements Recruiter {
+
+    private final LlmClient llm;
+    private final List<RoleSpec> templates;
+    private final Staffing staffing;
+
+    public HiringService(LlmClient llm, List<RoleSpec> templates, Staffing staffing) {
+        this.llm = llm;
+        this.templates = templates;
+        this.staffing = staffing;
+    }
+
+    @Override
+    public List<RoleSpec> candidates() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public RoleSpec draft(String requirement) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public RoleId onboard(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/hr/HrToolkit.java
+package com.agent.software.tool.hr;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 招聘工具包（id {@code "hr"}），暴露工具：post_job_posting / list_candidates。
+ */
+public final class HrToolkit implements Toolkit {
+
+    private final Recruiter recruiter;
+
+    public HrToolkit(Recruiter recruiter) {
+        this.recruiter = recruiter;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/hr/Recruiter.java
+package com.agent.software.tool.hr;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+
+/**
+ * 招聘能力（HR 工具的后端）。
+ *
+ * <p>master 的 {@code Hr} 工具直接持有 {@code RolePool} + {@code RoleFactory}；
+ * 这里只暴露"看候选人 / 起草角色 / 使其上岗"三个动作。
+ */
+public interface Recruiter {
+
+    /** 现有角色模板（候选人清单）。 */
+    List<RoleSpec> candidates();
+
+    /** 由招聘需求用 LLM 起草一个角色定义（不落库、不上岗）。 */
+    RoleSpec draft(String requirement);
+
+    /** 让角色正式上岗（注册 + 装配工具 + 启动 worker）。 */
+    RoleId onboard(RoleSpec spec);
+}
+=========== src/main/java/com/agent/software/tool/mail/EmailToolkit.java
+package com.agent.software.tool.mail;
+
+import com.agent.software.agent.AgentDirectory;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 邮件工具包（id {@code "email"}），暴露工具：send_email / read_mail / open_mail / mail_address_book。
+ */
+public final class EmailToolkit implements Toolkit {
+
+    private final Mailbox mail;
+    private final AgentDirectory directory;
+
+    public EmailToolkit(Mailbox mail, AgentDirectory directory) {
+        this.mail = mail;
+        this.directory = directory;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/mail/FileMailbox.java
+package com.agent.software.tool.mail;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.MailId;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.infra.config.AppConfig.Mail;
+import com.agent.software.tool.mail.Mailbox.DeliveryListener;
+import com.agent.software.tool.mail.Mailbox.OutgoingMail;
+
+/**
+ * 落盘的公司虚拟邮箱：地址由配置后缀推导，邮件按收件人存放于数据目录。
+ */
+public final class FileMailbox implements Mailbox {
+
+    /** 绑定邮件配置与数据路径。 */
+    public FileMailbox(AppConfig.Mail config, AppPaths paths) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public String addressOf(RoleSpec spec) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public MailId send(OutgoingMail mail) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<MailMessage> inbox(String address, int limit) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public int unreadCount(String address) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<MailMessage> read(String address, MailId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void onDelivery(DeliveryListener listener) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/mail/Mailbox.java
+package com.agent.software.tool.mail;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.kernel.Ids.MailId;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 公司邮箱能力（虚拟邮箱；可选真实 SMTP）。
+ *
+ * <p>唯一地址分配权威：角色地址只由 {@link #addressOf(RoleSpec)} 决定，
+ * 避免 master 中 {@code MailService.emailFor} 与 adapter 各算一份。
+ */
+public interface Mailbox {
+
+    /** 该角色的公司邮箱地址。 */
+    String addressOf(RoleSpec spec);
+
+    MailId send(OutgoingMail mail);
+
+    List<MailMessage> inbox(String address, int limit);
+
+    int unreadCount(String address);
+
+    /** 读信并标记已读。 */
+    Optional<MailMessage> read(String address, MailId id);
+
+    /** 注册投递监听：邮箱落信 → 转成 NEW_MAIL 事件（由 bootstrap 接线）。 */
+    void onDelivery(DeliveryListener listener);
+
+    record OutgoingMail(String fromAddress, String fromName, List<String> to,
+                        List<String> cc, String subject, String body) {
+    }
+
+    @FunctionalInterface
+    interface DeliveryListener {
+        void delivered(MailMessage message, String recipientAddress);
+    }
+}
+=========== src/main/java/com/agent/software/tool/mail/MailMessage.java
+package com.agent.software.tool.mail;
+
+import com.agent.software.kernel.Ids.MailId;
+
+import java.time.Instant;
+import java.util.List;
+
+/** 一封公司邮件。纯数据，不认识 SMTP 与磁盘。 */
+public record MailMessage(MailId id, String fromEmail, String fromName,
+                          List<String> to, List<String> cc, String subject, String body,
+                          Instant sentAt, boolean read) {
+
+    /** 收件箱预览用的一行摘要。 */
+    public String preview() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/mail/SmtpSender.java
+package com.agent.software.tool.mail;
+
+import com.agent.software.infra.config.AppConfig;
+import com.agent.software.infra.config.AppConfig.Mail;
+import com.agent.software.tool.mail.Mailbox.OutgoingMail;
+import com.agent.software.infra.config.AppConfig.Mail.Smtp;
+
+/**
+ * 可选的真实 SMTP 发送器：把公司邮箱的对外邮件经 jakarta.mail 投递。
+ */
+public final class SmtpSender {
+
+    /** 绑定 SMTP 服务器配置。 */
+    public SmtpSender(AppConfig.Mail.Smtp config) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 发送一封对外邮件。 */
+    public void send(Mailbox.OutgoingMail mail) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/mcp/McpBridge.java
+package com.agent.software.tool.mcp;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+
+/**
+ * MCP 工具桥（每台电脑各自安装的 MCP 工具集合）。
+ *
+ * <p>把 master 中 {@code MCPManager} + {@code Computer.mcpTools} + {@code MCPServer}
+ * 三者纠缠的注册/调用逻辑收进一个端口，实现放在 {@code tool.mcp}。
+ */
+public interface McpBridge {
+
+    /** 按关键词搜索可安装的 MCP 工具。 */
+    List<McpToolInfo> search(String keyword);
+
+    /** 某角色已安装的 MCP 工具。 */
+    List<McpToolInfo> installed(RoleId agent);
+
+    void install(RoleId agent, String toolName);
+
+    void uninstall(RoleId agent, String toolName);
+
+    record McpToolInfo(String name, String description) {
+    }
+}
+=========== src/main/java/com/agent/software/tool/mcp/McpToolkit.java
+package com.agent.software.tool.mcp;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * MCP 管理工具包（id {@code "mcp_manager"}），暴露工具：mcp_search / mcp_list / mcp_add / mcp_remove / mcp_my_tools。
+ */
+public final class McpToolkit implements Toolkit {
+
+    private final McpBridge mcp;
+
+    public McpToolkit(McpBridge mcp) {
+        this.mcp = mcp;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/mcp/StdioMcpBridge.java
+package com.agent.software.tool.mcp;
+
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import com.agent.software.tool.mcp.McpBridge.McpToolInfo;
+
+/**
+ * stdio JSON-RPC 形态的 MCP 工具桥：按角色安装/卸载工具并转发调用。
+ */
+public final class StdioMcpBridge implements McpBridge {
+
+    /** 绑定数据路径（MCP 安装状态与日志落盘位置）。 */
+    public StdioMcpBridge(AppPaths paths) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<McpToolInfo> search(String keyword) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<McpToolInfo> installed(RoleId agent) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void install(RoleId agent, String toolName) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void uninstall(RoleId agent, String toolName) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/note/JsonNoteBook.java
+package com.agent.software.tool.note;
+
+import com.agent.software.agent.dialog.DailySummary;
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.infra.json.JsonCodec;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * JSON 目录形态的笔记实现：每角色一份笔记文件，每日总结作为特殊笔记保存。
+ *
+ * <p>同时实现 {@link DailySummary}：提示词侧只认 agent 自己声明的那一个方法，
+ * 不需要认识整个 {@link NoteBook}。
+ */
+public final class JsonNoteBook implements NoteBook, DailySummary {
+
+    /** 绑定数据路径与 JSON 编解码器。 */
+    public JsonNoteBook(AppPaths paths, JsonCodec json) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Note> list(RoleId owner) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<Note> read(RoleId owner, String title) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void write(Note note) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void edit(Note note) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean delete(RoleId owner, String title) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void saveSummary(RoleId owner, int day, String body) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<String> summary(RoleId owner, int day) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<String> latestSummary(RoleId owner, int beforeDay) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/note/MemoryToolkit.java
+package com.agent.software.tool.note;
+
+import com.agent.software.agent.AgentControl;
+import com.agent.software.sim.clock.Clock;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 记忆工具包（id {@code "memory"}），暴露工具：summary（保存当日总结、转 OFF_DUTY、关闭当日对话，并关闭个人电脑）。
+ */
+public final class MemoryToolkit implements Toolkit {
+
+    private final NoteBook notes;
+    private final Clock clock;
+    private final AgentControl control;
+
+    public MemoryToolkit(NoteBook notes, Clock clock, AgentControl control) {
+        this.notes = notes;
+        this.clock = clock;
+        this.control = control;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/note/NoteBook.java
+package com.agent.software.tool.note;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 笔记与每日总结的读写能力。
+ *
+ * <p>是"域端口"，不是文件系统：实现可以是 JSON/Markdown 目录，也可以是内存 fake。
+ */
+public interface NoteBook {
+
+    List<Note> list(RoleId owner);
+
+    Optional<Note> read(RoleId owner, String title);
+
+    void write(Note note);
+
+    void edit(Note note);
+
+    boolean delete(RoleId owner, String title);
+
+    /** 保存第 day 天的总结（总结是特殊的笔记）。 */
+    void saveSummary(RoleId owner, int day, String body);
+
+    Optional<String> summary(RoleId owner, int day);
+
+    /** 取严格早于 beforeDay 的最近一份总结（用于次日冷启动提示词）。 */
+    Optional<String> latestSummary(RoleId owner, int beforeDay);
+}
+=========== src/main/java/com/agent/software/tool/note/Note.java
+package com.agent.software.tool.note;
+
+import com.agent.software.kernel.Ids.NoteId;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Instant;
+
+/** 一条笔记（或每日总结）。纯数据，不认识文件系统。 */
+public record Note(NoteId id, RoleId owner, String title, String body,
+                   Integer remindDay, Integer remindTick, Instant updatedAt) {
+
+    /** 是否为"每日总结"（标题约定）。 */
+    public boolean isSummary() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/note/NoteToolkit.java
+package com.agent.software.tool.note;
+
+import com.agent.software.sim.clock.ReminderScheduler;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 笔记工具包（id {@code "note"}），暴露工具：write_note / edit_note / list_notes / read_note / delete_note。
+ */
+public final class NoteToolkit implements Toolkit {
+
+    private final NoteBook notes;
+    private final ReminderScheduler reminders;
+
+    public NoteToolkit(NoteBook notes, ReminderScheduler reminders) {
+        this.notes = notes;
+        this.reminders = reminders;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/skill/JsonSkillLibrary.java
+package com.agent.software.tool.skill;
+
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.SkillId;
+
+import java.util.List;
+
+/**
+ * 目录扫描形态的技能库：解析 SKILL.md 得到技能，并记录角色授权关系。
+ */
+public final class JsonSkillLibrary implements SkillLibrary {
+
+    /** 绑定数据路径（技能目录与授权文件位置）。 */
+    public JsonSkillLibrary(AppPaths paths) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Skill> available() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Skill> search(String keyword) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Skill> ownedBy(RoleId owner) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void grant(RoleId owner, SkillId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void revoke(RoleId owner, SkillId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/skill/Skill.java
+package com.agent.software.tool.skill;
+
+import com.agent.software.kernel.Ids.SkillId;
+
+import java.util.List;
+
+/** 一条技能（SKILL.md 的解析结果）。 */
+public record Skill(SkillId id, String name, String description, String body, List<String> files) {
+
+    /** 交给 LLM 的完整技能文本（frontmatter + 正文）。 */
+    public String render() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/skill/SkillLibrary.java
+package com.agent.software.tool.skill;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.SkillId;
+
+import java.util.List;
+
+/** 技能库能力（扫描 SKILL.md 目录；技能按角色授权）。 */
+public interface SkillLibrary {
+
+    List<Skill> available();
+
+    List<Skill> search(String keyword);
+
+    List<Skill> ownedBy(RoleId owner);
+
+    void grant(RoleId owner, SkillId id);
+
+    void revoke(RoleId owner, SkillId id);
+}
+=========== src/main/java/com/agent/software/tool/skill/SkillToolkit.java
+package com.agent.software.tool.skill;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 技能工具包（id {@code "skill"}），暴露工具：skill_list / skill_search / skill_add / skill_remove / skill_my_skills。
+ */
+public final class SkillToolkit implements Toolkit {
+
+    private final SkillLibrary skills;
+
+    public SkillToolkit(SkillLibrary skills) {
+        this.skills = skills;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/spi/Toolbox.java
+package com.agent.software.tool.spi;
+
+import com.agent.software.kernel.Payload;
+
+import java.util.List;
+
+/**
+ * 某个角色已装配好的工具集合。
+ *
+ * <p>工具循环只认识这个接口，不需要知道工具来自内置工具包还是 MCP 代理。
+ */
+public interface Toolbox {
+
+    List<ToolSpec> specs();
+
+    ToolResult invoke(String toolName, Payload arguments);
+}
+=========== src/main/java/com/agent/software/tool/spi/Tool.java
+package com.agent.software.tool.spi;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Payload;
+
+/**
+ * 单个工具：声明 {@link ToolSpec} 并以类型化 {@link Payload} 作为参数执行，替代裸 Map 参数。
+ */
+public interface Tool {
+
+    /** 工具的对外声明（名字、描述、参数 schema）。 */
+    ToolSpec spec();
+
+    /** 以调用者角色身份执行工具，参数为类型化负载。 */
+    ToolResult invoke(RoleId agent, Payload arguments);
+}
+=========== src/main/java/com/agent/software/tool/spi/Toolkit.java
+package com.agent.software.tool.spi;
+
+import java.util.List;
+
+/**
+ * 工具包：把一组工具绑定到它真正需要的能力端口上，依赖在构造期注入、无 role/system 穿透。
+ */
+public interface Toolkit {
+
+    /** 工具包标识（对应 {@code RoleSpec.toolkits} 中的名字），例："note" / "todo" / "talk"。 */
+    String id();
+
+    /** 实例化本包暴露的全部工具（每角色一份，依赖在构造期注入）。 */
+    List<Tool> instantiate();
+}
+=========== src/main/java/com/agent/software/tool/spi/ToolResult.java
+package com.agent.software.tool.spi;
+
+/** 一次工具调用的结果（显式 error 标志，替代字符串前缀嗅探）。 */
+public record ToolResult(String text, boolean error) {
+
+    public static ToolResult ok(String text) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    public static ToolResult error(String text) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/spi/ToolSpec.java
+package com.agent.software.tool.spi;
+
+import com.agent.software.kernel.JsonSchema;
+
+/**
+ * 工具的对外声明（名字、描述、参数 schema）。
+ *
+ * <p>工具描述归工具层所有：{@code llm.LlmClient.ToolChatRequest} 会引用它，
+ * 因此依赖方向是 llm → tool.spi，反过来不成立。
+ */
+public record ToolSpec(String name, String description, JsonSchema schema) {
+}
+=========== src/main/java/com/agent/software/tool/talk/TalkService.java
+package com.agent.software.tool.talk;
+
+import com.agent.software.agent.Team;
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.transcript.Transcript;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.tool.talk.TeamChannel.TalkMessage;
+
+/**
+ * {@link TeamChannel} 的 engine 实现：talk 工具的运行时后端。
+ *
+ * <p>wait=true 的语义在这里：用发送者的 {@link WaitCoordinator} 进入等待，
+ * 把委派任务投给目标角色，收到回复或超时后结束等待。master 中这套逻辑直接写在
+ * {@code TalkTo} + {@code AgentRole.talkWait} 里，工具因此穿透到了角色内部。
+ */
+public final class TalkService implements TeamChannel {
+
+    private final Team team;
+    private final Transcript transcript;
+
+    public TalkService(Team team, Transcript transcript) {
+        this.team = team;
+        this.transcript = transcript;
+    }
+
+    @Override
+    public List<RoleSpec> roster() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<RoleSpec> findByName(String personName) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void send(TalkMessage message) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<String> sendAndWait(TalkMessage message, Task delegated, Duration timeout) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/talk/TalkToolkit.java
+package com.agent.software.tool.talk;
+
+import com.agent.software.agent.AgentDirectory;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+import com.agent.software.transcript.Transcript;
+
+import java.util.List;
+
+/**
+ * 角色间沟通工具包（id {@code "talk"}），暴露工具：talk（组内私聊/委派等待）与 list_roles（花名册只读视图）。
+ */
+public final class TalkToolkit implements Toolkit {
+
+    private final TeamChannel team;
+    private final AgentDirectory directory;
+    private final Transcript transcript;
+
+    public TalkToolkit(TeamChannel team, AgentDirectory directory, Transcript transcript) {
+        this.team = team;
+        this.directory = directory;
+        this.transcript = transcript;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/talk/TeamChannel.java
+package com.agent.software.tool.talk;
+
+import com.agent.software.agent.role.RoleSpec;
+import com.agent.software.agent.task.Task;
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 角色间通信能力（talk 工具的后端）。
+ *
+ * <p>把 master 中 {@code TalkTo} 直接抓 {@code RolePool}、对方 {@code AgentRole}、
+ * {@code deliverReply/talkWait} 内部状态的做法收成一个端口；wait=true 的阻塞语义
+ * 由 engine 的 {@code TalkService} 用 {@link WaitCoordinator} 实现。
+ */
+public interface TeamChannel {
+
+    List<RoleSpec> roster();
+
+    Optional<RoleSpec> findByName(String personName);
+
+    /** 组内即时消息（不等回复）。 */
+    void send(TalkMessage message);
+
+    /**
+     * 委派并同步等待回复（talk wait=true）。
+     *
+     * @param delegated 随消息投递给对方的任务；null 表示只发消息
+     * @return 对方回复；超时或对方下班解阻塞时返回提示文本
+     */
+    Optional<String> sendAndWait(TalkMessage message, Task delegated, Duration timeout);
+
+    record TalkMessage(RoleId from, String fromName, RoleId to, String toName,
+                       String group, String text, String urgency) {
+    }
+}
+=========== src/main/java/com/agent/software/tool/task/TaskViewToolkit.java
+package com.agent.software.tool.task;
+
+import com.agent.software.agent.AgentTasks;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 任务视图工具包（id {@code "task_view"}），暴露工具：my_tasks（经由构造期注入的 {@link AgentTasks} 读取本角色的待办与历史任务）。
+ */
+public final class TaskViewToolkit implements Toolkit {
+
+    private final AgentTasks tasks;
+
+    public TaskViewToolkit(AgentTasks tasks) {
+        this.tasks = tasks;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/time/TimeToolkit.java
+package com.agent.software.tool.time;
+
+import com.agent.software.sim.clock.Clock;
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 时间工具包（id {@code "time"}），暴露工具：get_time / take_rest。
+ */
+public final class TimeToolkit implements Toolkit {
+
+    private final Clock clock;
+
+    public TimeToolkit(Clock clock) {
+        this.clock = clock;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/todo/JsonTodoList.java
+package com.agent.software.tool.todo;
+
+import com.agent.software.infra.config.AppPaths;
+import com.agent.software.infra.json.JsonCodec;
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TodoId;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.tool.todo.Todo.TodoStatus;
+
+/**
+ * JSON 文件形态的待办清单：按角色存放，状态迁移显式落盘。
+ */
+public final class JsonTodoList implements TodoList {
+
+    /** 绑定数据路径与 JSON 编解码器。 */
+    public JsonTodoList(AppPaths paths, JsonCodec json) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Todo> list(RoleId owner, TodoStatus filter) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Todo add(RoleId owner, String title, String detail) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public Optional<Todo> update(RoleId owner, TodoId id, TodoStatus status) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public boolean delete(RoleId owner, TodoId id) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/tool/todo/Todo.java
+package com.agent.software.tool.todo;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TodoId;
+
+/** 一条待办。 */
+public record Todo(TodoId id, RoleId owner, String title, String detail, TodoStatus status) {
+
+    public enum TodoStatus {
+        PENDING,
+        IN_PROGRESS,
+        COMPLETED
+    }
+}
+=========== src/main/java/com/agent/software/tool/todo/TodoList.java
+package com.agent.software.tool.todo;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TodoId;
+
+import java.util.List;
+import java.util.Optional;
+import com.agent.software.tool.todo.Todo.TodoStatus;
+
+/** 待办清单能力。 */
+public interface TodoList {
+
+    /** filter 为 null 时返回全部。 */
+    List<Todo> list(RoleId owner, TodoStatus filter);
+
+    Todo add(RoleId owner, String title, String detail);
+
+    Optional<Todo> update(RoleId owner, TodoId id, TodoStatus status);
+
+    boolean delete(RoleId owner, TodoId id);
+}
+=========== src/main/java/com/agent/software/tool/todo/TodoToolkit.java
+package com.agent.software.tool.todo;
+
+import com.agent.software.tool.spi.Tool;
+import com.agent.software.tool.spi.Toolkit;
+
+import java.util.List;
+
+/**
+ * 待办工具包（id {@code "todo"}），暴露工具：todo_add / todo_list / todo_update / todo_delete。
+ */
+public final class TodoToolkit implements Toolkit {
+
+    private final TodoList todos;
+
+    public TodoToolkit(TodoList todos) {
+        this.todos = todos;
+    }
+
+    @Override
+    public String id() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Tool> instantiate() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/transcript/ChatFeed.java
+package com.agent.software.transcript;
+
+import com.agent.software.kernel.Ids.RoleId;
+
+import java.util.List;
+import com.agent.software.transcript.Transcript.Client;
+import com.agent.software.transcript.Transcript.Entry;
+import com.agent.software.transcript.Transcript.Feed;
+import com.agent.software.transcript.Transcript.Talk;
+import com.agent.software.transcript.Transcript.TraceMeta;
+
+/**
+ * 内存环形缓冲的轨迹流 + 客户回复会合点：Web 端按 watermark 增量拉取，客户输入阻塞式等待。
+ */
+public final class ChatFeed implements Transcript.Feed {
+
+    @Override
+    public void reasoning(RoleId agent, String text, TraceMeta meta) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void note(RoleId agent, String text, TraceMeta meta) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void toolCall(RoleId agent, String toolName, String argsJson, String result, TraceMeta meta) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void answer(RoleId agent, String text, boolean failed, int tokens, TraceMeta meta) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void talk(Talk record) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void client(Client record) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public void system(String text) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public long watermark() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    @Override
+    public List<Entry> since(long seq) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}
+=========== src/main/java/com/agent/software/transcript/Transcript.java
+package com.agent.software.transcript;
+
+import com.agent.software.kernel.Ids.RoleId;
+import com.agent.software.kernel.Ids.TaskId;
+import com.agent.software.kernel.Payload;
+
+import java.util.List;
+
+/**
+ * 运行轨迹写入端口（推理 / 工具调用 / 最终答案 / 群聊 / 客户消息 / 系统通知）。
+ *
+ * <p>engine 只负责写；Web 端通过内嵌的 {@link Feed} 读取视图增量拉取。
+ * master 里这套逻辑与聊天记录、客户等待状态一起挤在 {@code ChatStore}。
+ */
+public interface Transcript {
+
+    void reasoning(RoleId agent, String text, TraceMeta meta);
+
+    void note(RoleId agent, String text, TraceMeta meta);
+
+    void toolCall(RoleId agent, String toolName, String argsJson, String result, TraceMeta meta);
+
+    void answer(RoleId agent, String text, boolean failed, int tokens, TraceMeta meta);
+
+    void talk(Talk record);
+
+    void client(Client record);
+
+    void system(String text);
+
+    record TraceMeta(TaskId taskId, Integer round) {
+    }
+
+    record Talk(RoleId from, String fromName, RoleId to, String toName,
+                String group, String text, String urgency) {
+    }
+
+    record Client(RoleId role, String name, String group, String text) {
+    }
+
+    /** 供 Web 端增量拉取的读取视图（由适配器实现）。 */
+    interface Feed extends Transcript {
+
+        long watermark();
+
+        List<Entry> since(long seq);
+    }
+
+    /** Web 端消费的一条轨迹记录。 */
+    record Entry(long seq, long timestamp, String kind, String group,
+                 String fromRoleId, String fromName, String toRoleId, String toName,
+                 String text, Payload extra) {
+    }
+}
+=========== src/main/java/com/agent/software/web/ChatWebServer.java
+package com.agent.software.web;
+
+import com.agent.software.company.CompanyView;
+import com.agent.software.transcript.Transcript;
+import com.agent.software.transcript.Transcript.Feed;
+
+/**
+ * JDK HttpServer，路由 /api/state /api/messages /api/reply /api/pause /api/resume /api/attach + 静态资源。
+ */
+public final class ChatWebServer {
+
+    /** 绑定公司只读视图、轨迹 feed 与监听地址。 */
+    public ChatWebServer(CompanyView view, Transcript.Feed feed, String host, int port) {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 启动 HTTP 服务。 */
+    public void start() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 停止 HTTP 服务。 */
+    public void stop() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 实际监听端口（port=0 时为系统分配的端口）。 */
+    public int port() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+
+    /** 实际监听地址。 */
+    public String host() {
+        throw new UnsupportedOperationException("skeleton");
+    }
+}

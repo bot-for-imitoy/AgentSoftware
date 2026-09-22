@@ -1,0 +1,193 @@
+/* ============================================================
+   图 1 · 人：AI 软件公司组织架构与汇报/指挥关系
+   数据来源：data/journals/*.md 首行身份 + data/mail/mailboxes.json
+   渲染：dot -Tpng diagrams/1-org-people.dot -o diagrams/1-org-people.png
+   ============================================================ */
+digraph org {
+  graph [
+    rankdir=TB,
+    fontname="Noto Sans CJK SC",
+    bgcolor="#fbfcfe",
+    labelloc=t,
+    label=<<b>图 1 · 人：AI 软件公司组织架构（47 名角色，D6 / 2026-09-17 快照）</b><br/><font point-size="11" color="#475569">蓝=领导层　浅蓝=条线负责人　白蓝=工程师　绿=测试　红=安全　黄=外部客户</font>>,
+    fontsize=24, nodesep=0.20, ranksep=0.45, compound=true, pad=0.4, splines=true
+  ];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=11,
+        penwidth=1, color="#94a3b8", fillcolor="#e0f2fe", margin="0.14,0.07"];
+  edge [fontname="Noto Sans CJK SC", fontsize=10, color="#8595ad", arrowsize=0.7, penwidth=1.1];
+
+  /* ---------- 外部 ---------- */
+  subgraph cluster_ext {
+    label=<<b>外部</b>>; labeljust=l; fontsize=12; color="#d97706"; style="rounded,dashed";
+    CLIENT [label="客户（外部甲方）\n口径：界面能看、可演示即可", fillcolor="#fde68a", color="#d97706", shape=box];
+  }
+
+  /* ---------- 领导层 ---------- */
+  subgraph cluster_lead {
+    label=<<b>领导层 / Leadership</b>>; labeljust=l; fontsize=13; color="#1e3a8a"; style="rounded";
+    CEO  [label="林 总  CEO / 对外窗口", fillcolor="#1e3a8a", fontcolor="white", color="#1e3a8a"];
+    COO  [label="陈 总  COO / 调度与落地", fillcolor="#1d4ed8", fontcolor="white", color="#1d4ed8"];
+    CTO  [label="高 远  CTO / 技术终裁", fillcolor="#2563eb", fontcolor="white", color="#2563eb"];
+    HR   [label="王人事  CHRO", fillcolor="#3b82f6", fontcolor="white", color="#3b82f6"];
+  }
+
+  /* ---------- 需求 / 架构 / 发布 ---------- */
+  subgraph cluster_staff {
+    label=<<b>需求 · 架构 · 发布（幕僚岗）</b>>; labeljust=l; fontsize=13; color="#0f766e"; style="rounded";
+    BA   [label="徐若男  BA 需求分析", fillcolor="#ccfbf1", color="#0f766e"];
+    ARCH [label="王建国  系统架构师", fillcolor="#ccfbf1", color="#0f766e"];
+    RM   [label="方瑾妍  RM 发布经理\n（v0.1.4 唯一单写者）", fillcolor="#a7f3d0", color="#047857"];
+    TL   [label="刘子涵  测试负责人", fillcolor="#bbf7d0", color="#047857"];
+  }
+
+  /* ---------- 开发四条线 ---------- */
+  subgraph cluster_dev {
+    label=<<b>研发条线</b>>; labeljust=l; fontsize=13; color="#0369a1"; style="rounded";
+
+    subgraph cluster_fe {
+      label="前端组"; fontsize=12; color="#7dd3fc"; style="rounded";
+      FE_L [label="陈思远 前端 Lead", fillcolor="#93c5fd", color="#0284c7"];
+      FE_1 [label="顾承宇 React"];
+      FE_2 [label="唐思远 Vue"];
+      FE_3 [label="罗子涵 UI/UX"];
+      FE_L -> FE_1; FE_L -> FE_2; FE_L -> FE_3;
+      {rank=same; FE_1; FE_2; FE_3;}
+    }
+    subgraph cluster_be {
+      label="后端组"; fontsize=12; color="#7dd3fc"; style="rounded";
+      BE_L [label="王宇轩 后端 Lead", fillcolor="#93c5fd", color="#0284c7"];
+      BE_1 [label="彭志强 Java"];
+      BE_2 [label="萧文博 Go"];
+      BE_3 [label="邓立群 Python"];
+      BE_L -> BE_1; BE_L -> BE_2; BE_L -> BE_3;
+      {rank=same; BE_1; BE_2; BE_3;}
+    }
+    subgraph cluster_mb {
+      label="移动组"; fontsize=12; color="#7dd3fc"; style="rounded";
+      MB_L [label="张雅婷 移动 Lead", fillcolor="#93c5fd", color="#0284c7"];
+      MB_1 [label="曾子墨 Android"];
+      MB_2 [label="卢俊豪 iOS"];
+      MB_3 [label="蔡文静 RN"];
+      MB_L -> MB_1; MB_L -> MB_2; MB_L -> MB_3;
+      {rank=same; MB_1; MB_2; MB_3;}
+    }
+    subgraph cluster_fs {
+      label="全栈组"; fontsize=12; color="#7dd3fc"; style="rounded";
+      FS_L [label="李俊杰 全栈 Lead", fillcolor="#93c5fd", color="#0284c7"];
+      FS_1 [label="谭志远 Flutter"];
+      FS_2 [label="范晓峰 Node"];
+      FS_3 [label="高梦洁 Python"];
+      FS_L -> FS_1; FS_L -> FS_2; FS_L -> FS_3;
+      {rank=same; FS_1; FS_2; FS_3;}
+    }
+  }
+
+  /* ---------- 测试组（20 名 QA，网格排布） ---------- */
+  subgraph cluster_qa {
+    label=<<b>测试组 · 20 名 QA（按专长）</b>>; labeljust=l; fontsize=13; color="#15803d"; style="rounded";
+    T1  [label="郭晓东\n功能", fillcolor="#dcfce7", color="#16a34a"];
+    T2  [label="马春燕\n自动化", fillcolor="#dcfce7", color="#16a34a"];
+    T3  [label="宋佳期\n移动", fillcolor="#dcfce7", color="#16a34a"];
+    T4  [label="袁明轩\nAPI", fillcolor="#dcfce7", color="#16a34a"];
+    T5  [label="胡婷婷\n回归", fillcolor="#dcfce7", color="#16a34a"];
+    T6  [label="石景山\n性能", fillcolor="#dcfce7", color="#16a34a"];
+    T7  [label="程雪梅\nE2E", fillcolor="#dcfce7", color="#16a34a"];
+    T8  [label="陆一帆\n用例设计", fillcolor="#dcfce7", color="#16a34a"];
+    T9  [label="孟浩然\n前端", fillcolor="#dcfce7", color="#16a34a"];
+    T10 [label="沈佳仪\n后端", fillcolor="#dcfce7", color="#16a34a"];
+    T11 [label="田晓辉\n探索性", fillcolor="#dcfce7", color="#16a34a"];
+    T12 [label="魏 莱\n兼容性", fillcolor="#dcfce7", color="#16a34a"];
+    T13 [label="姜文博\n安全测试", fillcolor="#dcfce7", color="#16a34a"];
+    T14 [label="谢婉婷\n移动自动化", fillcolor="#dcfce7", color="#16a34a"];
+    T15 [label="邹 明\n数据库", fillcolor="#dcfce7", color="#16a34a"];
+    T16 [label="苏 云\n测试环境/CI", fillcolor="#dcfce7", color="#16a34a"];
+    T17 [label="潘志远\n混沌", fillcolor="#dcfce7", color="#16a34a"];
+    T18 [label="葛天宇\n测试报告", fillcolor="#dcfce7", color="#16a34a"];
+    T19 [label="薛静怡\n可用性", fillcolor="#dcfce7", color="#16a34a"];
+    T20 [label="阮志明\n全链路", fillcolor="#dcfce7", color="#16a34a"];
+
+    /* 网格：4 行 × 5 列 */
+    {rank=same; T1; T2; T3; T4; T5;}
+    {rank=same; T6; T7; T8; T9; T10;}
+    {rank=same; T11; T12; T13; T14; T15;}
+    {rank=same; T16; T17; T18; T19; T20;}
+    T1 -> T6 -> T11 -> T16 [style=invis, weight=10];
+    T2 -> T7 -> T12 -> T17 [style=invis];
+    T3 -> T8 -> T13 -> T18 [style=invis];
+    T4 -> T9 -> T14 -> T19 [style=invis];
+    T5 -> T10 -> T15 -> T20 [style=invis];
+  }
+
+  /* ---------- 安全组 ---------- */
+  subgraph cluster_sec {
+    label=<<b>安全组（红/蓝/审计）</b>>; labeljust=l; fontsize=13; color="#b91c1c"; style="rounded";
+    RED   [label="白 鹏  红队 Web 渗透\n（D6 无任务、待命）", fillcolor="#fecaca", color="#dc2626"];
+    BLUE  [label="纪 安  蓝队 防御", fillcolor="#fecaca", color="#dc2626"];
+    AUDIT [label="严 东  安全审计\nSEC-INCIDENT 取证", fillcolor="#fca5a5", color="#b91c1c"];
+  }
+
+  /* ================= 指挥 / 汇报 关系 ================= */
+  CLIENT -> CEO  [label="  原始需求（模糊）", color="#d97706", fontcolor="#b45309", penwidth=1.8];
+  CEO -> CLIENT  [label="  验收约请（4 次超时）", color="#d97706", fontcolor="#b45309", style=dashed, penwidth=1.8];
+
+  CEO -> COO [label=" 战略指令", color="#1e3a8a", penwidth=1.8];
+  COO -> CEO [label=" 交付核报", color="#64748b", style=dashed];
+  CEO -> CTO [label=" 技术裁定 / 复核", color="#1e3a8a", penwidth=1.8, dir=both];
+  CEO -> HR  [label=" 人事", color="#94a3b8", style=dotted];
+
+  CEO -> BA  [label=" 需求交底 / 战略倾向", color="#0f766e"];
+  BA  -> CEO [label=" RS v0.1→v1.1 定稿", color="#0f766e", style=dashed];
+  COO -> BA  [label=" 调度", color="#cbd5e1", style=dotted];
+
+  CTO -> ARCH [label=" 技术评审/会签", color="#0284c7"];
+  CTO -> RM   [label=" 技术门禁 / 口径(A)", color="#0284c7", penwidth=1.6];
+  RM  -> CTO  [label=" 四要件 / tag-peel", color="#0284c7", style=dashed];
+  COO -> RM   [label=" 发布调度", color="#cbd5e1", style=dotted];
+
+  CTO -> TL   [label=" 测试指派", color="#0284c7"];
+  TL  -> RM   [label=" CP-REPIN 检查点提请", color="#047857"];
+  RM  -> TL   [label=" 冻结提交号", color="#047857", style=dashed];
+
+  /* 调度到各条线 */
+  COO -> FE_L [label=" 调度", color="#cbd5e1", style=dotted];
+  COO -> BE_L [color="#cbd5e1", style=dotted];
+  COO -> MB_L [color="#cbd5e1", style=dotted];
+  COO -> FS_L [color="#cbd5e1", style=dotted];
+  COO -> TL   [color="#cbd5e1", style=dotted];
+  CTO -> FE_L [label=" 技术线", color="#7dd3fc", style=dotted];
+  CTO -> BE_L [color="#7dd3fc", style=dotted];
+  CTO -> MB_L [color="#7dd3fc", style=dotted];
+  CTO -> FS_L [color="#7dd3fc", style=dotted];
+
+  /* QA 汇报：TL 统管 20 名 QA */
+  TL -> T1  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6];
+  TL -> T2  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T3  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T4  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T5  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T6  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T7  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T8  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T9  [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T10 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T11 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T12 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T13 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T14 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T15 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T16 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T17 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T18 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T19 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+  TL -> T20 [color="#86efac", style=dotted, arrowhead=none, penwidth=0.6, constraint=false];
+
+  /* 安全组汇报线 */
+  AUDIT -> COO [label=" SEC-INCIDENT-01/02 举报", color="#b91c1c", fontcolor="#b91c1c", penwidth=1.8];
+  AUDIT -> CTO [color="#b91c1c", style=dotted];
+  BLUE  -> CTO [label=" 防御/加固建议", color="#dc2626", style=dotted];
+  RED   -> CTO [label=" （红队待命，无产出）", color="#f87171", style=dotted, fontcolor="#b91c1c"];
+
+  /* 前端 Lead 直接对 RM 提交流水线 */
+  FE_L -> RM [label=" 提交评审邮件", color="#0284c7", style=dashed];
+
+}

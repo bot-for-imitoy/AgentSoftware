@@ -1,21 +1,20 @@
 package com.agent.software.tools.toolkits.skill;
 
+import com.agent.software.role.Role;
 import com.agent.software.tools.Tool;
+import com.agent.software.utils.Json;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
-/**
- * skill_list — list all available skills in the skill library (name + brief description).
- */
+/** skill_list：列出技能库里所有可用技能。 */
 public class SkillList extends Tool {
 
+    private final Role role;
     private final SkillManager manager;
 
-    public SkillList(SkillManager manager) {
-        super();
+    public SkillList(Role role, SkillManager manager) {
+        this.role = role;
         this.manager = manager;
     }
 
@@ -30,16 +29,12 @@ public class SkillList extends Tool {
     }
 
     @Override
+    public String getDescription() {
+        return "List all skills available in the skill library.";
+    }
+
+    @Override
     public String handler(Map<String, Object> args) {
-        List<Map<String, String>> avail = this.manager.listAvailable();
-        if (avail.isEmpty()) {
-            return "skill_list: no skills available (the skill library is empty; make sure data/skills/ exists).";
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add("skill_list: the skill library has " + avail.size() + " skills:");
-        for (Map<String, String> a : avail) {
-            lines.add("- " + a.get("name") + ": " + a.get("description"));
-        }
-        return String.join("\n", lines);
+        return "skill_list: " + Json.stringify(manager.listAvailable());
     }
 }

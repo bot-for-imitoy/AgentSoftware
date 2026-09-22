@@ -1,90 +1,78 @@
 package com.agent.software.tools;
 
+import com.agent.software.role.Role;
+import com.agent.software.services.MailService;
+import com.agent.software.store.ToolkitConfig;
 import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.email.Email;
+import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.mcp.McpManager;
-import com.agent.software.tools.toolkits.memory.Memory;
-import com.agent.software.tools.toolkits.note.Note;
 import com.agent.software.tools.toolkits.pc.Pc;
 import com.agent.software.tools.toolkits.skill.Skill;
+import com.agent.software.tools.toolkits.skill.SkillManager;
+import com.agent.software.tools.toolkits.staffing.StaffingToolkit;
 import com.agent.software.tools.toolkits.taskview.TaskView;
 import com.agent.software.tools.toolkits.time.Time;
-import com.agent.software.tools.toolkits.todo.Todo;
-import com.agent.software.role.Role;
-import com.agent.software.tools.toolkits.mcp.MCPManager;
-import com.agent.software.tools.toolkits.skill.SkillManager;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Toolkit registry (the Java counterpart of the Python python_tools/__init__.py).
+ * 默认工具集工厂（纯工厂，无 static 单例）。
  *
- * DEFAULT_TOOLKITS (toolkits auto-assembled for roles, all template-style toolkits.* implementations):
- *   memory / note / time / todo / task_view / pc / mcp_manager /
- *   skill_manager / email (hermes is disabled by default, consistent with the Python version).
- *
- * Notes:
- *   - The note tool has been split out of memory: memory only keeps memory-related content (summary),
- *     note operations (write_note/edit_note/list_notes/read_note/delete_note) live in
- *     toolkits.note.Note.
- *   - pc is the computer tool (toolkits.pc.Pc): run_command / computer_status /
- *     lan_devices / reboot.
- *
- * DEFAULT_MCP_GROUPS: when a role joins/starts, the MCP tools of the group are automatically installed on the personal computer.
+ * <p>清单优先从 {@link ToolkitConfig} 读；没有配置时用内置默认值。
+ * 之后按角色额外追加：管理组 → talk_to_client；COO → 调度工具。
  */
 public final class Toolkits {
+
+    public static final List<String> DEFAULT_MCP_GROUPS = List.of("file_ops");
+    public static final String LEADERSHIP_GROUP = "Leadership Group";
+
+    private static final List<String> DEFAULT_NAMES =
+            List.of("time", "task_view", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
 
-    /** Globally shared MCP manager. */
-    private static final MCPManager MCP_MANAGER = new MCPManager();
-
-    /** Globally shared skill library manager. */
-    private static final SkillManager SKILL_MANAGER = new SkillManager();
-
-    /** Default MCP tool group: file operation MCP tools. */
-    public static final List<String> DEFAULT_MCP_GROUPS = List.of("file_ops");
-
-    /** Leadership group name (corresponds to the group field in role_templates.json). */
-    public static final String LEADERSHIP_GROUP = "Leadership Group";
-
-    public static MCPManager getMcpManager() {
-        return MCP_MANAGER;
-    }
-
-    public static SkillManager getSkillManager() {
-        return SKILL_MANAGER;
-    }
-
-    /**
-     * Default toolkit registry: when a role is added to an AgentSystem (autoToolkits=true)
-     * the toolkits are loaded one by one automatically (RolePool.setupRole calls this, passing the concrete role so the toolkits can bind).
-     * Each call returns a new independent template-style toolkit instance (AgentRole.addToolkit(Toolkit)
-     * registers directly into the ToolRegistry exposed to the LLM).
-     *
-     * <p>Collaboration objects used by the toolkits (MCP/skills/mailbox/conversation lock) prefer the per-system
-     * instance of the {@link com.agent.software.AgentSystem} the role belongs to; standalone roles not bound to a system
-     * fall back to the process-level default singletons of this class (legacy behavior).
-     */
-    public static List<Toolkit> defaultToolkits(Role role) {
-        MCPManager mcpManager = role != null ? role.mcpManager() : MCP_MANAGER;
-        SkillManager skillManager = role != null ? role.skillManager() : SKILL_MANAGER;
+    public static List<Toolkit> defaults(Role role, ToolkitConfig config,
+                                         MailService mail, MCPManager mcp, SkillManager skill) {
+        List<String> names = config == null || role == null
+                ? DEFAULT_NAMES
+                : config.defaultsFor(role.roleId, role.group);
+        if (names == null || names.isEmpty()) {
+            names = DEFAULT_NAMES;
+        }
         List<Toolkit> out = new ArrayList<>();
-        out.add(new Memory(role));
-        out.add(new Note(role));
-        out.add(new Time(role));
-        out.add(new Todo(role));
-        out.add(new TaskView(role));
-        out.add(new Pc(role));
-        out.add(new McpManager(role, mcpManager));
-        out.add(new Skill(role, skillManager));
-        out.add(new Email(role, role != null ? role.mailService() : null));
-        // all leadership group members get the tool for communicating with the client (talk_to_client, globally exclusive)
-        if (role != null && LEADERSHIP_GROUP.equals(role.group)) {
+        for (String name : names) {
+            switch (name) {
+                case "time" -> out.add(new Time(role));
+                case "task_view" -> out.add(new TaskView(role));
+                case "pc" -> out.add(new Pc(role));
+                case "mcp_manager" -> out.add(new McpManager(role, mcp));
+                case "skill", "skill_manager" -> out.add(new Skill(role, skill));
+                case "email" -> out.add(new Email(role, mail));
+                case "client" -> out.add(new Client(role));
+                case "staffing" -> out.add(new StaffingToolkit(role));
+                default -> {
+                    // 未知名字忽略
+                }
+            }
+        }
+        if (role != null && LEADERSHIP_GROUP.equals(role.group) && !has(out, Client.class)) {
             out.add(new Client(role));
         }
+        if (role != null && "COO".equals(role.roleId) && !has(out, StaffingToolkit.class)) {
+            out.add(new StaffingToolkit(role));
+        }
         return out;
+    }
+
+    private static boolean has(List<Toolkit> toolkits, Class<? extends Toolkit> type) {
+        for (Toolkit t : toolkits) {
+            if (type.isInstance(t)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

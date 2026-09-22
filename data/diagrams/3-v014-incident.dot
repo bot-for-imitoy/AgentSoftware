@@ -1,0 +1,62 @@
+/* ============================================================
+   图 3 · 事（二）：v0.1.4 改进轨 & 安全事故因果链
+   数据来源：data/drive/yandong/sec-audit-2026-0916/、data/todos/{COO,CTO,release_manager,attacker_2}.json
+   渲染：dot -Tpng diagrams/3-v014-incident.dot -o diagrams/3-v014-incident.png
+   ============================================================ */
+digraph incident {
+  graph [
+    rankdir=TB, fontname="Noto Sans CJK SC", bgcolor="#fbfcfe", labelloc=t,
+    label=<<b>图 3 · 事（二）：v0.1.4 改进轨（HOLD）与 SEC-INCIDENT 事故因果链</b><br/><font point-size="11" color="#475569">橙=v0.1.4 改进轨　红=安全事故　黄=唯一解锁闸门　绿=已收敛/已隔离</font>>,
+    fontsize=24, nodesep=0.30, ranksep=0.45, pad=0.4, compound=true, newrank=true
+  ];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=12,
+        fillcolor="#ffedd5", color="#ea580c", penwidth=1.1, margin="0.18,0.10", width=3.8];
+  edge [fontname="Noto Sans CJK SC", fontsize=10, color="#475569", arrowsize=0.75, penwidth=1.4];
+
+  /* 共同根：v0.1.3 冻结基线 */
+  ROOT [label="★ v0.1.3 冻结基线  tag peel = 8e3951b\n（唯一对外演示基线 · 全程未受污染）", fillcolor="#fde68a", color="#b45309", penwidth=2.6, width=4.2];
+
+  /* ---------------- 左：v0.1.4 改进轨 ---------------- */
+  subgraph cluster_v14 {
+    label=<<b>v0.1.4 改进轨（与 09-16 硬节点解耦）</b>>; labeljust=l; fontsize=14; color="#b45309"; style="rounded,dashed";
+
+    V0 [label="D4–D5  门禁①第4断言加固需求\n防「被测提交 ≠ 签字提交」的双结论假绿"];
+    V1 [label="待修 5 项\nD-2 主包白屏降级 ｜ D-3·D-4 移动端 P1\nDEF-GATE-1 常量重钉 ｜ QG-1 第4断言 ｜ DEF-CHAOS-6 常量单源化"];
+    V2 [label="octopus 原子合入 75e58a5\n首父 8e3951b + 5ea92c3 / ae51c48 / 699bba8"];
+    V3 [label="门禁资产批 D 合入 → bc35288\n（+ d3ddfcf 第4断言，四臂结构）"];
+    V4 [label="main 漂移 tip = ad527dc3\n自指重钉提交（仅一父）\n>> CEO/COO 裁定：整体丢弃 <<", fillcolor="#fecaca", color="#dc2626", penwidth=2.2];
+    V5 [label="D6 17:30  CEO《窗口收口结论》\n唯一解锁闸门：仅解除窗口、不自动解除技术闸门\n>> 待触发 <<", fillcolor="#fde68a", color="#b45309", penwidth=2.6];
+    V6 [label="干净重建 C1 → C1' → C1'' → C3\n基点 e7828d8 · 单写者 RM · 独立窗口 · 零重写 · 禁 amend/reset"];
+    V7 [label="重建 tag v0.1.4 + push --atomic\n+ CTO tag-peel 复核 + QA 独立复跑（正控 EXIT=0 / 负控 ×4 EXIT=3）"];
+    V8 [label="v0.1.4 完成后仅作改进轨归档\n不得作为对外演示基线（v0.1.3 冻结不动）", fillcolor="#dcfce7", color="#15803d"];
+
+    V0 -> V1 -> V2 -> V3 -> V4;
+    V4 -> V5 [label=" 触发重建", color="#b45309", fontcolor="#b45309", penwidth=1.8];
+    V5 -> V6 [label=" 17:30 窗口关闭后授权"];
+    V6 -> V7 -> V8;
+  }
+
+  /* ---------------- 右：安全事故 ---------------- */
+  subgraph cluster_inc {
+    label=<<b>SEC-INCIDENT-2026-0916-01 / -02</b>>; labeljust=l; fontsize=14; color="#b91c1c"; style="rounded";
+
+    I1 [label="根因：门禁①第4断言「自指不可满足」\nQA_SIGNOFF_COMMIT=bc35288（= 自身父提交·前缀比对）\n→ 干净检出默认调用恒 [FATAL] EXIT=3", fillcolor="#fee2e2", color="#dc2626", penwidth=2.0];
+    I2 [label="失控 --amend 重钉循环\nreflog HEAD 条目 = 43,635\n自洽前缀 nonce 43479…43502", fillcolor="#fee2e2", color="#dc2626"];
+    I3 [label="禁令期误建 v0.1.4 tag（INCIDENT-02）\n901febab / peel=ad527dc，实测带病 EXIT=3", fillcolor="#fee2e2", color="#dc2626", penwidth=2.0];
+    I4 [label="CEO/COO 收敛裁定\n① 立即删除带病 tag（本地 + 远端）\n② 口径(A)：全 40 位精确比对 + 运行时显式注入\n③ 树内常量改中性占位（禁前缀 / 禁短常量）\n④ 弃用 ad527dc3 血脉，基点改 e7828d8", fillcolor="#fecaca", color="#b91c1c", penwidth=2.4];
+    I5 [label="严东（安全审计）独立只读取证\n/drive/yandong/sec-audit-2026-0916/\nEVIDENCE-INDEX + reflog export", fillcolor="#dcfce7", color="#15803d"];
+    I6 [label="CI 供应链硬化 3 项 + eval 项\n移出 v0.1.4 → 独立改进轨（不阻断）", fillcolor="#fef3c7", color="#d97706"];
+
+    I1 -> I2 [label=" 前缀自指闭环"];
+    I2 -> I3 [label=" 抢跑打标"];
+    I3 -> I4 [label=" 举报 → 裁定 → 止损", penwidth=1.8];
+    I1 -> I5 [style=dotted, label=" 取证"];
+    I4 -> I6 [style=dashed];
+  }
+
+  /* ---------------- 跨轨关系 ---------------- */
+  ROOT -> V0 [label=" 基座 8e3951b", color="#b45309", fontcolor="#b45309", style=dashed, penwidth=1.6];
+  ROOT -> I1 [label=" 未受污染（RR-2 完好）", color="#15803d", fontcolor="#15803d", style=dashed];
+  I3 -> V5 [label=" 打标 HOLD 至 17:30", color="#b91c1c", fontcolor="#b91c1c", style=dashed, penwidth=1.8];
+  I4 -> V6 [label=" 口径(A) 成为 C1 载荷", color="#b91c1c", fontcolor="#b91c1c", penwidth=1.8];
+}
