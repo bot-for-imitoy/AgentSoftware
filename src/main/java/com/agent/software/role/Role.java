@@ -53,6 +53,8 @@ public final class Role extends UUIDObject implements Data {
 
     /** 一次任务内最多几轮工具调用。 */
     private static final int MAX_TOOL_ROUNDS = 20;
+    /** 连续多少轮工具失败就放弃（错误已回喂，给模型几次自我纠正的机会，避免无限烧 token）。 */
+    private static final int MAX_FAILING_ROUNDS = 3;
 
     // ── 配置（从 Employee.template 构建；非 final，见报备项 B1）──
     public String roleId;
@@ -378,7 +380,8 @@ public final class Role extends UUIDObject implements Data {
                 if (tool.getToolName().equals(name)) {
                     try {
                         String out = tool.handler(safeArgs);
-                        return new ToolResult(true, out == null ? "" : out);
+                        String text = out == null ? "" : out;
+                        return new ToolResult(!isToolFailure(text), text);
                     } catch (Exception e) {
                         logger.warn("Role[{}] tool {} failed", roleId, name, e);
                         return new ToolResult(false, "tool error: " + e.getMessage());
@@ -387,6 +390,20 @@ public final class Role extends UUIDObject implements Data {
             }
         }
         return new ToolResult(false, "unknown tool: " + name);
+    }
+
+    /** 工具用文本报错（不抛异常），这里统一判定成败。 */
+    private static boolean isToolFailure(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String s = text.stripLeading();
+        if (com.agent.software.core.Types.isFailureText(s)) {
+            return true;
+        }
+        String lower = s.toLowerCase();
+        return lower.startsWith("[error") || lower.startsWith("error")
+                || lower.contains(" error:") || lower.contains("failed:");
     }
 
     // ── 对话 ────────────────────────────────────────────────────
@@ -691,6 +708,7 @@ public final class Role extends UUIDObject implements Data {
         task.markRunning();
         int tokens = 0;
         String answer = "";
+        int failingRounds = 0;
         try {
             getLlm().appendUserMessage(task.content);
             for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -708,7 +726,7 @@ public final class Role extends UUIDObject implements Data {
                 // 否则下一轮只有 tool 结果、没有对应的 function_call，部分网关（如 Hanseq）
                 // 会因为 "function_call_output requires item_reference ids matching each call_id" 直接 400。
                 getLlm().appendAssistantMessage(r.text, r.toolCalls);
-                boolean failed = false;
+                boolean anyFailed = false;
                 for (Map<String, Object> call : r.toolCalls) {
                     String callId = toolCallId(call);
                     String toolName = toolName(call);
@@ -718,13 +736,19 @@ public final class Role extends UUIDObject implements Data {
                     getLlm().appendToolResult(callId, toolName, res.text);
                     recordToolCall(toolName, Json.stringify(args), res.text, task.uuid, round);
                     if (!res.ok) {
-                        failed = true;
+                        // 关键：所有 tool_call 都必须回喂结果，否则下一轮 call_id 对不上；
+                        // 失败也不立刻结束任务，把错误文本交给模型让它自己纠正。
+                        anyFailed = true;
                         answer = "tool failed: " + res.text;
-                        break;
                     }
                 }
-                if (failed) {
-                    break;
+                if (anyFailed) {
+                    failingRounds++;
+                    if (failingRounds >= MAX_FAILING_ROUNDS) {
+                        break;
+                    }
+                } else {
+                    failingRounds = 0;
                 }
             }
             if (answer.isEmpty()) {

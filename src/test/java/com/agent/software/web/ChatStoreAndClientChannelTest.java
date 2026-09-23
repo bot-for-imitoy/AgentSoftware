@@ -78,4 +78,18 @@ class ChatStoreAndClientChannelTest {
         channel.talk("CEO", "hello", false);
         assertTrue(channel.receiveFrom("CTO", "hi").startsWith("talk_to_client failed"));
     }
+
+    @Test
+    void replyArrivingBeforeTheWaitStartsIsNotLost() {
+        ChatStore store = new ChatStore();
+        ClientChannel channel = new ClientChannel(new Client("CLIENT", "Client A", "client@x"), store);
+
+        // 角色已占用通道（前端据此启用输入框），但还没进 awaitReply
+        channel.talk("CEO", "question", false);
+        channel.reply("early answer");
+
+        // 同一角色随后进入等待，应立刻拿到这条早到的回复
+        assertEquals("early answer", channel.receiveFrom("CEO", "question"));
+        assertTrue(channel.isFree());
+    }
 }

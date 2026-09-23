@@ -109,16 +109,25 @@ public final class ClientChannel {
         }
     }
 
+    /** 结束当前会话：释放占用，并清掉可能残留的回复。 */
     public void release() {
         synchronized (lock) {
             currentRoleId = null;
         }
-    }
-
-    /** 开始新一轮等待：清掉上一轮的回复/取消标记（在 cancelWait 可能到来之前调用，标记不会被吞掉）。 */
-    private void beginWait() {
         synchronized (waitLock) {
             pendingReply = null;
+            cancelled = false;
+            cancelReason = null;
+        }
+    }
+
+    /**
+     * 进入本轮等待：只清上一轮的取消标记，**不清回复**。
+     * 前端 2s 轮询才启用输入框，但"角色把消息写进 ChatStore"到"真正进入等待"之间仍有窗口，
+     * 若在这里清掉回复，用户抢在这之前回复就会丢。
+     */
+    private void beginWait() {
+        synchronized (waitLock) {
             cancelled = false;
             cancelReason = null;
         }
@@ -129,8 +138,9 @@ public final class ClientChannel {
         synchronized (waitLock) {
             while (true) {
                 if (cancelled) {
+                    String reason = cancelReason == null ? "client conversation cancelled" : cancelReason;
                     release();
-                    return "[client] " + cancelReason;
+                    return "[client] " + reason;
                 }
                 if (pendingReply != null) {
                     String reply = pendingReply;
