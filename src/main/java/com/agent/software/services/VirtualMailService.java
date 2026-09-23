@@ -44,16 +44,23 @@ public class VirtualMailService extends MailService {
             return "mail error: no recipients";
         }
         MailMessage msg = new MailMessage(UUID.randomUUID().toString(), from, "", to, cc, subject, body);
+        // 同一地址只投递一次：to/cc 重叠、或收件人列表里重复写同一个人时，
+        // 否则会对同一封邮件发出多条 NEW_MAIL 通知，收件人反复"查已读邮件"。
+        java.util.Set<String> delivered = new java.util.LinkedHashSet<>();
         for (String recipient : to) {
-            deliver(msg, recipient);
-        }
-        if (cc != null) {
-            for (String recipient : cc) {
+            if (recipient != null && delivered.add(recipient.toLowerCase())) {
                 deliver(msg, recipient);
             }
         }
-        logger.info("Mail sent from {} to {} (subject: {})", from, to, subject);
-        return "mail sent: " + to + " (subject: " + subject + ")";
+        if (cc != null) {
+            for (String recipient : cc) {
+                if (recipient != null && delivered.add(recipient.toLowerCase())) {
+                    deliver(msg, recipient);
+                }
+            }
+        }
+        logger.info("Mail sent from {} to {} cc {} (subject: {})", from, to, cc, subject);
+        return "mail sent: " + to + (cc == null || cc.isEmpty() ? "" : " cc " + cc) + " (subject: " + subject + ")";
     }
 
     private void deliver(MailMessage msg, String address) {

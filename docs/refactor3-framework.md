@@ -829,3 +829,16 @@ public class AgentSystem {
   环境变量 `AGENTSOFTWARE_TIME_SCALE` / 系统属性 `-Dagentsoftware.timeScale` 由 `AgentSystem` 注入；
   旧入口 `setSecondsPerTick(x)` 变成别名（等价 `setTimeScale(1/x)`），避免两个速率源互相打架。
   空闲快进是瞬时跳转，不受倍率影响。
+
+- **邮件通知去重与跳过**：同一 `(messageId, 收件人)` 只发一条 `NEW_MAIL`；`to`/`cc` 指向同一邮箱只投递一次；
+  通知里带 `message_id` 并提示"已读则无需动作"；`Role` 在处理 `NEW_MAIL` 前先查该邮件是否已读，
+  已读就直接跳过（不调用 LLM）。这解决了通知积压时"重复通知已处理邮件"的 token 浪费。
+- **工具参数容错**：模型给出的 `arguments` 不是合法 JSON 时，按空参数处理并 warn，不再让整个任务抛
+  `UncheckedIOException`。
+- **read_mail 支持 `unread_only`**：收到 NEW_MAIL 通知后只列未读邮件，避免把整个收件箱（含大量已读回执）重扫一遍；
+  默认 `false` 保持原行为，`limit` 依旧作用于过滤后的最近 N 封。
+- **HR 招聘工具回归**：`post_job_posting`（按一段招聘要求生成完整员工档案并登记进 `CompanyRoster`；
+  `draft_in=true` 时立即由 `Staffing` 入职当前大组）与 `list_candidates`（查名单）。
+  生成策略：有 API Key 时用**独立 LLM + 独立 Context** 让模型按固定 JSON 生成（不污染 HR 角色自己的对话上下文），
+  无 Key / 解析失败时退回本地确定性生成，保证工具永远产出合法档案。
+  重新引入了 `role.RoleFactory`（此前 B8 删除）作为生成器。

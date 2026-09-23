@@ -693,9 +693,30 @@ public final class Role extends UUIDObject implements Data {
             return;
         }
         if (e.type == EventType.NEW_MAIL) {
+            String mailId = e.payload == null ? null : safe(String.valueOf(e.payload.get("message_id")));
+            if (!mailId.isBlank() && mailAlreadyRead(mailId)) {
+                // 通知积压：前面的任务可能已经把收件箱读完了，这条通知已无意义。
+                // 直接跳过，不再白烧一轮 LLM（这是"重复邮件通知"投诉的根源）。
+                journal("Skip duplicate NEW_MAIL notification (already read): " + mailId);
+                return;
+            }
             runTask(new Task(e.fromRoleId, roleId, System.currentTimeMillis(),
                     "[mail] " + e.content, e.priority));
         }
+    }
+
+    /** 这封邮件是否已读（查不到按未读处理，保证正常流程不受影响）。 */
+    private boolean mailAlreadyRead(String messageId) {
+        if (system == null || system.getMailService() == null) {
+            return false;
+        }
+        String address = system.getMailService().getAddress(roleId);
+        for (com.agent.software.services.MailMessage m : system.getMailService().inbox(address, null)) {
+            if (messageId.equals(m.messageId)) {
+                return m.read;
+            }
+        }
+        return false;
     }
 
     private void runTask(Task task) {
@@ -788,7 +809,7 @@ public final class Role extends UUIDObject implements Data {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> toolArgs(Map<String, Object> call) {
+    private Map<String, Object> toolArgs(Map<String, Object> call) {
         Object fn = call.get("function");
         Object raw = fn instanceof Map<?, ?> m ? m.get("arguments") : call.get("arguments");
         if (raw instanceof Map<?, ?> m) {
@@ -799,7 +820,14 @@ public final class Role extends UUIDObject implements Data {
             return out;
         }
         if (raw instanceof String s && !s.isBlank()) {
-            return Json.parseObject(s);
+            try {
+                return Json.parseObject(s);
+            } catch (Exception ex) {
+                // 模型的 arguments 偶尔不是合法 JSON：不能让整个任务崩掉（日志里出现过 UncheckedIOException）
+                logger.warn("Role[{}] tool arguments are not valid JSON, using empty args: {}",
+                        roleId, s.length() > 200 ? s.substring(0, 200) + "…" : s);
+                return Map.of();
+            }
         }
         return Map.of();
     }

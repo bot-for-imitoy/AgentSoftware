@@ -5,6 +5,7 @@ import com.agent.software.services.MailService;
 import com.agent.software.store.ToolkitConfig;
 import com.agent.software.tools.toolkits.client.Client;
 import com.agent.software.tools.toolkits.email.Email;
+import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.mcp.McpManager;
 import com.agent.software.tools.toolkits.pc.Pc;
@@ -53,6 +54,7 @@ public final class Toolkits {
                 case "email" -> out.add(new Email(role, mail));
                 case "client" -> out.add(new Client(role));
                 case "staffing" -> out.add(new StaffingToolkit(role));
+                case "hr" -> out.add(new Hr(role));
                 default -> {
                     // 未知名字忽略
                 }
@@ -63,6 +65,9 @@ public final class Toolkits {
         }
         if (role != null && "COO".equals(role.roleId) && !has(out, StaffingToolkit.class)) {
             out.add(new StaffingToolkit(role));
+        }
+        if (role != null && "HR".equals(role.roleId) && !has(out, Hr.class)) {
+            out.add(new Hr(role));
         }
         return out;
     }

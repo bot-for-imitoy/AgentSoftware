@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
 /**
  * 组合根：持有全部协作者，注入给 Role，并把时间/事件/班次接起来。
@@ -64,6 +65,8 @@ public class AgentSystem {
     private volatile boolean onDuty = false;
     /** 已经因为"没有后续任务"自动暂停过，避免重复触发。 */
     private volatile boolean autoPaused = false;
+    /** 已通知过的 (messageId|收件人)，防止同一封邮件重复唤醒。 */
+    private final java.util.Set<String> notifiedMail = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public AgentSystem() {
         this(null, new StdInput());
@@ -295,6 +298,12 @@ public class AgentSystem {
         if (target == null) {
             return;
         }
+        // 同一封邮件对同一收件人只通知一次：to/cc 重叠、重复地址都不该产生第二条通知
+        String dedupeKey = message.messageId + "|" + recipient.toLowerCase();
+        if (!notifiedMail.add(dedupeKey)) {
+            logger.debug("Suppressed duplicate mail notification: {}", dedupeKey);
+            return;
+        }
         Event e = Event.builder()
                 .from(message.senderEmail)
                 .to(target.roleId)
@@ -302,8 +311,11 @@ public class AgentSystem {
                 .priority(Priority.NORMAL)
                 .at(timeBus.now())
                 .source("mail")
+                .payload(Map.of("message_id", message.messageId,
+                        "subject", message.subject == null ? "" : message.subject))
                 .content("New mail from " + message.senderName + " <" + message.senderEmail
-                        + ">, subject: \"" + message.subject + "\". Use read_mail to view it.")
+                        + ">, subject: \"" + message.subject + "\", message_id=" + message.messageId
+                        + ". Call open_mail with this message_id; if it is already read, no action is needed.")
                 .build();
         eventBus.post(e);
     }
