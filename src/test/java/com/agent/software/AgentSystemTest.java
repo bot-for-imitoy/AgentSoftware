@@ -105,6 +105,21 @@ class AgentSystemTest {
     }
 
     @Test
+    void timeScaleComesFromSystemProperty(@TempDir Path dir) {
+        System.setProperty("agentsoftware.timeScale", "20");
+        try {
+            AgentSystem system = new AgentSystem(dir, new WebInput());
+            try {
+                assertEquals(20.0, system.getTimeBus().getTimeScale(), 1e-9);
+            } finally {
+                system.stop();
+            }
+        } finally {
+            System.clearProperty("agentsoftware.timeScale");
+        }
+    }
+
+    @Test
     void autoPausesWhenThereIsNoFurtherWork(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {

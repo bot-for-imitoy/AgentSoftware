@@ -37,7 +37,8 @@ public class TimeBus {
     private volatile boolean running = false;
     private volatile boolean paused = false;
     private volatile LocalDate baseDate = LocalDate.now();
-    private volatile double secondsPerTick = 1.0;
+    /** 模拟时间倍率：模拟秒/真实秒（1.0 = 实时）。 */
+    private volatile double timeScale = 1.0;
 
     private final List<Consumer<TimeBus>> listeners = new CopyOnWriteArrayList<>();
     private volatile Supplier<Boolean> idleChecker;
@@ -195,10 +196,29 @@ public class TimeBus {
         this.rolloverHook = hook;
     }
 
+    /**
+     * 兼容入口：直接指定"每 tick 消耗多少真实秒"（越小越快）。
+     * 等价于 {@code setTimeScale(1 / secondsPerTick)}。
+     */
     public void setSecondsPerTick(double secondsPerTick) {
         if (secondsPerTick > 0) {
-            this.secondsPerTick = secondsPerTick;
+            this.timeScale = 1.0 / secondsPerTick;
         }
+    }
+
+    /**
+     * 模拟时间相对真实时间的倍率（唯一速率开关）：
+     * {@code 1.0} = 实时（1 tick/秒），{@code 10} = 10 倍速，{@code 0.5} = 半速。
+     * 空闲快进不受它影响（那颗直接跳到下一个事件 tick）。
+     */
+    public void setTimeScale(double scale) {
+        if (scale > 0) {
+            this.timeScale = scale;
+        }
+    }
+
+    public double getTimeScale() {
+        return timeScale;
     }
 
     // ── 驱动循环 ────────────────────────────────────────────────
@@ -263,7 +283,7 @@ public class TimeBus {
     }
 
     private long tickMillis() {
-        return Math.max(1L, (long) (secondsPerTick * 1000.0));
+        return Math.max(1L, (long) (1000.0 / timeScale));
     }
 
     private void notifyListeners() {

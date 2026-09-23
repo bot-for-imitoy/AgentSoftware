@@ -824,3 +824,8 @@ public class AgentSystem {
   服务端必须照此实现，否则页面会一直停在 "Connecting…" 且不渲染消息。
   角色的 `recordReasoning/recordNote/recordToolCall/recordAnswer` 与 `talkTo/talkToClient`
   都会写入 `ChatStore`，供 "All Activity" 实时展示（reason/note/tool/answer/talk/client）。
+
+- **模拟时间速率**：唯一开关是 `TimeBus.setTimeScale(double)`（模拟秒/真实秒，默认 1.0 = 实时），
+  环境变量 `AGENTSOFTWARE_TIME_SCALE` / 系统属性 `-Dagentsoftware.timeScale` 由 `AgentSystem` 注入；
+  旧入口 `setSecondsPerTick(x)` 变成别名（等价 `setTimeScale(1/x)`），避免两个速率源互相打架。
+  空闲快进是瞬时跳转，不受倍率影响。

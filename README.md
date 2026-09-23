@@ -32,6 +32,20 @@
 - 数据目录（角色电脑、模板、技能）默认是启动目录下的 `data/`，可用 `AGENTSOFTWARE_DATA_DIR` 覆盖；
   电脑类型默认 `podman`，无 podman 环境用 `AGENTSOFTWARE_COMPUTER_KIND=local`。
 
+## 模拟时间速率
+
+默认 **1 倍速**（1 tick = 1 模拟秒 = 1 真实秒）。用环境变量调：
+
+```bash
+AGENTSOFTWARE_TIME_SCALE=10  java ... com.agent.software.Main   # 10 倍速
+AGENTSOFTWARE_TIME_SCALE=0.5 java ... com.agent.software.Main   # 半速
+```
+
+- `AGENTSOFTWARE_TIME_SCALE`（或系统属性 `-Dagentsoftware.timeScale=…`）是**唯一速率开关**：2 = 2 倍，60 = 60 倍；启动日志和 `Main` 输出里会打印当前倍率。
+- 全员空闲时的**快进不受倍率影响**：它直接跳到下一个事件 / 班次边界，是瞬时的。
+- 代码内等价入口：`system.getTimeBus().setTimeScale(x)`；
+  旧入口 `setSecondsPerTick(每 tick 真实秒数)` 仍可用（`setSecondsPerTick(0.1)` 等价 10 倍速）。
+
 A **multi-role AI agent "software company" simulator** written in Java (Maven, JUnit 5).
 A team of LLM-powered employees — CEO, COO, HR, team leads, developers, testers, security
 engineers, … — runs like a real company: it works on a **corporate shift clock**, reacts to

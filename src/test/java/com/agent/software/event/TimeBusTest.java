@@ -60,6 +60,23 @@ class TimeBusTest {
     }
 
     @Test
+    void timeScaleIsTheSingleRateKnob() {
+        TimeBus tb = new TimeBus(LocalDate.of(2026, 1, 1));
+        assertEquals(1.0, tb.getTimeScale(), 1e-9);
+
+        tb.setTimeScale(10);
+        assertEquals(10.0, tb.getTimeScale(), 1e-9);
+
+        // 兼容入口：每 tick 真实秒数 0.1s == 10 倍速
+        tb.setSecondsPerTick(0.1);
+        assertEquals(10.0, tb.getTimeScale(), 1e-6);
+
+        // 非法值忽略
+        tb.setTimeScale(0);
+        assertEquals(10.0, tb.getTimeScale(), 1e-6);
+    }
+
+    @Test
     void setNowDoesNotMoveBackwards() {
         TimeBus tb = new TimeBus(LocalDate.of(2026, 1, 1));
         tb.advanceTo(100);

@@ -45,7 +45,8 @@ public class Main {
         system.start();
         System.out.println("System started: " + system.getTimeBus().currentDateTime()
                 + " (shift " + system.getTimeBus().getShiftStartTick()
-                + " → " + system.getTimeBus().getShiftEndTick() + " ticks/day)");
+                + " → " + system.getTimeBus().getShiftEndTick() + " ticks/day, timeScale="
+                + system.getTimeBus().getTimeScale() + "x; override with AGENTSOFTWARE_TIME_SCALE)");
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             system.stop();

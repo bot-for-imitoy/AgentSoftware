@@ -98,6 +98,16 @@ public class AgentSystem {
             return next == null ? null : next.targetTime;
         });
         timeBus.setRolloverHook(() -> logger.info("Clock rolled over: {}", timeBus.currentDateTime()));
+        // 模拟时间倍率：系统属性 agentsoftware.timeScale 优先，其次 AGENTSOFTWARE_TIME_SCALE，默认 1.0（实时）
+        double timeScale = 1.0;
+        try {
+            String raw = System.getProperty("agentsoftware.timeScale",
+                    System.getenv().getOrDefault("AGENTSOFTWARE_TIME_SCALE", "1.0"));
+            timeScale = Double.parseDouble(raw.trim());
+        } catch (NumberFormatException ignored) {
+        }
+        timeBus.setTimeScale(timeScale);
+        logger.info("Simulation time scale: {}x (1 tick = 1 simulated second)", timeBus.getTimeScale());
         mailService.setDeliveryListener(this::onMailDelivered);
 
         // 默认大组 = 管理组
