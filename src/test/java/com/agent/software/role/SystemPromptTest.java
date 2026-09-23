@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,6 +65,35 @@ class SystemPromptTest {
 
             String hr = system.getRolePool().find("HR").getLlm().getSystemPrompt();
             assertTrue(hr.contains("recruitment tool"), hr);
+        } finally {
+            system.stop();
+        }
+    }
+
+    /**
+     * COO 的模板文案（抄自 master，那边工程团队是预加载的）说"不要直接指挥一线员工、派工由管理层协调"，
+     * 但 refactor3 只准入管理组、且只有 COO 有 draft_in。不把这条说清，COO 会把派工推给 CTO（没有该工具），
+     * 结果全公司没人被拉进组、没人干活。
+     */
+    @Test
+    void cooPromptTellsItToDraftTheTeamInAndOthersDoNot(@TempDir Path dir) {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            String coo = system.getRolePool().find("COO").getLlm().getSystemPrompt();
+            assertTrue(coo.contains("[Staffing]"), coo);
+            assertTrue(coo.contains("draft_in"), coo);
+            assertTrue(coo.contains("OUT_OF_GROUP"), coo);
+            assertTrue(coo.contains("no other role has draft_in"), coo);
+            // 工作流本身写在模板里：拆解 → 用 draft_in 拉人进组 → 派活
+            assertTrue(coo.contains("draft the matching employees into the current cohort"), coo);
+            // master 那句会造成矛盾的话必须已经改掉
+            assertFalse(coo.contains("do not directly command frontline staff"), coo);
+
+            for (String other : List.of("CEO", "CTO", "HR", "business_analyst")) {
+                String prompt = system.getRolePool().find(other).getLlm().getSystemPrompt();
+                assertFalse(prompt.contains("[Staffing]"),
+                        other + " 不该有 COO 专属的调度说明");
+            }
         } finally {
             system.stop();
         }

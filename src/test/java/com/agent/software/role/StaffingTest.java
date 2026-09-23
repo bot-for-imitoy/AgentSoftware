@@ -70,4 +70,35 @@ class StaffingTest {
             system.stop();
         }
     }
+
+    /**
+     * uid 必须"按员工"稳定（requirements-2 §A.3）：COO 会反复抽调/移出，
+     * 如果 uid 跟着入组顺序走，容器内的文件归属会跟着漂。
+     */
+    @Test
+    void uidIsStablePerEmployeeAcrossDraftOutAndIn(@TempDir Path dir) {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            int ceoUid = system.getRolePool().find("CEO").uid;
+            assertTrue(ceoUid >= 1101, "uid 从 1101 起: " + ceoUid);
+
+            Role first = system.getStaffing().draftIn("architect");
+            int architectUid = first.uid;
+            system.getStaffing().draftOut("architect");
+            Role again = system.getStaffing().draftIn("architect");
+            assertEquals(architectUid, again.uid, "重新进组必须还是同一个 uid");
+
+            // 中间进出的别人，不影响已有成员的 uid
+            system.getStaffing().draftIn("frontend_dev_1");
+            system.getStaffing().draftOut("frontend_dev_1");
+            assertEquals(ceoUid, system.getRolePool().find("CEO").uid);
+            assertEquals(architectUid, system.getRolePool().find("architect").uid);
+
+            // 同一批人的 uid 互不相同
+            var uids = system.getRolePool().all().stream().map(r -> r.uid).toList();
+            assertEquals(uids.size(), uids.stream().distinct().count(), "uid 不能重复: " + uids);
+        } finally {
+            system.stop();
+        }
+    }
 }

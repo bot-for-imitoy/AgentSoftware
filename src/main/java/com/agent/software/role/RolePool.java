@@ -19,7 +19,7 @@ public final class RolePool extends UUIDObjectManager<Role> {
     private static final Logger logger = LoggerFactory.getLogger(RolePool.class);
 
     private AgentSystem agentSystem;
-    /** 容器内 uid 分配序号：1100 + 入组顺序（对齐 master RolePool.addRole）。 */
+    /** 不在名单里的角色（理论上只在测试里出现）的 uid 兜底序号。 */
     private int uidCounter = 0;
 
     public RolePool() {
@@ -41,13 +41,28 @@ public final class RolePool extends UUIDObjectManager<Role> {
         if (find(r.roleId) != null) {
             throw new IllegalStateException("role already in cohort: " + r.roleId);
         }
-        // 容器内 uid：模板没给就按入组顺序分配，保证同一员工的云盘/主目录归属稳定
+        // 容器内 uid：必须"按员工"稳定（requirements-2 §A.3），否则 COO 抽调/移除会让别人的 uid
+        // 漂移、容器内文件归属跟着变。所以按员工在名单里的固定位置派生，而不是按入组顺序。
         if (r.uid < 1100) {
-            r.uid = 1100 + (++uidCounter);
+            r.uid = stableUid(r);
         }
         r.bind(agentSystem);
         add(r);
         logger.info("RolePool: {} joined the cohort (uid={})", r.roleId, r.uid);
+    }
+
+    /** 员工在名单里的位置 → 固定 uid（1101 起）。名单里没有（如测试里临时造的）才退回自增。 */
+    private int stableUid(Role r) {
+        CompanyRoster roster = agentSystem == null ? null : agentSystem.getRoster();
+        if (roster != null && r.roleId != null) {
+            List<Employee> all = roster.all();
+            for (int i = 0; i < all.size(); i++) {
+                if (r.roleId.equals(all.get(i).roleId)) {
+                    return 1101 + i;
+                }
+            }
+        }
+        return 1101 + (++uidCounter);
     }
 
     public boolean removeRole(String roleId) {

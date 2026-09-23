@@ -859,3 +859,23 @@ public class AgentSystem {
   都按 INFO 打印且**不截断**（`journal` 走 DEBUG，默认看不到）；模型给出非法 JSON 参数时也完整打印原文。
   `run_command` 回喂给模型的结果仍受工具自己的 `maxChars` 预算约束（默认 20000），这是上下文预算而非日志截断。
 
+- **COO 是唯一能把人拉进组的角色（D15），所以模板文案必须按大组模型写**：
+  COO 模板的 `system_prompt_extra` 原本抄自 master，而 master 一开局就把整个工程团队放进池子，
+  于是那句"Only interact with the CEO, HR, business analyst and CTO; do not directly command frontline
+  staff: do not assign specific developers"在那边没有副作用。refactor3 只准入管理组，其余 49 人是
+  `OUT_OF_GROUP` 的"假死"状态（无 Role/电脑/工具，收不到邮件也收不到 talk），且**只有 COO 有 `draft_in`**。
+  保留那句话会让 COO 把派工推给 CTO（没有该工具）→ 全公司没人进组、没人干活。现在的分工是：
+  模板写工作流（拆解 → `draft_in` 拉人 → 逐个派活 → 有缺口才找 HR），运行时提示词再加一段
+  `[Staffing]` 说明"只有你有 draft_in"这条系统事实。
+  ⚠️ 运行时读的是 `<dataDir>/role_templates.json`，**只有在它缺失时才从 resources 复制**，
+  所以改模板要同时改 `src/main/resources/role_templates.json` 和 `data/role_templates.json`。
+
+- **容器内 uid 按员工（名单）稳定**：`RolePool.addRole` 用员工在 `CompanyRoster` 里的固定位置派生
+  `uid = 1101 + index`（requirements-2 §A.3），不再是 master 的"按入组顺序 `1100+seq`" ——
+  否则 COO 每抽调/移出一次，别人的 uid 就漂一次，容器内的文件归属跟着变。
+
+- **`take_rest` 结束当前任务**：`take_rest` 的语义是"这件事到此为止，我去休息"。工具循环必须就此收尾，
+  否则模型会被反复追问同一件事，继续 `take_rest`/`read_mail` 空转到 `MAX_TOOL_ROUNDS`（实测 20 轮、
+  18 万 token 仍无产出）。
+
+

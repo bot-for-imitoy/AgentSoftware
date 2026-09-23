@@ -23,13 +23,15 @@ public class DraftIn extends Tool {
     @Override
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("role_id", "employee role_id to draft into the cohort");
+        schema.put("role_id", "employee role_id to draft into the cohort (see list_employees)");
         return schema;
     }
 
     @Override
     public String getDescription() {
-        return "Draft an employee into the current task cohort (creates their Role, computer and tools).";
+        return "Draft an employee into the current task cohort (creates their Role, computer and tools). "
+                + "Employees are OUT_OF_GROUP by default and dormant until drafted in: they cannot receive "
+                + "mail, talk or any task before that. Only the COO has this tool.";
     }
 
     @Override

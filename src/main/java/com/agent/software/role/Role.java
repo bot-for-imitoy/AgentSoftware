@@ -774,6 +774,7 @@ public final class Role extends UUIDObject implements Data {
                 // 会因为 "function_call_output requires item_reference ids matching each call_id" 直接 400。
                 getLlm().appendAssistantMessage(r.text, r.toolCalls);
                 boolean anyFailed = false;
+                boolean restRequested = false;
                 for (Map<String, Object> call : r.toolCalls) {
                     String callId = toolCallId(call);
                     String toolName = toolName(call);
@@ -788,6 +789,16 @@ public final class Role extends UUIDObject implements Data {
                         anyFailed = true;
                         answer = "tool failed: " + res.text;
                     }
+                    if ("take_rest".equals(toolName)) {
+                        // take_rest 的语义是"这件事到此为止，我去休息"。必须结束当前任务：
+                        // 否则模型会被反复追问同一件事，继续 take_rest / read_mail 空转
+                        // 到 MAX_TOOL_ROUNDS（实测 20 轮、18 万 token 仍无产出）。
+                        answer = res.text;
+                        restRequested = true;
+                    }
+                }
+                if (restRequested) {
+                    break;
                 }
                 if (anyFailed) {
                     failingRounds++;
@@ -937,8 +948,26 @@ public final class Role extends UUIDObject implements Data {
         if (extra != null && !extra.isBlank()) {
             parts.add(extra);
         }
+        if ("COO".equals(roleId)) {
+            parts.add(cooStaffingRules());
+        }
         parts.add("Work only through the provided tools and report results concisely.");
         return String.join("\n", parts);
+    }
+
+    /**
+     * COO 专属：把"公司名单 ≠ 当前大组"这条系统事实说清。
+     *
+     * <p>工作流（怎么拆、怎么派）写在模板的 {@code system_prompt_extra} 里；这里只补系统事实，
+     * 因为它是运行时的、按角色生效的，模板不该承担。refactor3 只准入管理组，其余人全是
+     * {@code OUT_OF_GROUP} 的"假死"状态，而**只有 COO 有 draft_in**（D15）——实测不写清楚，
+     * COO 会把派工推给 CTO（没有该工具），于是全公司永远没人被拉进组、没人干活。
+     */
+    private static String cooStaffingRules() {
+        return "[Staffing] Only you can change the cohort: roster entries are OUT_OF_GROUP "
+                + "(list_employees marks them) and dormant — no Role, no computer, no tools, and they "
+                + "receive no mail and no talk — until you call draft_in for them. Handing staffing to "
+                + "the CTO or HR leaves the work unassigned: no other role has draft_in.";
     }
 
     /** 当前日期 / 班次 / 时钟语义：让角色知道今天是第几天、几点、工期多长。 */
