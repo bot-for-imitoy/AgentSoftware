@@ -561,6 +561,8 @@ public final class Role extends UUIDObject implements Data {
     }
 
     public void recordReasoning(String text, String taskId, Integer round) {
+        // 角色输出全部进日志（INFO，不截断）——journal 走的是 DEBUG，默认看不到
+        logger.info("Role[{}] reasoning (task={} round={}):\n{}", roleId, taskId, round, text);
         journal("reasoning(task=" + taskId + ", round=" + round + "): " + text);
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("task", safe(taskId));
@@ -569,6 +571,7 @@ public final class Role extends UUIDObject implements Data {
     }
 
     public void recordNote(String content, String taskId, Integer round) {
+        logger.info("Role[{}] note (task={} round={}):\n{}", roleId, taskId, round, content);
         journal("note(task=" + taskId + ", round=" + round + "): " + content);
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("task", safe(taskId));
@@ -577,6 +580,8 @@ public final class Role extends UUIDObject implements Data {
     }
 
     public void recordToolCall(String tool, String args, String result, String taskId, Integer round) {
+        logger.info("Role[{}] tool {} (task={} round={}):\n  args={}\n  result={}",
+                roleId, tool, taskId, round, args, result);
         journal("tool(" + tool + ", task=" + taskId + ", round=" + round + "): args=" + args
                 + " result=" + result);
         Map<String, Object> extra = new LinkedHashMap<>();
@@ -589,6 +594,8 @@ public final class Role extends UUIDObject implements Data {
     }
 
     public void recordAnswer(String text, String taskId, String status, Integer tokens) {
+        logger.info("Role[{}] answer (task={} status={} tokens={}):\n{}",
+                roleId, taskId, status, tokens, text);
         journal("answer(task=" + taskId + ", status=" + status + ", tokens=" + tokens + "): " + text);
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("status", status == null ? "" : status);
@@ -745,6 +752,7 @@ public final class Role extends UUIDObject implements Data {
         String answer = "";
         int failingRounds = 0;
         try {
+            logger.info("Role[{}] task input ({}):\n{}", roleId, task.uuid, task.content);
             getLlm().appendUserMessage(task.content);
             for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
                 Response r = getLlm().request();
@@ -756,6 +764,10 @@ public final class Role extends UUIDObject implements Data {
                     answer = r.text == null ? "" : r.text;
                     getLlm().appendAssistantMessage(answer);
                     break;
+                }
+                if (r.text != null && !r.text.isBlank()) {
+                    logger.info("Role[{}] assistant text (task={} round={}):\n{}",
+                            roleId, task.uuid, round, r.text);
                 }
                 // 必须先把带 tool_calls 的 assistant 消息写回上下文：
                 // 否则下一轮只有 tool 结果、没有对应的 function_call，部分网关（如 Hanseq）
@@ -839,7 +851,7 @@ public final class Role extends UUIDObject implements Data {
             } catch (Exception ex) {
                 // 模型的 arguments 偶尔不是合法 JSON：不能让整个任务崩掉（日志里出现过 UncheckedIOException）
                 logger.warn("Role[{}] tool arguments are not valid JSON, using empty args: {}",
-                        roleId, s.length() > 200 ? s.substring(0, 200) + "…" : s);
+                        roleId, s);
                 return Map.of();
             }
         }

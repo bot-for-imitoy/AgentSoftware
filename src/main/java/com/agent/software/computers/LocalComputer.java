@@ -28,6 +28,10 @@ public class LocalComputer extends Computer {
     @Override
     public void powerOn() {
         ensureDir(hostDir());
+        // 本地模式没有容器可挂载，至少把共享云盘的目录结构建出来（Public + 自己的目录）
+        ensureDir(driveRoot());
+        ensureDir(driveRoot().resolve("Public"));
+        ensureDir(driveRoot().resolve(driveDirName()));
         ison = true;
     }
 
@@ -44,7 +48,11 @@ public class LocalComputer extends Computer {
     @Override
     public String runCommand(String command, int timeout, int maxChars) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("bash", "-lc", command);
+            // 本地模式没有 /mnt/drive 挂载点：把命令里的云盘路径改写到宿主机的共享目录
+            String effective = command == null ? ""
+                    : command.replaceAll(DRIVE_MOUNT + "(?![\\w-])",
+                            java.util.regex.Matcher.quoteReplacement(driveRoot().toString()));
+            ProcessBuilder pb = new ProcessBuilder("bash", "-lc", effective);
             pb.directory(hostDir().toFile());
             Process p = pb.start();
             p.getOutputStream().close();
@@ -52,7 +60,7 @@ public class LocalComputer extends Computer {
             String err = new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
             if (!p.waitFor(timeout, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
-                return "[timeout] " + command;
+                return "[timeout] " + effective;
             }
             String combined = out + (err.isBlank() ? "" : "\n[stderr] " + err);
             return maxChars > 0 && combined.length() > maxChars
@@ -113,6 +121,10 @@ public class LocalComputer extends Computer {
     private Path resolve(String path) {
         if (path == null || path.isBlank()) {
             return hostDir();
+        }
+        // 本地模式没有 /mnt/drive 挂载点，把提示词里的云盘路径映射到宿主机的共享目录
+        if (path.equals(DRIVE_MOUNT) || path.startsWith(DRIVE_MOUNT + "/")) {
+            return driveRoot().resolve(path.substring(DRIVE_MOUNT.length()).replaceFirst("^/", ""));
         }
         Path p = Path.of(path);
         return p.isAbsolute() ? p : hostDir().resolve(path);

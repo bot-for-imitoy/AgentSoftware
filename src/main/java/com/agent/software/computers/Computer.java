@@ -27,9 +27,15 @@ public abstract class Computer extends UUIDObject implements Data {
     private static final Logger logger = LoggerFactory.getLogger(Computer.class);
 
     private static final String COMPUTERS_ROOT = "./data/computers";
+    /** 共享云盘在宿主机上的根目录；所有电脑挂的是同一个（不是每角色一个）。 */
     private static final String DRIVE_ROOT = "./data/drive";
+    /** 共享云盘在容器内的挂载点，与 System Prompt 里给角色看的路径一致。 */
+    protected static final String DRIVE_MOUNT = "/mnt/drive";
     private static final String DEFAULT_IMAGE = "agentsoftware-base:latest";
     private static final String CONTAINERFILE = "Containerfile";
+
+    /** 容器内 uid 起始值（对齐 master：1100 + 注册顺序）。 */
+    protected static final int UID_BASE = 1100;
 
     protected boolean ison = false;
     private final Role role;
@@ -173,14 +179,44 @@ public abstract class Computer extends UUIDObject implements Data {
         return role == null ? "shared" : role.roleId;
     }
 
+    /** 容器内用户名（模板里是姓名拼音）；没给就退化成 role_id。 */
+    protected String username() {
+        String u = role == null ? null : role.username;
+        return u == null || u.isBlank() ? roleId() : u;
+    }
+
+    /** 容器内工作目录 = 个人主目录；宿主机 hostDir() 挂到这里。 */
+    protected String workdir() {
+        return "/home/" + username();
+    }
+
+    /** 容器内 uid：由 RolePool 按注册顺序分配，缺失时退化成 1100。 */
+    protected int uid() {
+        int u = role == null ? 0 : role.uid;
+        return u >= UID_BASE ? u : UID_BASE;
+    }
+
+    /** 云盘里的个人目录名 = 容器内用户名（对齐 master 的 driveDirName()）。 */
+    protected String driveDirName() {
+        return username();
+    }
+
+    /** 本机自己的目录（宿主机侧），挂到容器内 {@link #workdir()}。 */
     protected Path hostDir() {
         String root = System.getenv().getOrDefault("AGENTSOFTWARE_DATA_DIR", "data");
         return Paths.get(root, "computers", roleId()).toAbsolutePath();
     }
 
-    protected Path driveDir() {
+    /**
+     * 共享云盘根目录（宿主机侧），挂到容器内 {@link #DRIVE_MOUNT}。
+     *
+     * <p>注意：是**全体共用**的一个目录，不是每角色一个 —— 云盘的布局是
+     * {@code /mnt/drive/Public}（公共）+ {@code /mnt/drive/<username>}（各人私有），
+     * 由容器启动时的初始化脚本创建，见 {@code PodmanComputer#setupUserAndDrive()}。
+     */
+    protected Path driveRoot() {
         String root = System.getenv().getOrDefault("AGENTSOFTWARE_DATA_DIR", "data");
-        return Paths.get(root, "drive", roleId()).toAbsolutePath();
+        return Paths.get(root, "drive").toAbsolutePath();
     }
 
     // ── 持久化 ──────────────────────────────────────────────────

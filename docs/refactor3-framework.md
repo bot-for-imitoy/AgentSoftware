@@ -842,3 +842,20 @@ public class AgentSystem {
   生成策略：有 API Key 时用**独立 LLM + 独立 Context** 让模型按固定 JSON 生成（不污染 HR 角色自己的对话上下文），
   无 Key / 解析失败时退回本地确定性生成，保证工具永远产出合法档案。
   重新引入了 `role.RoleFactory`（此前 B8 删除）作为生成器。
+
+- **电脑 = 容器：云盘全公司共享 + 每人在容器内有自己的账号**：
+  `data/computers/<role_id>` 挂到容器内 `/home/<username>`（`username` 取模板里的姓名拼音，缺省用 `role_id`）；
+  **一份**共享云盘 `data/drive` 挂到所有容器的 `/mnt/drive`。旧实现误按 `data/drive/<role_id>` 每角色挂一份，
+  于是 `/mnt/drive/Public` 根本不存在、各人看到的也不是同一个云盘。每次上电幂等地执行：
+  建用户（固定 uid = `1100 + 入组顺序`，见 `RolePool.addRole`）、加入 `sudo` 组并写
+  `/etc/sudoers.d/<username>`（`ALL=(ALL) NOPASSWD:ALL` 免密 sudo）、建好个人主目录并 chown、
+  建 `/mnt/drive/Public`（777）与 `/mnt/drive/<username>`（归属本人；CEO 额外接管 `Public`，对齐 master）。
+  `podman exec` 一律带 `--user <username>`（不再以 root 跑角色的命令）。挂载对不上的旧容器由
+  `podman inspect` 判定后在上电时自动重建（挂载无法就地修改）。
+  `AGENTSOFTWARE_COMPUTER_KIND=local` 时没有容器可挂载，改为把 `/mnt/drive` 路径映射到宿主机的
+  `data/drive` 并建出 `Public` + 本人目录；本地模式不动宿主机 sudoers。
+
+- **角色输出全部进日志**：任务输入、每轮 assistant 文本、`reasoning`、`tool`（含 args 与 result）、`answer`
+  都按 INFO 打印且**不截断**（`journal` 走 DEBUG，默认看不到）；模型给出非法 JSON 参数时也完整打印原文。
+  `run_command` 回喂给模型的结果仍受工具自己的 `maxChars` 预算约束（默认 20000），这是上下文预算而非日志截断。
+

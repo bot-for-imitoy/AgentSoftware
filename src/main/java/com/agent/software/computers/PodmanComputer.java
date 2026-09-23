@@ -37,6 +37,12 @@ public class PodmanComputer extends Computer {
         if (isOn()) {
             return;
         }
+        // 旧容器可能是按"每角色一个云盘目录 / 没有个人用户"的老逻辑建的：挂载改不了，只能重建。
+        if (exists() && mountsAreStale()) {
+            logger.info("PodmanComputer[{}] container {} has stale mounts; recreating it",
+                    roleId(), containerName);
+            destroy();
+        }
         if (!exists()) {
             createContainer();
         }
@@ -44,7 +50,10 @@ public class PodmanComputer extends Computer {
         ison = r.exit == 0;
         if (!ison) {
             logger.warn("PodmanComputer[{}] powerOn failed: {}", roleId(), r.output);
+            return;
         }
+        // 每次上电都幂等地补齐：容器内用户（含免密 sudo）、个人主目录、云盘目录
+        setupUserAndDrive();
     }
 
     @Override
@@ -65,27 +74,27 @@ public class PodmanComputer extends Computer {
 
     @Override
     public String runCommand(String command, int timeout, int maxChars) {
-        return pod(null, "exec", containerName, "bash", "-lc", command);
+        return pod(null, "exec", "--user", username(), containerName, "bash", "-lc", command);
     }
 
     @Override
     public String readFile(String path) {
-        return pod(null, "exec", containerName, "cat", path);
+        return pod(null, "exec", "--user", username(), containerName, "cat", path);
     }
 
     @Override
     public void writeFile(String path, String content) {
-        pod(content, "exec", "-i", containerName, "tee", path);
+        pod(content, "exec", "-i", "--user", username(), containerName, "tee", path);
     }
 
     @Override
     public String listDir(String path) {
-        return pod(null, "exec", containerName, "ls", "-la", path);
+        return pod(null, "exec", "--user", username(), containerName, "ls", "-la", path);
     }
 
     @Override
     public void deleteFile(String path) {
-        pod(null, "exec", containerName, "rm", "-f", path);
+        pod(null, "exec", "--user", username(), containerName, "rm", "-f", path);
     }
 
     private boolean exists() {
@@ -112,7 +121,7 @@ public class PodmanComputer extends Computer {
     private void createContainer() {
         try {
             java.nio.file.Files.createDirectories(hostDir());
-            java.nio.file.Files.createDirectories(driveDir());
+            java.nio.file.Files.createDirectories(driveRoot());
         } catch (java.io.IOException e) {
             logger.warn("PodmanComputer[{}] cannot create host dirs", roleId(), e);
         }
@@ -121,13 +130,88 @@ public class PodmanComputer extends Computer {
         }
         List<String> cmd = new ArrayList<>(List.of("podman", "run", "-d", "--name", containerName));
         cmd.add("-v");
-        cmd.add(hostDir() + ":/home/agent");
+        cmd.add(hostDir() + ":" + workdir());            // 个人电脑目录 → 自己的主目录
         cmd.add("-v");
-        cmd.add(driveDir() + ":/mnt/drive");
+        cmd.add(driveRoot() + ":" + DRIVE_MOUNT);        // 全公司共享云盘 → /mnt/drive
         cmd.add(defaultImage());
         cmd.add("sleep");
         cmd.add("infinity");
-        exec(null, 300, cmd.toArray(new String[0]));
+        Exec r = exec(null, 300, cmd.toArray(new String[0]));
+        if (r.exit != 0) {
+            logger.warn("PodmanComputer[{}] podman run failed: {}", roleId(), r.output);
+        }
+    }
+
+    /**
+     * 幂等地在容器内建号并初始化云盘，每次上电都跑一遍：
+     *
+     * <ul>
+     *   <li>建用户 {@code <username>}（固定 uid、加入 sudo 组）并建好个人主目录；</li>
+     *   <li>写 {@code /etc/sudoers.d/<username>}，免密 sudo；</li>
+     *   <li>建 {@code /mnt/drive/Public}（777）与 {@code /mnt/drive/<username>}（归属本人）。</li>
+     * </ul>
+     */
+    private void setupUserAndDrive() {
+        String personal = DRIVE_MOUNT + "/" + driveDirName();
+        Exec r = exec(null, 120, "podman", "exec", containerName, "sh", "-c",
+                userSetupScript(username(), uid(), workdir()));
+        if (r.exit != 0) {
+            logger.warn("PodmanComputer[{}] in-container user setup failed: {}", roleId(), r.output);
+        }
+        r = exec(null, 120, "podman", "exec", containerName, "sh", "-c",
+                driveSetupScript(personal, uid(), "CEO".equalsIgnoreCase(roleId())));
+        if (r.exit != 0) {
+            logger.warn("PodmanComputer[{}] cloud drive setup failed: {}", roleId(), r.output);
+        } else {
+            logger.info("PodmanComputer[{}] ready: user={} uid={} home={} drive={}",
+                    roleId(), username(), uid(), workdir(), personal);
+        }
+    }
+
+    /**
+     * 容器内建号脚本（幂等）：建 sudo 组 → 建用户（固定 uid）→ 写免密 sudoers → 建主目录并 chown。
+     *
+     * <p>抽成静态纯函数是为了能在没有 podman 的环境里断言脚本内容。
+     */
+    static String userSetupScript(String user, int uid, String home) {
+        return "getent group sudo >/dev/null || groupadd sudo; "
+                + "id -u " + sh(user) + " >/dev/null 2>&1 || useradd -s /bin/bash -u " + uid
+                + " -G sudo " + sh(user) + "; "
+                + "mkdir -p /etc/sudoers.d; "
+                + "echo " + sh(user + " ALL=(ALL) NOPASSWD:ALL") + " > /etc/sudoers.d/" + sh(user) + "; "
+                + "chmod 440 /etc/sudoers.d/" + sh(user) + "; "
+                + "mkdir -p " + sh(home) + "; chown -R " + uid + ":" + uid + " " + sh(home);
+    }
+
+    /**
+     * 云盘初始化脚本（幂等）：建 {@code Public}（777）和本人目录（755、归属本人）；
+     * CEO 额外接管 {@code Public} 的所有权（对齐 master）。
+     */
+    static String driveSetupScript(String personal, int uid, boolean ceo) {
+        String script = "mkdir -p " + DRIVE_MOUNT + "/Public " + sh(personal) + "; "
+                + "chmod 777 " + DRIVE_MOUNT + "/Public; chmod 755 " + sh(personal) + "; "
+                + "chown " + uid + ":" + uid + " " + sh(personal);
+        if (ceo) {
+            script += "; chown " + uid + ":" + uid + " " + DRIVE_MOUNT + "/Public";
+        }
+        return script;
+    }
+
+    /**
+     * 已存在的容器挂的目录是否还是老逻辑那套。查不到（inspect 失败）时返回 false：
+     * 宁可少重建一次，也不要因为一次瞬时失败就把容器删掉。
+     */
+    private boolean mountsAreStale() {
+        Exec r = exec(null, 30, "podman", "inspect", containerName, "-f", "{{json .Mounts}}");
+        if (r.exit != 0) {
+            return false;
+        }
+        return !(r.output.contains(driveRoot().toString()) && r.output.contains(workdir()));
+    }
+
+    /** 单引号包裹，供容器内的 sh 解析（路径/内容里的单引号做转义）。 */
+    private static String sh(String s) {
+        return "'" + (s == null ? "" : s.replace("'", "'\\''")) + "'";
     }
 
     private String pod(String stdin, String... args) {

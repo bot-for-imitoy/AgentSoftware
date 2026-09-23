@@ -19,6 +19,8 @@ public final class RolePool extends UUIDObjectManager<Role> {
     private static final Logger logger = LoggerFactory.getLogger(RolePool.class);
 
     private AgentSystem agentSystem;
+    /** 容器内 uid 分配序号：1100 + 入组顺序（对齐 master RolePool.addRole）。 */
+    private int uidCounter = 0;
 
     public RolePool() {
     }
@@ -39,9 +41,13 @@ public final class RolePool extends UUIDObjectManager<Role> {
         if (find(r.roleId) != null) {
             throw new IllegalStateException("role already in cohort: " + r.roleId);
         }
+        // 容器内 uid：模板没给就按入组顺序分配，保证同一员工的云盘/主目录归属稳定
+        if (r.uid < 1100) {
+            r.uid = 1100 + (++uidCounter);
+        }
         r.bind(agentSystem);
         add(r);
-        logger.info("RolePool: {} joined the cohort", r.roleId);
+        logger.info("RolePool: {} joined the cohort (uid={})", r.roleId, r.uid);
     }
 
     public boolean removeRole(String roleId) {
