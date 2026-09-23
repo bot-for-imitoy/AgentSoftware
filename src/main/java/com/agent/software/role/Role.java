@@ -841,24 +841,125 @@ public final class Role extends UUIDObject implements Data {
         return kind;
     }
 
+    /**
+     * 组装角色的 System Prompt。
+     *
+     * <p>对齐 master {@code AgentRole.buildSystemPrompt()} / refactor2 {@code SystemPrompt.build()}：
+     * 人设 + 当前时间 + 云盘/Git/邮件规则 + talk 范围 + 模板里的 {@code system_prompt_extra}。
+     *
+     * <p>注意：refactor3 首版这里只剩"人设三行"，把上面这些全丢了。最要命的是
+     * {@code system_prompt_extra} 从未注入 —— 54 个模板里有 52 个带这个字段，CEO/COO/HR/CTO/
+     * business_analyst 的**完整工作流定义**（谁向谁要什么、走什么流程）都在里面，
+     * 不进提示词角色自然不知道自己该干活、该找谁。
+     */
     private String buildSystemPrompt() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are ").append(name).append(" (").append(roleId).append(")");
-        if (title != null && !title.isBlank()) {
-            sb.append(", ").append(title);
-        }
-        sb.append(" in group \"").append(group).append("\".\n");
+        List<String> parts = new ArrayList<>();
+        String shownTitle = title == null || title.isBlank() ? roleId : title;
+        parts.add("You are " + name + ", your title is " + shownTitle
+                + ", working as the " + roleId + " role.");
         if (responsibilities != null && !responsibilities.isBlank()) {
-            sb.append("Responsibilities: ").append(responsibilities).append('\n');
+            parts.add("Responsibilities: " + sentence(responsibilities));
         }
         if (personality != null && !personality.isBlank()) {
-            sb.append("Personality: ").append(personality).append('\n');
+            parts.add("Personality: " + sentence(personality));
         }
         if (!skills.isEmpty()) {
-            sb.append("Skills: ").append(String.join(", ", skills)).append('\n');
+            parts.add("Skills: " + String.join(", ", skills) + ".");
         }
-        sb.append("Work only through the provided tools and report results concisely.");
-        return sb.toString();
+        parts.add(clockLine());
+        parts.add("If you currently have no task, you may directly rest. "
+                + "Also note: do not send messages to others when you should not be disturbing them; "
+                + "only send when necessary. So when you have no task, do not ask others anything, "
+                + "just rest. You will be notified automatically when something comes up. "
+                + "After you finish a task, report the completion to the colleague who assigned it, "
+                + "then rest.");
+        parts.add("If you have a task that involves communicating with someone, make sure to do it "
+                + "at the scheduled time — not early, not late — because the other party expects you "
+                + "to contact them at that time.");
+        parts.add("The company cloud drive is at /mnt/drive (every computer mounts the same shared folder):\n"
+                + "  - /mnt/drive/Public — public shared directory, readable and writable by all employees "
+                + "(put shared resources, announcements, and collaboration files here)\n"
+                + "  - /mnt/drive/" + username + " — your personal directory; only you can write to it; "
+                + "other employees have read-only access\n"
+                + "  - Other employees' personal directories are read-only for you as well\n"
+                + "Use the computer's file commands directly for file operations (ls / cat / cp / mv / rm, etc.); "
+                + "to share a file with a colleague: write it to Public, or send the cloud drive file path "
+                + "via the talk attachment parameter.");
+        parts.add("The company uses Git to manage project code (multi-person collaboration, multiple projects):\n"
+                + "  - Each project is one repository; code is kept in its own repository per project\n"
+                + "  - Run git commands on your personal computer (git clone / branch / add / commit / push / merge, etc.)\n"
+                + "  - After completing a feature: first git pull to get the latest code, commit "
+                + "(with a clear description of what and why), then push to merge into the main branch "
+                + "or open a merge request\n"
+                + "  - When collaborating with others on the same project, sync the latest code first (git pull) "
+                + "to avoid conflicts; when a conflict occurs, communicate with the relevant colleagues "
+                + "before merging\n"
+                + "  - The main branch must always remain usable; do not force-overwrite others' code "
+                + "without permission\n"
+                + "For changes that need collaboration with colleagues, discuss the division of work first, "
+                + "then commit and merge.");
+        parts.add("Company email: every employee has a company mailbox, and employees communicate via email "
+                + "(send_email to send / read_mail to receive).");
+        if (group != null && !group.isBlank()) {
+            parts.add("You belong to the " + group + ", and your company email is " + mailAddress() + ". "
+                    + "Colleague communication rules: the talk tool can only message members of your own group "
+                    + "(quick in-group communication); communication with colleagues in other groups "
+                    + "(other teams, release management, leadership, etc.) must use email "
+                    + "(send_email to send, read_mail to check the inbox).");
+        }
+        String extra = employee == null ? "" : employee.templateString("system_prompt_extra", "");
+        if (extra != null && !extra.isBlank()) {
+            parts.add(extra);
+        }
+        parts.add("Work only through the provided tools and report results concisely.");
+        return String.join("\n", parts);
+    }
+
+    /** 当前日期 / 班次 / 时钟语义：让角色知道今天是第几天、几点、工期多长。 */
+    private String clockLine() {
+        if (system == null || system.getTimeBus() == null) {
+            return "The simulated clock is not available yet.";
+        }
+        var tb = system.getTimeBus();
+        // SHIFT_START_SECONDS 在 TimeBus 里是 private 常量（08:00），这里按同一基准换算
+        long shiftStartSeconds = 8L * 3600L;
+        long shiftEndSeconds = shiftStartSeconds + tb.getShiftEndTick();
+        return "Today is " + tb.currentDate() + " (day " + tb.getDay() + "), company shift "
+                + hhmm(shiftStartSeconds) + "–" + hhmm(shiftEndSeconds)
+                + " (1 tick = 1 simulated second, tick 0 of the shift = " + hhmm(shiftStartSeconds) + "). "
+                + "Current simulated time: " + tb.currentDateTime() + ".";
+    }
+
+    private static String hhmm(long seconds) {
+        return java.time.LocalTime.MIDNIGHT.plusSeconds(Math.floorMod(seconds, 86_400L)).toString();
+    }
+
+    /** 模板里的句子多数自带句号，拼接时避免出现 ".."。 */
+    private static String sentence(String s) {
+        String t = s.strip();
+        if (t.isEmpty()) {
+            return t;
+        }
+        char last = t.charAt(t.length() - 1);
+        return switch (last) {
+            case '.', '!', '?', '。', '！', '？' -> t;
+            default -> t + ".";
+        };
+    }
+
+    /** 提示词里展示的公司邮箱；查不到时退化成 username@company.local。 */
+    private String mailAddress() {
+        if (system != null && system.getMailService() != null && roleId != null && !roleId.isBlank()) {
+            try {
+                String address = system.getMailService().getAddress(roleId);
+                if (address != null && !address.isBlank()) {
+                    return address;
+                }
+            } catch (Exception e) {
+                logger.debug("Role[{}] mail address lookup failed", roleId, e);
+            }
+        }
+        return (username == null || username.isBlank() ? roleId : username) + "@company.local";
     }
 
     @Override
