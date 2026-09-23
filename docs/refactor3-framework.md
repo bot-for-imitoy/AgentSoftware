@@ -705,9 +705,11 @@ public class AgentSystem {
 
 ### 3.12 业务 toolkit
 
-**保留**：`client`（角色→客户 `talk_to_client`）、`email`、`mcp/McpManager`、`pc/Pc`、`skill/Skill`、`talk/Talk`、`taskview/TaskView`、`time/Time`。
-**新增**：`staffing/Staffing`（COO 专用：`draft_in/draft_out/list_employees/list_active`）。
-**暂缓/删除**：`hr/Hr`（招聘）、`memory/Memory`、`note/Note`、`todo/Todo`、`hermes/Hermes`。
+**保留**：`client`（角色→客户 `talk_to_client`）、`email`、`mcp/McpManager`、`pc/Pc`、`skill/Skill`、`talk/Talk`、`time/Time`。
+**新增**：`staffing/Staffing`（COO 专用：`draft_in/draft_out/list_employees/list_active`）、
+`task/Task`（原 `taskview/TaskView`，见 §9：`my_tasks` + `create_task/list_tasks/update_task/delete_task` 增删改查）、
+`note/Note`（`write_note/read_note/edit_note/delete_note/list_notes`，见 §9）。
+**暂缓/删除**：`hr/Hr` 曾被删又回归（见 §9）、`memory/Memory`、`todo/Todo`、`hermes/Hermes`。
 
 ---
 
@@ -769,7 +771,7 @@ public class AgentSystem {
 - **event**：`EventType`、`Priority`、`Event`、`Task extends Event`、`TimeBus`、`EventBus`
 - **role**：`RoleState`、`MembershipState`、`Employee`、`CompanyRoster`、`Role`、`RolePool`、`Staffing`
 - **llm**：`Message` + `UserMessage`/`AssistantMessage`/`ToolMessage`（独立文件）、`Context`、`Response`（独立文件）、`LLM`、`OpenAICompatLLM`
-- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 9 个工具包（time/taskview/pc/mcp/skill/email/client/talk/staffing）
+- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 11 个工具包（time/task/note/pc/mcp/skill/email/client/talk/staffing/hr）
 - **computers**：`Computer`、`MCPServer`（stdio JSON-RPC）、`PodmanComputer`、`LocalComputer`、`ComputerManager`
 - **io/client/mail/web**：`Input`/`StdInput`/`WebInput`、`Client`/`ClientChannel`、`MailService`(abstract)/`VirtualMailService`、`ChatStore`/`ChatWebServer`
 - **store**：`JsonStore`、`RoleTemplateStore`、`ToolkitConfig`；`ConfigStore` 适配新 `Json`
@@ -786,6 +788,11 @@ public class AgentSystem {
 | `ClientChannel.setTalkSink(BiConsumer<String,String>)` | 客户 → 角色的口信要变成给目标角色的 `TALK` 事件；`ClientChannel` 拿不到 `EventBus`，用一个投递口接线（`AgentSystem` 注入） |
 | `ClientChannel.isAwaiting()` | `/api/state` 要区分"有角色正在等客户回复"和"客户自己开着会话"，UI 据此提示 |
 | `Employee.inGroup/templateString/templateList`、`CompanyRoster.add`、`JsonStore.of`、`VirtualMailService.stats` | 数据访问/构建辅助 |
+| `AgentSystem.getDataDir()` | 角色的笔记要落在本实例的 dataDir 下（`<dataDir>/notes/<role_id>`），Role 需要拿到它；原来只有包内可见的 `dataDir()` |
+| `Role.noteStore()` | 笔记库按角色持有，note 工具包通过它取（懒创建，测试可注入临时目录） |
+| `Role.pendingEvents()` / `Role.taskHistory(int)` | `my_tasks` 要列出整个队列 + 最近任务历史（含状态与 token）；原来只能 `peekEvent()` 看队首，任务"静默失败"时无人可见 |
+| `EventBus.schedule/cancel/scheduled` 之上的 task 工具 | 排期任务增删改查：`update_task` 用 `cancel(id)` + `schedule(e)` 重新挂键（`targetTime` 是 TreeMap 的 key，改了必须摘下再挂回），因此 `EventBus` 本身不需要新 API |
+| `Toolkits` 配置名 `task`（兼容旧名 `task_view`） | `taskview/TaskView` 按需求更名为 `task/Task`；`data/toolkits.default.json` 同步改键，旧配置仍能加载 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
 
@@ -801,15 +808,23 @@ public class AgentSystem {
 
 ### 8.5 仍暂缓
 
-`NoteStore`/`TodoStore`/`StateStore`、`SMTPMailService`、`SSHComputer`、provider 目录（已删）、每日总结（改为 `Context.forgetAll()`）。
+`TodoStore`/`StateStore`、`SMTPMailService`、`SSHComputer`、provider 目录（已删）、每日总结（改为 `Context.forgetAll()`）。
+（`NoteStore` 与 note 工具包已按需求补回，见 §9；`todo` 仍未做 —— 排期类需求由 `task` 工具包承担。）
 
 ---
 
 ## 9. 运行行为补充（后续迭代）
 
-- **无任务自动暂停**：`AgentSystem` 只有在"确实还有后续工作"时才允许时钟快进；判据
-  `hasFutureWork()` = 有排期事件 ∨ 有下班暂存事件 ∨ 有角色队列待处理项（三者缺一不可，否则"事件已投递但 worker 还没取走"会被误判成没活）。
+- **无任务自动暂停 + 认班次边界**：`AgentSystem` 只有在"确实还有后续工作"时才允许时钟快进；判据
+  `hasFutureWork()` = 有排期事件 ∨ 有下班暂存事件 ∨ 有角色队列待处理项 ∨ **当前不在上班时段**
+  （前三者缺一不可，否则"事件已投递但 worker 还没取走"会被误判成没活）。
   全员 `IDLE` 且无后续工作时，`onTick` 直接调用 `pause()`（冻结时钟），外部 `resume()` 可恢复。
+  ⚠️ 最后那一条是必须的：`TimeBus.nextStop()` 本来就会把时钟跳到下一个班次边界并在那里发
+  `SHIFT_START`，但"下一个边界"不算 future work 时，日终（全员 IDLE、没有排期）会被判成
+  **永远没活了** → 时钟停在当天，`resume()` 只前进 1 秒就再次暂停，永远走不到第二天
+  （实测 2026-09-23 18:09 就这么永久停住，`imitoy` 的日志里能看到连点 4 次 resume 都被弹回）。
+  反过来，**上班时段**内空闲又没有排期时不认边界：那种情况说明公司在等外部输入（客户回信/人的操作），
+  必须继续暂停，否则时钟会一路快进到 18:00，把当天剩下的半天直接跳过去（10:32 等客户确认那次就是这种合法暂停）。
 - **工具循环上下文**：每轮带 `tool_calls` 的 assistant 消息必须先写回 `Context`，再回喂 tool 结果；
   否则下一轮只有 `tool` 结果、没有对应的 `function_call`，部分网关（实测 Hanseq）会因
   `function_call_output requires item_reference ids matching each call_id` 返回 400。
@@ -895,6 +910,27 @@ public class AgentSystem {
   - UI：输入框上方新增 `#clientBar`（选人下拉 + 口头/邮件切换 + End chat），由 `/api/talk`、
     `/api/client_mail`、`/api/client_end` 支撑；`/api/state.clientTalk.waiting` 让界面区分
     "有人在等你回复" 和 "你开着会话"。
+
+- **note 工具包（笔记 = 角色的长期记忆）**：`store/NoteStore` 把每条笔记落成
+  `<dataDir>/notes/<role_id>/notes/<title>.md`（标题会被清洗成合法文件名：非法字符→`_`、
+  去掉首尾点/下划线、去掉多写的 `.md`，所以 `../../etc/passwd` 只会变成一条普通笔记）。
+  工具是 `write_note / read_note / edit_note / delete_note / list_notes`（增删改查，同名覆盖）。
+  为什么必须有它：`Context.forgetAll()` 每天下班把对话移出 prompt，跨天要记住的事只能落到笔记。
+  笔记**不做提醒**——"未来某时刻要做什么"是 `task` 工具包的事，两者职责不重叠。
+
+- **task 工具包（原 `taskview`，排期任务的增删改查）**：包名 `tools/toolkits/task`，
+  工具包名 `task`（配置名同步改；旧名 `task_view` 仍被 `Toolkits` 接受），工具：
+  - `create_task(content, in_minutes | day+tick, target?, priority?)`：把一条 `Task` 排到未来某刻
+    （`EventBus.schedule`）。到点后正常投递到目标角色队列，把对方唤醒。tick 是班次内秒数
+    （0 = 08:00，36000 = 18:00）；只给 `tick` 且今天已过就顺延到明天，显式给了 `day` 而时间已过则报错。
+  - `list_tasks(scope)`：`mine`（默认，派给我的）/ `created`（我建的）/ `all` —— 只看**还没到点**的排期表。
+  - `update_task(task_id, content?/priority?/target?/时间?)`、`delete_task(task_id)`：只对"还没到点"的任务生效，
+    权限是创建者 / 被指派者 / 管理组。改时间用 `cancel(id)` + `schedule(e)` 重新挂键。
+  - `my_tasks(scope)`：队列里已投递的（`Role.pendingEvents()`）+ 最近完成/失败历史
+    （`Role.taskHistory(int)`，含状态与 token）。
+  跨组派活沿用 talk 规则（同组可以，跨组只有管理组可以），未进组的"假死"员工不能派活。
+  这是给"角色自己安排未来工作"补上的缺环：以前没有任何工具能造出未来事件，于是全员
+  `take_rest` 之后 `hasFutureWork()` 必然为假、公司只能靠人手动 resume。
 
 
 

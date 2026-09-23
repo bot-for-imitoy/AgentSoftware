@@ -8,7 +8,7 @@ import java.util.Map;
  * 默认工具集配置：
  * <pre>
  * {
- *   "default_toolkits": ["time", "task_view", ...],
+ *   "default_toolkits": ["time", "task", "note", ...],
  *   "by_group": { "Leadership Group": [...] },
  *   "by_role":  { "COO": [...] }
  * }

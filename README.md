@@ -294,7 +294,7 @@ console output.
 │ AgentRole's personal computer (podman container)             │
 │  · MCP servers run inside the container (podman exec)        │
 │  · default MCP group file_ops auto-installed at role setup   │
-│  · tools: notes/time/todo/taskview/pc/mcp/skill/email/talk…  │
+│  · tools: notes/time/task/pc/mcp/skill/email/talk…           │
 │  · talk (same group) / email (cross group) / talk_to_client  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -361,10 +361,10 @@ OpenAI-style function schemas. `Toolkits.defaultToolkits(role)` auto-assembles f
 | Toolkit | Tools | Purpose |
 |---|---|---|
 | `memory.Memory` | `summary` | end-of-day summary (memory + triggers power-off) |
-| `note.Note` | `write_note` `edit_note` `list_notes` `read_note` `delete_note` | notes; `write_note` with a reminder = scheduled event |
+| `note.Note` | `write_note` `read_note` `edit_note` `delete_note` `list_notes` | the role's own markdown notes, kept across days (refactor3: no reminder — scheduling is `task`) |
 | `time.Time` | `get_time` `take_rest` | work-rest schedule |
 | `todo.Todo` | `todo_add` `todo_list` `todo_update` `todo_delete` | personal todo list |
-| `taskview.TaskView` | `my_tasks` | the role's task queue + history |
+| `task.Task` | `my_tasks` `create_task` `list_tasks` `update_task` `delete_task` | the role's task queue + history, and CRUD over future scheduled tasks |
 | `pc.Pc` | `run_command` `computer_status` `lan_devices` `reboot` | operations on its own computer |
 | `mcp.McpManager` | `mcp_search` `mcp_list` `mcp_add` `mcp_remove` `mcp_my_tools` | self-service MCP tool management |
 | `skill.Skill` | `skill_search` `skill_list` `skill_add` `skill_remove` `skill_my_skills` | SKILL.md skill library |

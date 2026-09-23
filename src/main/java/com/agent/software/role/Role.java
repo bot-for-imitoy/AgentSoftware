@@ -11,6 +11,7 @@ import com.agent.software.llm.LLM;
 import com.agent.software.llm.OpenAICompatLLM;
 import com.agent.software.llm.Response;
 import com.agent.software.llm.context.Context;
+import com.agent.software.store.NoteStore;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.ToolResult;
 import com.agent.software.tools.Toolkit;
@@ -22,6 +23,7 @@ import com.agent.software.web.ChatStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -55,6 +57,8 @@ public final class Role extends UUIDObject implements Data {
     private static final int MAX_TOOL_ROUNDS = 20;
     /** 连续多少轮工具失败就放弃（错误已回喂，给模型几次自我纠正的机会，避免无限烧 token）。 */
     private static final int MAX_FAILING_ROUNDS = 3;
+    /** 最近任务历史保留条数（供 my_tasks 查看）。 */
+    private static final int TASK_HISTORY_LIMIT = 100;
 
     // ── 配置（从 Employee.template 构建；非 final，见报备项 B1）──
     public String roleId;
@@ -75,12 +79,15 @@ public final class Role extends UUIDObject implements Data {
     private Context context;
     private LLM llm;
     private Computer computer;
+    private NoteStore noteStore;
     private boolean setupDone = false;
     private volatile boolean running = false;
     private Thread worker;
 
     private final List<Toolkit> toolkits = new CopyOnWriteArrayList<>();
     private final List<String> journal = new CopyOnWriteArrayList<>();
+    /** 最近处理完的任务（成功/失败都留痕，供 my_tasks 查看 —— 任务静默失败过一次）。 */
+    private final List<Task> taskHistory = new CopyOnWriteArrayList<>();
 
     // 优先级队列：同优先级按入队序号 FIFO
     private record Slot(long seq, Event event) {
@@ -205,6 +212,42 @@ public final class Role extends UUIDObject implements Data {
             return queue.size();
         } finally {
             queueLock.unlock();
+        }
+    }
+
+    /** 队列快照，按 worker 的取用顺序（优先级高在前，同优先级 FIFO）。 */
+    public List<Event> pendingEvents() {
+        queueLock.lock();
+        try {
+            List<Slot> slots = new ArrayList<>(queue);
+            slots.sort(Comparator.comparingInt((Slot s) -> -s.event().priority.value)
+                    .thenComparingLong(Slot::seq));
+            List<Event> out = new ArrayList<>(slots.size());
+            for (Slot s : slots) {
+                out.add(s.event());
+            }
+            return out;
+        } finally {
+            queueLock.unlock();
+        }
+    }
+
+    /** 最近处理完的任务（新的在前，最多 limit 条）。 */
+    public List<Task> taskHistory(int limit) {
+        List<Task> all = List.copyOf(taskHistory);
+        if (limit <= 0 || all.size() <= limit) {
+            return all;
+        }
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    private void rememberTask(Task t) {
+        if (t == null || !t.isFinished()) {
+            return;
+        }
+        taskHistory.add(t);
+        while (taskHistory.size() > TASK_HISTORY_LIMIT) {
+            taskHistory.remove(0);
         }
     }
 
@@ -333,6 +376,19 @@ public final class Role extends UUIDObject implements Data {
         if (llm != null && context != null) {
             llm.setContext(context);
         }
+    }
+
+    /**
+     * 本角色的笔记库（{@code <dataDir>/notes/<roleId>}，懒创建）。
+     *
+     * <p>上下文每天下班会被清出 prompt，所以"跨天要记住的事"必须落到笔记里。
+     */
+    public synchronized NoteStore noteStore() {
+        if (noteStore == null) {
+            Path base = system == null ? null : system.getDataDir();
+            noteStore = new NoteStore(base == null ? null : base.resolve("notes"), roleId);
+        }
+        return noteStore;
     }
 
     // ── 工具 ────────────────────────────────────────────────────
@@ -819,6 +875,7 @@ public final class Role extends UUIDObject implements Data {
             task.markFailed("task error: " + ex.getMessage());
             recordAnswer(task.result, task.uuid, task.status, tokens);
         } finally {
+            rememberTask(task);
             setState(RoleState.IDLE);
         }
     }
@@ -937,6 +994,18 @@ public final class Role extends UUIDObject implements Data {
                 + "then commit and merge.");
         parts.add("Company email: every employee has a company mailbox, and employees communicate via email "
                 + "(send_email to send / read_mail to receive).");
+        parts.add("Personal notes and scheduled tasks:\n"
+                + "  - Notes (write_note / read_note / edit_note / delete_note / list_notes) are your own "
+                + "long-term memory, stored as files that survive across days. Your conversation context "
+                + "is cleared every night, so anything you must still remember tomorrow (decisions, file "
+                + "paths, who owes what, progress made) has to be written into a note.\n"
+                + "  - Tasks (create_task / list_tasks / update_task / delete_task / my_tasks) let you "
+                + "schedule work for a later simulated time (in_minutes, or day + tick where tick 0 = "
+                + "08:00 and 36000 = 18:00). When something must happen later — a follow-up, a deadline "
+                + "reminder, handing work to the next shift — schedule a task instead of resting and "
+                + "waiting in a loop: the task wakes the assignee when it is due. list_tasks shows what "
+                + "is scheduled but not due yet; my_tasks shows what is already in your queue plus how "
+                + "your recent tasks ended.");
         if (group != null && !group.isBlank()) {
             parts.add("You belong to the " + group + ", and your company email is " + mailAddress() + ". "
                     + "Colleague communication rules: the talk tool can only message members of your own group "

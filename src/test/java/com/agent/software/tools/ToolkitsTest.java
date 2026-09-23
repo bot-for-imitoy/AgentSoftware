@@ -27,7 +27,8 @@ class ToolkitsTest {
     void defaultSetContainsCoreToolkits() {
         List<String> names = names(role("architect", "Architecture & Release Group"));
         assertTrue(names.contains("time"), names.toString());
-        assertTrue(names.contains("task_view"));
+        assertTrue(names.contains("task"));
+        assertTrue(names.contains("note"));
         assertTrue(names.contains("pc"));
         assertTrue(names.contains("mcp_manager"));
         assertTrue(names.contains("skill"));

@@ -11,7 +11,7 @@ public final class Text {
     private Text() {
     }
 
-    /** CamelCase → snake_case（TaskView → task_view，McpManager → mcp_manager）。 */
+    /** CamelCase → snake_case（TaskToolkit → task_toolkit，McpManager → mcp_manager）。 */
     public static String snakeCase(String name) {
         if (name == null || name.isEmpty()) {
             return "";

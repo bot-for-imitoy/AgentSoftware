@@ -163,6 +163,33 @@ class AgentSystemTest {
         }
     }
 
+    /**
+     * 下班后（18:00 之后）全员空闲又没有排期：时钟应快进到第二天 08:00 的 SHIFT_START，
+     * 而不是像以前那样在当天永久暂停（2026-09-23 18:09 就是这么停死的）。
+     */
+    @Test
+    void fastForwardsAcrossTheShiftBoundaryInsteadOfPausing(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            for (Role r : system.getRolePool().all()) {
+                r.setLlm(new FakeLlm());   // 第二天开工的任务要能瞬间跑完
+            }
+            system.getTimeBus().setNow(system.getTimeBus().getShiftEndTick() + 500);
+            assertEquals(1, system.getTimeBus().getDay(), "起点仍是第一天");
+
+            system.start();
+
+            long deadline = System.currentTimeMillis() + 8_000;
+            while (System.currentTimeMillis() < deadline && system.getTimeBus().getDay() < 2) {
+                Thread.sleep(50);
+            }
+            assertTrue(system.getTimeBus().getDay() >= 2,
+                    "应跨过班次边界走到第二天，而不是停在 " + system.getTimeBus().currentDateTime());
+        } finally {
+            system.stop();
+        }
+    }
+
     /** 立即返回的假 LLM，避免测试里真的发 HTTP。 */
     private static final class FakeLlm extends com.agent.software.llm.LLM {
         @Override

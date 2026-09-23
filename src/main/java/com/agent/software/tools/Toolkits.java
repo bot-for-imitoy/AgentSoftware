@@ -8,11 +8,12 @@ import com.agent.software.tools.toolkits.email.Email;
 import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.mcp.McpManager;
+import com.agent.software.tools.toolkits.note.Note;
 import com.agent.software.tools.toolkits.pc.Pc;
 import com.agent.software.tools.toolkits.skill.Skill;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.tools.toolkits.staffing.StaffingToolkit;
-import com.agent.software.tools.toolkits.taskview.TaskView;
+import com.agent.software.tools.toolkits.task.Task;
 import com.agent.software.tools.toolkits.time.Time;
 
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ public final class Toolkits {
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     private static final List<String> DEFAULT_NAMES =
-            List.of("time", "task_view", "pc", "mcp_manager", "skill", "email");
+            List.of("time", "task", "note", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
@@ -47,7 +48,9 @@ public final class Toolkits {
         for (String name : names) {
             switch (name) {
                 case "time" -> out.add(new Time(role));
-                case "task_view" -> out.add(new TaskView(role));
+                // "task_view" 是旧名字，配置里可能还留着，一起认
+                case "task", "task_view" -> out.add(new Task(role));
+                case "note" -> out.add(new Note(role));
                 case "pc" -> out.add(new Pc(role));
                 case "mcp_manager" -> out.add(new McpManager(role, mcp));
                 case "skill", "skill_manager" -> out.add(new Skill(role, skill));
