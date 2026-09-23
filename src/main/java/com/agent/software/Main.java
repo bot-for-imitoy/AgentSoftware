@@ -19,6 +19,8 @@ public class Main {
         for (Role r : system.getRolePool().all()) {
             System.out.println("  - " + r.roleId + " | " + r.name + " | " + r.group);
         }
+        System.out.println("Config file: " + system.getConfigStore().getPath()
+                + (java.nio.file.Files.exists(system.getConfigStore().getPath()) ? "" : "  (not found — create it with llm.api_key / llm.base_url / llm.model)"));
 
         final ChatWebServer[] webHolder = new ChatWebServer[1];
         try {

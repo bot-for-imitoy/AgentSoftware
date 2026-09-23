@@ -168,7 +168,7 @@ public class OpenAICompatLLM extends LLM {
         m.put("role", role);
         m.put("content", content == null ? "" : content);
         if (toolCalls != null && !toolCalls.isEmpty()) {
-            m.put("tool_calls", toolCalls);
+            m.put("tool_calls", normalizeToolCalls(toolCalls));
         }
         if (toolCallId != null && !toolCallId.isBlank()) {
             m.put("tool_call_id", toolCallId);
@@ -177,6 +177,27 @@ public class OpenAICompatLLM extends LLM {
             m.put("name", name);
         }
         return m;
+    }
+
+    /**
+     * 回喂时补齐 tool_call 的 id：有的网关返回 {@code call_id} 而不是 {@code id}，
+     * 直接回喂会让下一次请求因为 "call_id 与 item_reference 不匹配" 被 400 拒掉。
+     */
+    private static List<Map<String, Object>> normalizeToolCalls(List<Map<String, Object>> calls) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> call : calls) {
+            Map<String, Object> copy = new LinkedHashMap<>(call);
+            Object id = copy.get("id");
+            if (id == null || String.valueOf(id).isBlank()) {
+                Object callId = copy.get("call_id");
+                if (callId != null && !String.valueOf(callId).isBlank()) {
+                    copy.put("id", callId);
+                }
+            }
+            copy.putIfAbsent("type", "function");
+            out.add(copy);
+        }
+        return out;
     }
 
     private List<Map<String, Object>> toolSpecs() {

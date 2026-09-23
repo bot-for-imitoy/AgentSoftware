@@ -62,6 +62,8 @@ public class AgentSystem {
     private final ToolkitConfig toolkitConfig;
 
     private volatile boolean onDuty = false;
+    /** 已经因为"没有后续任务"自动暂停过，避免重复触发。 */
+    private volatile boolean autoPaused = false;
 
     public AgentSystem() {
         this(null, new StdInput());
@@ -76,7 +78,7 @@ public class AgentSystem {
         this.chatStore = new ChatStore();
         this.mcpManager = new MCPManager();
         this.skillManager = new SkillManager(this.dataDir.resolve("skills").toString());
-        this.configStore = new ConfigStore(this.dataDir.resolve("config.json"));
+        this.configStore = new ConfigStore(resolveConfigFile(this.dataDir));
         this.input = input == null ? new StdInput() : input;
         this.mailService = MailService.create(MailConfig.fromEnv(), this.dataDir);
         this.clientChannel = new ClientChannel(
@@ -90,7 +92,7 @@ public class AgentSystem {
         eventBus.bind(this, timeBus);
         timeBus.addTickListener(tb -> eventBus.tick(tb.now()));
         timeBus.addTickListener(this::onTick);
-        timeBus.setIdleChecker(this::allRolesIdle);
+        timeBus.setIdleChecker(this::canFastForward);
         timeBus.setNextStopProvider(() -> {
             Event next = eventBus.nextDue();
             return next == null ? null : next.targetTime;
@@ -187,6 +189,7 @@ public class AgentSystem {
     }
 
     public void resume() {
+        autoPaused = false;
         timeBus.resume();
         logger.info("AgentSystem resumed");
     }
@@ -204,6 +207,33 @@ public class AgentSystem {
             }
         }
         return true;
+    }
+
+    /**
+     * 时间总线是否可以在空闲时快进：只有"确实还有后续工作可等"才快进。
+     * 没有后续工作时不快进（改为按真实时间走一格），由 {@link #onTick} 立即 pause。
+     */
+    private boolean canFastForward() {
+        return allRolesIdle() && hasFutureWork();
+    }
+
+    /**
+     * 是否还有后续工作：排期事件、下班暂存事件、或角色队列里的待处理项。
+     * 三个都要看 —— 事件一旦投递就从排期表移除，只看排期会因为"已投递但还没被 worker 取走"而误判。
+     */
+    private boolean hasFutureWork() {
+        if (eventBus.nextDue() != null) {
+            return true;
+        }
+        if (!eventBus.heldEvents().isEmpty()) {
+            return true;
+        }
+        for (Role r : rolePool.all()) {
+            if (r.queueDepth() > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 班次切换：由时间线程直调角色（不走事件队列）。 */
@@ -224,6 +254,13 @@ public class AgentSystem {
             }
             eventBus.post(shiftEvent(EventType.SHIFT_END, tb));
             logger.info("SHIFT_END at {}", tb.currentDateTime());
+        }
+
+        // 后续没有任何任务：停止推进时钟，等外部 resume()
+        if (allRolesIdle() && !hasFutureWork() && !autoPaused) {
+            autoPaused = true;
+            logger.info("No further tasks — auto-pausing at {}", tb.currentDateTime());
+            pause();
         }
     }
 
@@ -313,5 +350,29 @@ public class AgentSystem {
     /** 数据根目录（内部使用）。 */
     Path dataDir() {
         return dataDir;
+    }
+
+    /**
+     * 配置文件位置解析（API Key 等放这里）：
+     * <ol>
+     *   <li>优先 {@code $AGENTSOFTWARE_CONFIG_DIR/config.json} 或 {@code $XDG_CONFIG_HOME/AgentSoftware/config.json}
+     *       （通常是 {@code ~/.config/AgentSoftware/config.json}），由 {@link PathManager} 解析；</li>
+     *   <li>兼容旧位置 {@code <dataDir>/config.json}（仅当 XDG 那份不存在而它存在时）；</li>
+     *   <li>都没有时返回 XDG 路径作为默认落点，启动日志会打印。</li>
+     * </ol>
+     */
+    private static Path resolveConfigFile(Path dataDir) {
+        Path xdg = PathManager.createDefault().configFile("config.json");
+        if (Files.exists(xdg)) {
+            logger.info("Config file: {}", xdg);
+            return xdg;
+        }
+        Path local = dataDir.resolve("config.json");
+        if (Files.exists(local)) {
+            logger.info("Config file (legacy data dir): {}", local);
+            return local;
+        }
+        logger.info("Config file not found; default location is {}", xdg);
+        return xdg;
     }
 }

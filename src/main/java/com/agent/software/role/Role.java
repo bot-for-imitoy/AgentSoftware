@@ -217,7 +217,9 @@ public final class Role extends UUIDObject implements Data {
         }
         this.context = new Context();
         if (this.llm == null) {
-            this.llm = new OpenAICompatLLM(apiKey(), model(), system.getConfigStore());
+            // 传 null 让 OpenAICompatLLM 按 环境变量 > 配置文件 > 默认值 解析；
+            // 传死默认值会把 config.json 里的 llm.model / llm.api_key 顶掉。
+            this.llm = new OpenAICompatLLM(null, null, system.getConfigStore());
         }
         this.llm.setContext(this.context);
         this.llm.setSystemPrompt(buildSystemPrompt());
@@ -659,12 +661,18 @@ public final class Role extends UUIDObject implements Data {
                 }
                 if (!r.hasToolCalls()) {
                     answer = r.text == null ? "" : r.text;
+                    getLlm().appendAssistantMessage(answer);
                     break;
                 }
+                // 必须先把带 tool_calls 的 assistant 消息写回上下文：
+                // 否则下一轮只有 tool 结果、没有对应的 function_call，部分网关（如 Hanseq）
+                // 会因为 "function_call_output requires item_reference ids matching each call_id" 直接 400。
+                getLlm().appendAssistantMessage(r.text, r.toolCalls);
                 boolean failed = false;
                 for (Map<String, Object> call : r.toolCalls) {
-                    String callId = str(call.get("id"));
+                    String callId = toolCallId(call);
                     String toolName = toolName(call);
+                    logger.info("Role[{}] tool call: id={} name={}", roleId, callId, toolName);
                     Map<String, Object> args = toolArgs(call);
                     ToolResult res = invokeTool(toolName, args);
                     getLlm().appendToolResult(callId, toolName, res.text);
@@ -695,6 +703,15 @@ public final class Role extends UUIDObject implements Data {
 
     private static String str(Object o) {
         return o == null ? "" : String.valueOf(o);
+    }
+
+    /** 工具调用 id：不同网关有的给 id、有的给 call_id，取到哪个用哪个。 */
+    private static String toolCallId(Map<String, Object> call) {
+        String id = str(call.get("id"));
+        if (id.isBlank()) {
+            id = str(call.get("call_id"));
+        }
+        return id;
     }
 
     @SuppressWarnings("unchecked")
@@ -730,14 +747,6 @@ public final class Role extends UUIDObject implements Data {
             kind = System.getenv().getOrDefault("AGENTSOFTWARE_COMPUTER_KIND", "podman");
         }
         return kind;
-    }
-
-    private String apiKey() {
-        return System.getenv().getOrDefault("OPENAI_API_KEY", "");
-    }
-
-    private String model() {
-        return System.getenv().getOrDefault("OPENAI_MODEL", "gpt-4o-mini");
     }
 
     private String buildSystemPrompt() {

@@ -2,10 +2,12 @@ package com.agent.software;
 
 import com.agent.software.io.WebInput;
 import com.agent.software.role.Role;
+import com.agent.software.utils.Json;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -77,6 +79,62 @@ class AgentSystemTest {
             String result = talking.get(3, TimeUnit.SECONDS);
             assertTrue(result.contains("shift end"), result);
             assertTrue(system.getClientChannel().isFree(), "下班后客户通道要释放");
+        } finally {
+            system.stop();
+        }
+    }
+
+    @Test
+    void configIsReadFromConfiguredConfigDir(@TempDir Path cfgDir, @TempDir Path dataDir) {
+        System.setProperty("AGENTSOFTWARE_CONFIG_DIR", cfgDir.toString());
+        try {
+            Json.writeFile(cfgDir.resolve("config.json"),
+                    Map.of("llm", Map.of("model", "test-model", "base_url", "http://example.invalid")));
+
+            AgentSystem system = new AgentSystem(dataDir, new WebInput());
+            try {
+                assertEquals(cfgDir.resolve("config.json"), system.getConfigStore().getPath());
+                assertEquals("test-model", system.getConfigStore().get("llm.model", null));
+                assertEquals("http://example.invalid", system.getConfigStore().get("llm.base_url", null));
+            } finally {
+                system.stop();
+            }
+        } finally {
+            System.clearProperty("AGENTSOFTWARE_CONFIG_DIR");
+        }
+    }
+
+    @Test
+    void autoPausesWhenThereIsNoFurtherWork(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            system.start();
+            long deadline = System.currentTimeMillis() + 8_000;
+            while (System.currentTimeMillis() < deadline && !system.getTimeBus().isPaused()) {
+                Thread.sleep(50);
+            }
+            assertTrue(system.getTimeBus().isPaused(), "没有后续任务时应自动 pause");
+        } finally {
+            system.stop();
+        }
+    }
+
+    @Test
+    void doesNotPauseWhileATaskIsStillScheduled(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            // 排一个未来的事件：时钟应快进过去处理它，而不是在开局就 pause
+            system.getEventBus().schedule(com.agent.software.event.Event.builder()
+                    .to("CEO").type(com.agent.software.event.EventType.CUSTOM)
+                    .priority(com.agent.software.event.Priority.NORMAL)
+                    .at(5_000).content("later").build());
+            system.start();
+
+            long deadline = System.currentTimeMillis() + 6_000;
+            while (System.currentTimeMillis() < deadline && system.getTimeBus().now() < 5_000) {
+                Thread.sleep(50);
+            }
+            assertTrue(system.getTimeBus().now() >= 5_000, "应快进到排期事件的时间点");
         } finally {
             system.stop();
         }

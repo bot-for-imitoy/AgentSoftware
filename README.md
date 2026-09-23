@@ -7,6 +7,31 @@
 > 需求（名单/大组/抽调、甲方客户）见 **`docs/refactor3-requirements-2.md`**。
 > 下面正文描述的是 **`master` 分支的旧架构**（行为基线），仅作语义参照。
 
+## LLM 配置放在哪（API Key）
+
+启动时按以下顺序解析 `config.json`，**第一个存在的生效**（`Main` 启动会打印实际路径）：
+
+1. `$AGENTSOFTWARE_CONFIG_DIR/config.json`
+2. `$XDG_CONFIG_HOME/AgentSoftware/config.json` —— 默认即 **`~/.config/AgentSoftware/config.json`**
+3. 兼容旧位置：`data/config.json`（相对启动目录）
+
+内容格式：
+
+```json
+{
+  "llm": {
+    "base_url": "https://hhcoding.fun",
+    "api_key": "sk-...",
+    "model": "deepseek-v4.1-flash"
+  }
+}
+```
+
+- `base_url` 只写域名即可，客户端会自动补 `/v1`；已带路径（如 `/v1`）则原样使用。
+- **环境变量优先级高于配置文件**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`。
+- 数据目录（角色电脑、模板、技能）默认是启动目录下的 `data/`，可用 `AGENTSOFTWARE_DATA_DIR` 覆盖；
+  电脑类型默认 `podman`，无 podman 环境用 `AGENTSOFTWARE_COMPUTER_KIND=local`。
+
 A **multi-role AI agent "software company" simulator** written in Java (Maven, JUnit 5).
 A team of LLM-powered employees — CEO, COO, HR, team leads, developers, testers, security
 engineers, … — runs like a real company: it works on a **corporate shift clock**, reacts to

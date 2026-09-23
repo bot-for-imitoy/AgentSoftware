@@ -1,11 +1,11 @@
 FROM ubuntu:26.04
 
 # 阿里云 apt 镜像（先用 http 装 ca-certificates，之后切回 https）
-RUN sed -i 's|^URIs:.*|URIs: http://mirrors.aliyun.com/ubuntu/|' /etc/apt/sources.list.d/ubuntu.sources
+RUN sed -i 's|^URIs:.*|URIs: http://mirrors.bfsu.edu.cn/ubuntu/|' /etc/apt/sources.list.d/ubuntu.sources
 
 RUN apt update && apt install -y ca-certificates
 
-RUN sed -i 's|^URIs:.*|URIs: https://mirrors.aliyun.com/ubuntu/|' /etc/apt/sources.list.d/ubuntu.sources
+RUN sed -i 's|^URIs:.*|URIs: https://mirrors.bfsu.edu.cn/ubuntu/|' /etc/apt/sources.list.d/ubuntu.sources
 
 RUN apt update
 

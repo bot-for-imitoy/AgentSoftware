@@ -800,3 +800,20 @@ public class AgentSystem {
 ### 8.5 仍暂缓
 
 `NoteStore`/`TodoStore`/`StateStore`、`SMTPMailService`、`SSHComputer`、provider 目录（已删）、每日总结（改为 `Context.forgetAll()`）。
+
+---
+
+## 9. 运行行为补充（后续迭代）
+
+- **无任务自动暂停**：`AgentSystem` 只有在"确实还有后续工作"时才允许时钟快进；判据
+  `hasFutureWork()` = 有排期事件 ∨ 有下班暂存事件 ∨ 有角色队列待处理项（三者缺一不可，否则"事件已投递但 worker 还没取走"会被误判成没活）。
+  全员 `IDLE` 且无后续工作时，`onTick` 直接调用 `pause()`（冻结时钟），外部 `resume()` 可恢复。
+- **工具循环上下文**：每轮带 `tool_calls` 的 assistant 消息必须先写回 `Context`，再回喂 tool 结果；
+  否则下一轮只有 `tool` 结果、没有对应的 `function_call`，部分网关（实测 Hanseq）会因
+  `function_call_output requires item_reference ids matching each call_id` 返回 400。
+  另外对返回 `call_id` 而非 `id` 的网关做了兜底。
+- **配置文件**：顺序解析 `$AGENTSOFTWARE_CONFIG_DIR/config.json` → `$XDG_CONFIG_HOME/AgentSoftware/config.json`
+  （默认 `~/.config/AgentSoftware/config.json`）→ `<dataDir>/config.json`；
+  密钥优先级 `环境变量 > 配置文件 > 默认值`；`base_url` 只给域名时自动补 `/v1`。
+- **电脑默认 podman**：未指定电脑时创建 `agentsoftware-<role_id>` 容器（首次自动用根目录 `Containerfile` 构建基础镜像）；无 podman 环境用 `AGENTSOFTWARE_COMPUTER_KIND=local`。
+- **下班打断客户等待**：`ClientChannel.cancelWait(String)` 由时间线程在 `Role.onShiftEnd()` 调用，避免甲方不回消息把跨天卡到超时。
