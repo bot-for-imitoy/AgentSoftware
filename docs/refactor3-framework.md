@@ -817,3 +817,10 @@ public class AgentSystem {
   密钥优先级 `环境变量 > 配置文件 > 默认值`；`base_url` 只给域名时自动补 `/v1`。
 - **电脑默认 podman**：未指定电脑时创建 `agentsoftware-<role_id>` 容器（首次自动用根目录 `Containerfile` 构建基础镜像）；无 podman 环境用 `AGENTSOFTWARE_COMPUTER_KIND=local`。
 - **下班打断客户等待**：`ClientChannel.cancelWait(String)` 由时间线程在 `Role.onShiftEnd()` 调用，避免甲方不回消息把跨天卡到超时。
+
+- **Web 接口契约**：静态前端（`src/main/resources/web/app.js`）固定调用
+  `GET /api/state`、`GET /api/messages?since=N`、`POST /api/reply {text}`、`POST /api/pause|/api/resume`，
+  且要求 `ok/lastSeq` 与 camelCase 字段（`fromRoleId/fromName/...`）；
+  服务端必须照此实现，否则页面会一直停在 "Connecting…" 且不渲染消息。
+  角色的 `recordReasoning/recordNote/recordToolCall/recordAnswer` 与 `talkTo/talkToClient`
+  都会写入 `ChatStore`，供 "All Activity" 实时展示（reason/note/tool/answer/talk/client）。

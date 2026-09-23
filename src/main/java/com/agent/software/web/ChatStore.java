@@ -31,6 +31,8 @@ public class ChatStore {
         public String text;
         public String urgency;
         public long timestamp;
+        /** 前端 App 用的结构化附加信息（tool/args/result/round/task/status/tokens…）。 */
+        public Map<String, Object> extra = new LinkedHashMap<>();
     }
 
     private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
@@ -72,18 +74,20 @@ public class ChatStore {
         return record(KIND_CLIENT, "", "", CLIENT_NAME, "", "", text, "");
     }
 
+    /** 转成 Web UI（app.js）期望的 camelCase 形状。 */
     public static Map<String, Object> toMap(ChatMessage m) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("seq", m.seq);
         map.put("kind", m.kind);
         map.put("group", m.group);
-        map.put("from_role_id", m.fromRoleId);
-        map.put("from_name", m.fromName);
-        map.put("target_role_id", m.targetRoleId);
-        map.put("target_name", m.targetName);
+        map.put("fromRoleId", m.fromRoleId);
+        map.put("fromName", m.fromName);
+        map.put("targetRoleId", m.targetRoleId);
+        map.put("targetName", m.targetName);
         map.put("text", m.text);
         map.put("urgency", m.urgency);
         map.put("timestamp", m.timestamp);
+        map.put("extra", m.extra == null ? new LinkedHashMap<>() : m.extra);
         return map;
     }
 }

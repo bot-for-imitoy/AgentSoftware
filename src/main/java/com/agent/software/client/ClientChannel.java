@@ -67,7 +67,7 @@ public final class ClientChannel {
             currentRoleId = roleId;
         }
         beginWait();
-        record("client", roleId, message);
+        recordClientMessage(roleId, message);
         if (!wait) {
             return "client: message sent to " + roleId;
         }
@@ -83,7 +83,7 @@ public final class ClientChannel {
             currentRoleId = roleId;
         }
         beginWait();
-        record("client", roleId, message);
+        // 角色→客户这条消息由 Role.talkToClient 记录（那边才知道角色的显示名），这里不重复记
         return awaitReply();
     }
 
@@ -154,12 +154,14 @@ public final class ClientChannel {
         }
     }
 
-    private void record(String kind, String roleId, String message) {
+    /** 客户发出的消息：fromRoleId 空、fromName=Client A，前端据此渲染成甲方气泡。 */
+    private void recordClientMessage(String toRoleId, String message) {
         if (store == null) {
             return;
         }
         try {
-            store.record(kind, "", roleId, roleId, client.clientId, client.name, message, "");
+            store.record(ChatStore.KIND_CLIENT, "", "", ChatStore.CLIENT_NAME,
+                    toRoleId, "", message, "");
         } catch (Exception e) {
             logger.warn("ClientChannel: failed to record message", e);
         }

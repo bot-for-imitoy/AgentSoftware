@@ -18,6 +18,7 @@ import com.agent.software.tools.Toolkits;
 import com.agent.software.utils.Data;
 import com.agent.software.utils.Json;
 import com.agent.software.utils.UUIDObject;
+import com.agent.software.web.ChatStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -438,6 +439,7 @@ public final class Role extends UUIDObject implements Data {
                 .source("talk")
                 .build();
         system.getEventBus().post(e);
+        chat("talk", message, p.name(), Map.of("target", target.roleId));
         journal("Sent talk to " + target.roleId + " (" + p + ")");
         return "talk: message sent to " + target.roleId + ", urgency=" + p
                 + ", queue depth=" + target.queueDepth();
@@ -452,6 +454,7 @@ public final class Role extends UUIDObject implements Data {
         if (channel == null) {
             return "talk_to_client failed: no client channel";
         }
+        chat("client", message, "", Map.of("target", "CLIENT"));
         return channel.receiveFrom(roleId, message);
     }
 
@@ -525,10 +528,6 @@ public final class Role extends UUIDObject implements Data {
         }
     }
 
-    public String getWaitingFor() {
-        return waitingFor;
-    }
-
     // ── 日志 / trace ────────────────────────────────────────────
 
     public void journal(String entry) {
@@ -546,19 +545,60 @@ public final class Role extends UUIDObject implements Data {
 
     public void recordReasoning(String text, String taskId, Integer round) {
         journal("reasoning(task=" + taskId + ", round=" + round + "): " + text);
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("task", safe(taskId));
+        extra.put("round", String.valueOf(round));
+        chat("reason", text, "", extra);
     }
 
     public void recordNote(String content, String taskId, Integer round) {
         journal("note(task=" + taskId + ", round=" + round + "): " + content);
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("task", safe(taskId));
+        extra.put("round", String.valueOf(round));
+        chat("note", content, "", extra);
     }
 
     public void recordToolCall(String tool, String args, String result, String taskId, Integer round) {
         journal("tool(" + tool + ", task=" + taskId + ", round=" + round + "): args=" + args
                 + " result=" + result);
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("tool", tool);
+        extra.put("args", args);
+        extra.put("result", result);
+        extra.put("task", safe(taskId));
+        extra.put("round", String.valueOf(round));
+        chat("tool", tool, "", extra);
     }
 
     public void recordAnswer(String text, String taskId, String status, Integer tokens) {
         journal("answer(task=" + taskId + ", status=" + status + ", tokens=" + tokens + "): " + text);
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("status", status == null ? "" : status);
+        extra.put("tokens", tokens == null ? 0 : tokens);
+        extra.put("task", safe(taskId));
+        chat("answer", text, "", extra);
+    }
+
+    /** 向 Web UI 的活动流推一条消息（reason/note/tool/answer/talk/client）。 */
+    private void chat(String kind, String text, String urgency, Map<String, Object> extra) {
+        if (system == null || system.getChatStore() == null) {
+            return;
+        }
+        try {
+            ChatStore.ChatMessage m = system.getChatStore().record(
+                    kind, group == null ? "" : group, roleId,
+                    name == null ? roleId : name, "", "", text, urgency == null ? "" : urgency);
+            if (extra != null) {
+                m.extra.putAll(extra);
+            }
+        } catch (Exception e) {
+            logger.warn("Role[{}] failed to record chat message", roleId, e);
+        }
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 
     // ── 持久化 ──────────────────────────────────────────────────
