@@ -123,6 +123,11 @@ class AgentSystemTest {
     void autoPausesWhenThereIsNoFurtherWork(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
+            // 上班时每个大组成员都会收到一条"开工"任务；用假 LLM 让它瞬间跑完，
+            // 这样"队列排空后自动 pause"仍然可测（否则测试会真的去调 LLM API）
+            for (Role r : system.getRolePool().all()) {
+                r.setLlm(new FakeLlm());
+            }
             system.start();
             long deadline = System.currentTimeMillis() + 8_000;
             while (System.currentTimeMillis() < deadline && !system.getTimeBus().isPaused()) {
@@ -143,6 +148,9 @@ class AgentSystemTest {
                     .to("CEO").type(com.agent.software.event.EventType.CUSTOM)
                     .priority(com.agent.software.event.Priority.NORMAL)
                     .at(5_000).content("later").build());
+            for (Role r : system.getRolePool().all()) {
+                r.setLlm(new FakeLlm());   // 开工任务要能瞬间跑完，时钟才可能快进
+            }
             system.start();
 
             long deadline = System.currentTimeMillis() + 6_000;
@@ -152,6 +160,24 @@ class AgentSystemTest {
             assertTrue(system.getTimeBus().now() >= 5_000, "应快进到排期事件的时间点");
         } finally {
             system.stop();
+        }
+    }
+
+    /** 立即返回的假 LLM，避免测试里真的发 HTTP。 */
+    private static final class FakeLlm extends com.agent.software.llm.LLM {
+        @Override
+        public String getModel() {
+            return "fake";
+        }
+
+        @Override
+        public String getEndpoint() {
+            return "fake";
+        }
+
+        @Override
+        public com.agent.software.llm.Response request() {
+            return new com.agent.software.llm.Response("ok", "", java.util.List.of(), 0);
         }
     }
 }

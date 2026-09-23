@@ -654,6 +654,14 @@ public final class Role extends UUIDObject implements Data {
         while (running) {
             Event e;
             try {
+                // 等回复期间（WAIT）不取事件：队列非空时 pollEvent 会立即返回，
+                // 任务被 runTask"取出→塞回"来回折腾，形成 100% CPU 的忙等空转。
+                // 等 endWait() 把状态置回 IDLE 再继续（阻塞在 waitForReply 里的就是本线程，
+                // 所以正常路径下这里不会命中，是给外部 setState(WAIT) 兜底的）。
+                if (state == RoleState.WAIT) {
+                    Thread.sleep(200);
+                    continue;
+                }
                 e = pollEvent(200);
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
@@ -677,6 +685,12 @@ public final class Role extends UUIDObject implements Data {
     private void dispatch(Event e) {
         if (e.type == EventType.SHIFT_START) {
             onShiftStart();
+            // 唤醒：原实现在上班时把这条广播事件也变成一条任务，每个大组成员因此真的跑一轮
+            // （查收件箱、接着昨天没干完的活、回报）。refactor3 首版只改状态就 return，
+            // 于是每天 08:00 没有任何角色被叫醒 —— 这是"没人干活"的一半原因。
+            String wake = e.content == null || e.content.isBlank() ? "Shift start" : e.content;
+            runTask(new Task(e.fromRoleId, roleId, System.currentTimeMillis(),
+                    "[time] " + wake, e.priority));
             return;
         }
         if (e.type == EventType.SHIFT_END) {

@@ -186,6 +186,9 @@ public class AgentSystem {
 
     public void start() {
         rolePool.start();
+        // 第 1 天：开局就在上班时段，必须先把 08:00 的 SHIFT_START 发出去。
+        // 否则空闲快进会直接跳到第一个排期事件，首日的"开工"被推迟到那个时刻（以前日志里的 09:00）。
+        onShiftBoundary();
         timeBus.start();
         logger.info("AgentSystem started: {}", timeBus.currentDateTime());
     }
@@ -251,23 +254,7 @@ public class AgentSystem {
 
     /** 班次切换：由时间线程直调角色（不走事件队列）。 */
     private void onTick(TimeBus tb) {
-        boolean working = tb.isWorkingHours();
-        if (working && !onDuty) {
-            onDuty = true;
-            for (Role r : rolePool.all()) {
-                r.onShiftStart();
-            }
-            eventBus.post(shiftEvent(EventType.SHIFT_START, tb));
-            eventBus.releaseHeld();
-            logger.info("SHIFT_START at {}", tb.currentDateTime());
-        } else if (!working && onDuty) {
-            onDuty = false;
-            for (Role r : rolePool.all()) {
-                r.onShiftEnd();
-            }
-            eventBus.post(shiftEvent(EventType.SHIFT_END, tb));
-            logger.info("SHIFT_END at {}", tb.currentDateTime());
-        }
+        onShiftBoundary();
 
         // 后续没有任何任务：停止推进时钟，等外部 resume()
         if (allRolesIdle() && !hasFutureWork() && !autoPaused) {
@@ -277,12 +264,41 @@ public class AgentSystem {
         }
     }
 
+    /**
+     * 跨过班次边界时唤醒/收工。上班时给每个大组成员发一条广播事件，
+     * 角色把它变成"开工"任务真的跑一轮（见 {@code Role.dispatch}）。
+     */
+    private void onShiftBoundary() {
+        boolean working = timeBus.isWorkingHours();
+        if (working && !onDuty) {
+            onDuty = true;
+            for (Role r : rolePool.all()) {
+                r.onShiftStart();
+            }
+            eventBus.post(shiftEvent(EventType.SHIFT_START, timeBus));
+            eventBus.releaseHeld();
+            logger.info("SHIFT_START at {}", timeBus.currentDateTime());
+        } else if (!working && onDuty) {
+            onDuty = false;
+            for (Role r : rolePool.all()) {
+                r.onShiftEnd();
+            }
+            eventBus.post(shiftEvent(EventType.SHIFT_END, timeBus));
+            logger.info("SHIFT_END at {}", timeBus.currentDateTime());
+        }
+    }
+
     private static Event shiftEvent(EventType type, TimeBus tb) {
+        // SHIFT_START 的 content 会作为"开工"任务的正文发给每个大组成员，所以要带上日期和时刻
+        String content = type == EventType.SHIFT_START
+                ? "Shift start at " + tb.currentDateTime() + " (day " + tb.getDay()
+                        + "). You are on duty now."
+                : "Shift end at " + tb.currentDateTime();
         return Event.builder()
                 .type(type)
                 .priority(Priority.HIGH)
                 .at(tb.now())
-                .content(type == EventType.SHIFT_START ? "Shift start" : "Shift end")
+                .content(content)
                 .source("time")
                 .build();
     }
