@@ -49,6 +49,12 @@ class ToolkitsTest {
     }
 
     @Test
+    void hrGetsHiringToolkit() {
+        List<String> names = names(role("HR", "Leadership Group"));
+        assertTrue(names.contains("hr"), names.toString());
+    }
+
+    @Test
     void toolkitExposesItsToolsAndTrigger() {
         Role r = role("CEO", "Leadership Group");
         Toolkit time = Toolkits.defaults(r, null, null, new MCPManager(), new SkillManager())
