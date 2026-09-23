@@ -28,8 +28,11 @@ import java.util.Map;
  *   <li>{@code GET  /api/state}  → {@code {ok, day, tick, date, time, describe, paused, pauseReason, clientTalk, groups}}</li>
  *   <li>{@code GET  /api/messages?since=N} → {@code {ok, lastSeq, messages:[camelCase…]}}</li>
  *   <li>{@code POST /api/reply}  body {@code {text}} → {@code {ok, message}}</li>
+ *   <li>{@code POST /api/talk?role=ID}  body {@code {text}} → 以甲方身份找某个大组成员口头说话</li>
+ *   <li>{@code POST /api/client_mail}  body {@code {to, subject?, text}} → 以甲方身份发邮件给某个大组成员</li>
+ *   <li>{@code POST /api/client_end} → 结束当前甲方会话</li>
  *   <li>{@code POST /api/pause} / {@code POST /api/resume} → {@code {ok}}</li>
- *   <li>{@code POST /api/talk?role=ID} / {@code GET /api/roles}（额外保留）</li>
+ *   <li>{@code GET  /api/roles}（额外保留）</li>
  * </ul>
  */
 public class ChatWebServer {
@@ -60,6 +63,8 @@ public class ChatWebServer {
             server.createContext("/api/pause", this::handlePause);
             server.createContext("/api/resume", this::handleResume);
             server.createContext("/api/talk", this::handleTalk);
+            server.createContext("/api/client_mail", this::handleClientMail);
+            server.createContext("/api/client_end", this::handleClientEnd);
             server.createContext("/api/roles", this::handleRoles);
             server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
             server.start();
@@ -123,6 +128,8 @@ public class ChatWebServer {
         Role holder = holderRoleId == null ? null : system.getRolePool().find(holderRoleId);
         Map<String, Object> clientTalk = new LinkedHashMap<>();
         clientTalk.put("active", holderRoleId != null);
+        // waiting = 真有角色阻塞在等客户回复（区别于"客户自己开的会话"）
+        clientTalk.put("waiting", channel != null && channel.isAwaiting());
         clientTalk.put("holderRoleId", holderRoleId == null ? "" : holderRoleId);
         clientTalk.put("holderName", holder == null ? "" : holder.name);
         clientTalk.put("group", holder == null ? "" : holder.group);
@@ -166,6 +173,8 @@ public class ChatWebServer {
         if (system.getClientChannel() != null) {
             system.getClientChannel().reply(text);
         }
+        // 甲方说话了，就别让仿真停在 pause 上：角色那边还有活要接着干
+        system.resume();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("ok", true);
         body.put("message", ChatStore.toMap(message));
@@ -182,17 +191,92 @@ public class ChatWebServer {
         respond(ex, 200, "application/json", Json.stringify(Map.of("ok", true)));
     }
 
+    /** 甲方以 Client A 身份找某个大组成员口头说话：投一条 TALK 事件唤醒他。 */
     private void handleTalk(HttpExchange ex) throws IOException {
         String roleId = query(ex, "role");
         String raw = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         String text = extractText(raw);
-        String result;
         if (system.getClientChannel() == null) {
-            result = "no client channel";
-        } else {
-            result = system.getClientChannel().talk(roleId, text, false);
+            respondError(ex, "no client channel");
+            return;
         }
+        if (!inCohort(roleId)) {
+            respondError(ex, "role is not in the current cohort: " + roleId);
+            return;
+        }
+        String result = system.getClientChannel().talk(roleId, text, false);
+        system.resume();
         respond(ex, 200, "application/json", Json.stringify(Map.of("ok", true, "result", result)));
+    }
+
+    /** 甲方以 Client A 身份发邮件给某个大组成员：邮件投递会触发 NEW_MAIL 唤醒他。 */
+    private void handleClientMail(HttpExchange ex) throws IOException {
+        String raw = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        Map<String, Object> in = parseObject(raw);
+        String to = str(in.get("to"));
+        String text = str(in.get("text"));
+        String subject = str(in.get("subject"));
+        if (subject.isBlank()) {
+            subject = "Message from the client";
+        }
+        if (to.isBlank()) {
+            respondError(ex, "no recipient");
+            return;
+        }
+        if (!inCohort(to)) {
+            respondError(ex, "role is not in the current cohort: " + to);
+            return;
+        }
+        if (text.isBlank()) {
+            respondError(ex, "empty message");
+            return;
+        }
+        Role target = system.getRolePool().find(to);
+        var mail = system.getMailService();
+        String from = mail.getClientAddress();
+        String toAddress = mail.getAddress(target.roleId);
+        String result = mail.send(from, List.of(toAddress), List.of(), subject, text);
+        // 甲方自己发出去的信也进活动流，和口头消息一样在同一个界面里可见
+        system.getChatStore().record(ChatStore.KIND_CLIENT, "", "", ChatStore.CLIENT_NAME,
+                target.roleId, target.name, "📧 " + subject + "\n" + text, "");
+        system.resume();
+        logger.info("Client mailed {} <{}>: {} -> {}", target.roleId, toAddress, subject, result);
+        respond(ex, 200, "application/json", Json.stringify(Map.of("ok", true, "result", result)));
+    }
+
+    /** 结束甲方当前会话（角色还在等回复时用它把通道放掉）。 */
+    private void handleClientEnd(HttpExchange ex) throws IOException {
+        if (system.getClientChannel() != null) {
+            system.getClientChannel().release();
+        }
+        respond(ex, 200, "application/json", Json.stringify(Map.of("ok", true)));
+    }
+
+    /** 目标必须是当前大组成员：没进大组的人是"假死"的，投了也没人处理。 */
+    private boolean inCohort(String roleId) {
+        return roleId != null && !roleId.isBlank() && system.getRolePool().find(roleId) != null;
+    }
+
+    private static String str(Object o) {
+        return o == null ? "" : String.valueOf(o).strip();
+    }
+
+    private void respondError(HttpExchange ex, String reason) throws IOException {
+        respond(ex, 200, "application/json",
+                Json.stringify(Map.of("ok", false, "reason", reason)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> parseObject(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> parsed = Json.parseObject(raw);
+            return parsed == null ? Map.of() : parsed;
+        } catch (Exception e) {
+            return Map.of();
+        }
     }
 
     private void handleRoles(HttpExchange ex) throws IOException {

@@ -783,6 +783,8 @@ public class AgentSystem {
 | `Role.waitForReply(String, long)` | `talkTo` 无 wait 参数，`talk` 工具的 `wait=true` 需要它 |
 | `AgentSystem.getToolkitConfig()` | D22/A9 要求默认工具从 JSON 读，Role.setup 只能经 AgentSystem 取 |
 | `WebInput.submit(String, String)` | 冻结 API 中无人能把浏览器输入送入输入通道 |
+| `ClientChannel.setTalkSink(BiConsumer<String,String>)` | 客户 → 角色的口信要变成给目标角色的 `TALK` 事件；`ClientChannel` 拿不到 `EventBus`，用一个投递口接线（`AgentSystem` 注入） |
+| `ClientChannel.isAwaiting()` | `/api/state` 要区分"有角色正在等客户回复"和"客户自己开着会话"，UI 据此提示 |
 | `Employee.inGroup/templateString/templateList`、`CompanyRoster.add`、`JsonStore.of`、`VirtualMailService.stats` | 数据访问/构建辅助 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
@@ -877,5 +879,22 @@ public class AgentSystem {
 - **`take_rest` 结束当前任务**：`take_rest` 的语义是"这件事到此为止，我去休息"。工具循环必须就此收尾，
   否则模型会被反复追问同一件事，继续 `take_rest`/`read_mail` 空转到 `MAX_TOOL_ROUNDS`（实测 20 轮、
   18 万 token 仍无产出）。
+
+- **需求 B：甲方可以主动找任意大组成员（口头 / 邮件）**。两条通路都要**真的唤醒角色**：
+  - 口头：`ClientChannel.talk(roleId, msg, false)` 记一条客户消息（进活动流）**并投一条 `TALK` 事件**，
+    `Role.dispatch` 把它变成 `[talk] …` 任务；接线是 `AgentSystem` 注入的 `ClientChannel.setTalkSink`
+    （`ClientChannel` 本身拿不到 `EventBus`）。
+  - 邮件：`POST /api/client_mail` 以 `client@` 身份走 `MailService.send`，由既有的 `onMailDelivered`
+    投 `NEW_MAIL`，角色被唤醒后自己 `read_mail`。
+  - 只允许寻址**当前大组成员**（`RolePool.find` 校验）；没进组的人是"假死"的，直接拒收。
+  - 会话（F7 同一时间一个对话）：客户可以**改找别人**（等于结束上一段）；目标角色正阻塞在
+    `talk_to_client` 上等回复时，客户再发给该角色会被当作**回复**直接交付，而不是另排一条事件；
+    `POST /api/client_end` 显式结束会话（否则通道会一直挂在那个角色身上）。
+  - 客户的任何动作都会 `resume()` 时钟 —— 否则仿真停在 auto-pause 上，"客户来了"也没人处理。
+  - 角色寄给客户的邮件会记进活动流（客户不是 Role，以前这类信直接丢弃，UI 上看不到回信）。
+  - UI：输入框上方新增 `#clientBar`（选人下拉 + 口头/邮件切换 + End chat），由 `/api/talk`、
+    `/api/client_mail`、`/api/client_end` 支撑；`/api/state.clientTalk.waiting` 让界面区分
+    "有人在等你回复" 和 "你开着会话"。
+
 
 

@@ -16,12 +16,13 @@ const AVATAR_COLORS = [
 
 const state = {
   groups: [],
+  members: [],                // flattened cohort members (roleId / name / group) for the client picker
   selectedKey: ALL_KEY,
   lastSeq: 0,
   renderedSeqs: new Set(),
   messagesByGroup: new Map(), // groupKey -> [{...msg}]
   messagesAll: [],            // every message, ascending by seq (All Activity feed)
-  clientTalk: { active: false, holderName: null, holderRoleId: null },
+  clientTalk: { active: false, waiting: false, holderName: null, holderRoleId: null },
   prevClientActive: false,
   paused: false,
   prevPaused: false,
@@ -113,8 +114,46 @@ async function fetchJson(url, opts) {
   return { status: r.status, body };
 }
 
+/** Currently picked addressee ("" = reply to whoever started talking to the client). */
+function clientTarget() {
+  return $("clientTarget").value || "";
+}
+
 function canInput() {
-  return state.selectedKey === LEADERSHIP_KEY && state.clientTalk.active;
+  if (clientTarget()) return true;         // the client may open a conversation with any member
+  return state.clientTalk.active;          // otherwise: only while a member is waiting for a reply
+}
+
+/** Rebuild the addressee picker when the cohort changes (keeps the current choice). */
+function renderClientTargets() {
+  const sel = $("clientTarget");
+  const current = sel.value;
+  const signature = state.members.map((m) => m.roleId).join("|");
+  if (sel.dataset.signature === signature) return;
+  sel.dataset.signature = signature;
+  sel.innerHTML = "";
+  const reply = document.createElement("option");
+  reply.value = "";
+  reply.textContent = "(reply to whoever is talking to me)";
+  sel.appendChild(reply);
+
+  const byGroup = new Map();
+  for (const m of state.members) {
+    if (!byGroup.has(m.group)) byGroup.set(m.group, []);
+    byGroup.get(m.group).push(m);
+  }
+  for (const [group, list] of byGroup) {
+    const og = document.createElement("optgroup");
+    og.label = group || "Unassigned";
+    for (const m of list) {
+      const o = document.createElement("option");
+      o.value = m.roleId;
+      o.textContent = `${m.name} (${m.roleId})`;
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+  if (state.members.some((m) => m.roleId === current)) sel.value = current;
 }
 
 function extraOf(m) {
@@ -499,21 +538,43 @@ function scrollToBottom(el) {
 // ── Input state ─────────────────────────────
 
 function applyInputState() {
+  const active = state.clientTalk.active;
+  const target = clientTarget();
   const enabled = canInput();
   const wasEnabled = state.inputEnabled;
   state.inputEnabled = enabled;
+
   $("replyInput").disabled = !enabled;
   $("sendBtn").disabled = !enabled;
-  $("talkBanner").classList.toggle("hidden", !enabled);
+  $("talkBanner").classList.toggle("hidden", !active);
+  $("clientEndBtn").classList.toggle("hidden", !active);
   $("inputHint").classList.toggle("enabled", enabled);
-  if (enabled) {
+
+  if (active) {
     const who = state.clientTalk.holderName || "member";
-    $("talkBannerText").textContent = `${who} is talking to you (Client A) — type your reply below`;
-    $("replyInput").placeholder = "Type your reply…";
-    $("inputHint").textContent = "Input enabled";
+    const waiting = !!state.clientTalk.waiting;
+    $("talkBannerText").textContent = target
+      ? `${who} is talking to you (Client A) — switch "to" back to reply, or address someone else`
+      : waiting
+        ? `${who} is waiting for your reply (Client A) — type it below`
+        : `You have an open chat with ${who} (Client A) — type below to continue`;
+  }
+
+  if (enabled) {
+    const mode = $("clientMode").value;
+    if (target) {
+      const m = state.members.find((x) => x.roleId === target);
+      const label = m ? `${m.name} (${m.roleId})` : target;
+      $("replyInput").placeholder = mode === "mail" ? `Email to ${label}…` : `Say to ${label}…`;
+      $("inputHint").textContent = (mode === "mail" ? "Email → " : "Talk → ") + label;
+    } else {
+      $("replyInput").placeholder = "Type your reply…";
+      $("inputHint").textContent = "Replying to the current conversation";
+    }
     if (!wasEnabled) $("replyInput").focus();
   } else {
-    $("replyInput").placeholder = "Input disabled — enabled only when a Leadership Group member is talking to you";
+    $("replyInput").placeholder =
+      "Input disabled — pick a member above, or reply when someone talks to you";
     $("inputHint").textContent = "Disabled";
   }
 }
@@ -555,6 +616,14 @@ async function pollState() {
     renderGroups();
     renderHeader();
   }
+  // Flatten the cohort for the client's addressee picker
+  state.members = [];
+  for (const g of state.groups) {
+    for (const m of g.members || []) {
+      state.members.push({ roleId: m.roleId, name: m.name, group: g.key || "", state: m.state });
+    }
+  }
+  renderClientTargets();
 
   // Client talk activated: if the user is not in the Leadership Group, switch over automatically and notify
   if (ct.active && !state.prevClientActive) {
@@ -589,34 +658,74 @@ async function pollMessages() {
   updateGroupItemVisuals();
 }
 
-// ── Send reply ───────────────────────────────
+// ── Send (reply / talk to a member / email a member) ───────────────
+
+/** Render a single just-created message immediately (used for the reply path). */
+function renderOneMessage(m) {
+  if (!m) return;
+  pushMessage(m);
+  const listEl = $("messageList");
+  const nearBottom = isNearBottom(listEl);
+  if (state.selectedKey === ALL_KEY || groupOf(m) === state.selectedKey) {
+    const frag = document.createDocumentFragment();
+    if (m.seq) state.renderedSeqs.add(m.seq);
+    frag.appendChild(buildMessageEl(m, state.selectedKey === ALL_KEY));
+    listEl.appendChild(frag);
+    if (nearBottom) scrollToBottom(listEl);
+  }
+}
 
 async function sendReply() {
   if (!canInput()) return;
   const input = $("replyInput");
   const text = input.value.trim();
   if (!text) return;
-  const { status, body } = await fetchJson("/api/reply", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  if (status === 200 && body.ok && body.message) {
-    pushMessage(body.message);
+  const target = clientTarget();
+  const mode = $("clientMode").value;
+  const jsonHeaders = { "Content-Type": "application/json" };
+
+  let status;
+  let body;
+  if (target && mode === "mail") {
+    ({ status, body } = await fetchJson("/api/client_mail", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ to: target, text }),
+    }));
+  } else if (target) {
+    ({ status, body } = await fetchJson(`/api/talk?role=${encodeURIComponent(target)}`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ text }),
+    }));
+  } else {
+    ({ status, body } = await fetchJson("/api/reply", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ text }),
+    }));
+  }
+
+  if (status === 200 && body.ok) {
     input.value = "";
-    const listEl = $("messageList");
-    const nearBottom = isNearBottom(listEl);
-    if (state.selectedKey === ALL_KEY || groupOf(body.message) === state.selectedKey) {
-      const frag = document.createDocumentFragment();
-      if (body.message.seq) state.renderedSeqs.add(body.message.seq);
-      frag.appendChild(buildMessageEl(body.message, state.selectedKey === ALL_KEY));
-      listEl.appendChild(frag);
-      if (nearBottom) scrollToBottom(listEl);
-    }
+    if (body.message) renderOneMessage(body.message);
+    // talk / email are recorded server-side; pull them in and refresh the input state
+    await pollMessages();
+    await pollState();
   } else {
     toast(body.reason || "Failed to send, please try again");
   }
-  await pollState(); // Refresh input state (usually disabled immediately after replying)
+}
+
+/** End the current client conversation so another member can talk to the client. */
+async function endClientChat() {
+  const { status, body } = await fetchJson("/api/client_end", { method: "POST" });
+  if (status === 200 && body.ok) {
+    toast("Client conversation ended");
+    await pollState();
+  } else {
+    toast(body.reason || "Failed to end the conversation");
+  }
 }
 
 // ── Initialization ─────────────────────────────────
@@ -624,6 +733,9 @@ async function sendReply() {
 function init() {
   $("sendBtn").addEventListener("click", sendReply);
   $("pauseBtn").addEventListener("click", togglePause);
+  $("clientEndBtn").addEventListener("click", endClientChat);
+  $("clientTarget").addEventListener("change", applyInputState);
+  $("clientMode").addEventListener("change", applyInputState);
   $("replyInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

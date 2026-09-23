@@ -113,6 +113,25 @@ public class AgentSystem {
         logger.info("Simulation time scale: {}x (1 tick = 1 simulated second)", timeBus.getTimeScale());
         mailService.setDeliveryListener(this::onMailDelivered);
 
+        // 客户主动找角色：把客户的口信变成给该角色的一条 TALK 事件（角色因此被唤醒）。
+        // 只允许寻址当前大组成员 —— 没进组的人是"假死"的，投了也没人处理。
+        clientChannel.setTalkSink((roleId, message) -> {
+            if (rolePool.find(roleId) == null) {
+                logger.warn("ClientChannel: message to {} dropped (not in the cohort)", roleId);
+                return;
+            }
+            eventBus.post(Event.builder()
+                    .from("CLIENT")
+                    .to(roleId)
+                    .type(EventType.TALK)
+                    .priority(Priority.HIGH)
+                    .at(timeBus.now())
+                    .content(message)
+                    .source("client")
+                    .build());
+            logger.info("ClientChannel: client message delivered to {} as a TALK event", roleId);
+        });
+
         // 默认大组 = 管理组
         for (Employee e : roster.defaultCohort()) {
             try {
@@ -312,6 +331,15 @@ public class AgentSystem {
         }
         Role target = findRoleByMailbox(recipient);
         if (target == null) {
+            // 客户不是 Role：把"寄给客户"的信记进活动流，否则甲方在 UI 上永远看不到回信
+            if (recipient.equalsIgnoreCase(mailService.getClientAddress()) && chatStore != null) {
+                String from = message.senderName == null || message.senderName.isBlank()
+                        ? message.senderEmail : message.senderName;
+                chatStore.record(ChatStore.KIND_CLIENT, "", "", from, "CLIENT", "Client A",
+                        "📧 " + (message.subject == null ? "" : message.subject)
+                                + "\n" + (message.body == null ? "" : message.body), "");
+                logger.info("Mail to the client recorded in the activity feed: {}", message.subject);
+            }
             return;
         }
         // 同一封邮件对同一收件人只通知一次：to/cc 重叠、重复地址都不该产生第二条通知

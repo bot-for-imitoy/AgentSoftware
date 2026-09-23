@@ -44,9 +44,27 @@
           <div class="empty-tip">No activity yet — role thoughts, tool calls and outputs will appear here in real time</div>
         </div>
 
+        <div id="clientBar">
+          <span class="client-who">You are <strong>Client A</strong></span>
+          <label class="client-field">
+            to
+            <select id="clientTarget" title="Who the client is addressing">
+              <option value="">(reply to whoever is talking to me)</option>
+            </select>
+          </label>
+          <label class="client-field">
+            via
+            <select id="clientMode" title="Talk = a spoken message; email = lands in their inbox">
+              <option value="talk">💬 talk</option>
+              <option value="mail">✉️ email</option>
+            </select>
+          </label>
+          <button id="clientEndBtn" class="client-end-btn hidden" title="End the current client conversation so another role can talk to you">End chat</button>
+        </div>
+
         <div id="inputBar">
           <textarea id="replyInput" rows="2" maxlength="2000"
-                    placeholder="Input disabled — enabled only when a Leadership Group member is talking to you"
+                    placeholder="Input disabled — pick a member above, or reply when someone talks to you"
                     disabled></textarea>
           <div class="input-actions">
             <span class="input-hint" id="inputHint">Disabled</span>

@@ -317,6 +317,45 @@ body.paused .pause-btn:hover { background: #fff4e6; }
   padding: 10px 20px 12px;
   flex-shrink: 0;
 }
+
+/* Client A's addressee bar: pick a member and a channel (talk / email) */
+#clientBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 20px;
+  background: #f6f8fc;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: #4a5568;
+  flex-shrink: 0;
+}
+#clientBar .client-who { color: #7a8494; }
+#clientBar .client-who strong { color: var(--primary); }
+#clientBar .client-field { display: inline-flex; align-items: center; gap: 6px; }
+#clientBar select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  max-width: 260px;
+}
+#clientBar select:focus { outline: none; border-color: var(--primary); }
+.client-end-btn {
+  margin-left: auto;
+  border: 1px solid #ffccc7;
+  background: #fff2f0;
+  color: #cf1322;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.client-end-btn:hover { background: #ffe7e5; }
+.client-end-btn.hidden { display: none; }
 #replyInput {
   width: 100%;
   border: 1px solid var(--border);

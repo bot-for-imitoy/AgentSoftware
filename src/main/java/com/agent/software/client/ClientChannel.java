@@ -33,10 +33,28 @@ public final class ClientChannel {
     private String pendingReply;
     private boolean cancelled;
     private String cancelReason;
+    /** 是否有角色正阻塞在 {@link #awaitReply()} 上等客户的回复。 */
+    private volatile boolean awaiting;
+
+    /**
+     * 客户 → 角色的消息投递口。由 {@code AgentSystem} 接到 {@code EventBus} 上
+     * （投一条 {@code TALK} 事件，角色因此被唤醒）。不设置时只记录不投递。
+     */
+    private volatile java.util.function.BiConsumer<String, String> talkSink;
 
     public ClientChannel(Client client, ChatStore store) {
         this.client = client;
         this.store = store;
+    }
+
+    /** 接线：客户发出的口信如何变成给目标角色的事件。 */
+    public void setTalkSink(java.util.function.BiConsumer<String, String> sink) {
+        this.talkSink = sink;
+    }
+
+    /** 客户正和某个角色对话中（有角色在等回复，或客户主动开了会话）。 */
+    public boolean isAwaiting() {
+        return awaiting;
     }
 
     public Client getClient() {
@@ -55,23 +73,61 @@ public final class ClientChannel {
         }
     }
 
-    /** 客户发起一次对话；wait=true 时阻塞等待角色回复（可被 {@link #cancelWait(String)} 打断）。 */
+    /**
+     * 客户发起一次对话。
+     *
+     * <p>{@code wait=false}（Web UI 用的就是这条）：记一条客户消息，并**投一条 TALK 事件**
+     * 把目标角色唤醒 —— 这是"客户能主动找任意成员"的关键，早期实现只记录不投递，
+     * 于是角色那边毫无反应。会话留在目标角色身上，角色随后可以用 {@code talk_to_client} 回话。
+     *
+     * <p>{@code wait=true}：客户问完等着角色答，阻塞在 {@link #awaitReply()} 上。
+     *
+     * <p>F7（同一时间只有一个对话）：目标角色正在等客户回复时不接受中途换人；
+     * 否则客户可以改找别人（等于结束上一段、开一段新的），另有 {@link #release()} 显式结束。
+     */
     public String talk(String roleId, String message, boolean wait) {
         if (roleId == null || roleId.isBlank()) {
             return "client talk failed: no target role";
         }
+        String text = message == null ? "" : message;
+        boolean replyingToWaitingRole;
         synchronized (lock) {
             if (currentRoleId != null && !currentRoleId.equals(roleId)) {
-                return "client talk failed: already talking to " + currentRoleId;
+                if (awaiting) {
+                    return "client talk failed: already talking to " + currentRoleId;
+                }
+                currentRoleId = roleId;      // 客户改找别人：结束上一段会话
+            } else if (currentRoleId == null) {
+                currentRoleId = roleId;
             }
-            currentRoleId = roleId;
+            replyingToWaitingRole = awaiting && roleId.equals(currentRoleId);
         }
-        beginWait();
-        recordClientMessage(roleId, message);
+        recordClientMessage(roleId, text);
+        if (replyingToWaitingRole) {
+            // 目标角色正阻塞在 talk_to_client 上等回复：直接交付，别再排一条事件
+            reply(text);
+            return "client: replied to " + roleId;
+        }
+        deliverTalk(roleId, text);
         if (!wait) {
             return "client: message sent to " + roleId;
         }
+        beginWait();
         return awaitReply();
+    }
+
+    /** 把客户的口信交给投递口（AgentSystem 会转成给该角色的 TALK 事件）。 */
+    private void deliverTalk(String roleId, String message) {
+        java.util.function.BiConsumer<String, String> sink = talkSink;
+        if (sink == null) {
+            logger.warn("ClientChannel: no talk sink wired; message to {} was only recorded", roleId);
+            return;
+        }
+        try {
+            sink.accept(roleId, message);
+        } catch (Exception e) {
+            logger.warn("ClientChannel: failed to deliver client message to {}", roleId, e);
+        }
     }
 
     /** 角色发起一次对话；通道被别的角色占用时拒绝。返回等待到的回复（或超时/被打断提示）。 */
@@ -111,6 +167,7 @@ public final class ClientChannel {
 
     /** 结束当前会话：释放占用，并清掉可能残留的回复。 */
     public void release() {
+        awaiting = false;
         synchronized (lock) {
             currentRoleId = null;
         }
@@ -135,6 +192,7 @@ public final class ClientChannel {
 
     private String awaitReply() {
         long deadline = System.currentTimeMillis() + REPLY_TIMEOUT_MILLIS;
+        awaiting = true;
         synchronized (waitLock) {
             while (true) {
                 if (cancelled) {
