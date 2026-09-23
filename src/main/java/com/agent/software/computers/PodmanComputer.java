@@ -40,8 +40,11 @@ public class PodmanComputer extends Computer {
         if (!exists()) {
             createContainer();
         }
-        pod(null, "start", containerName);
-        ison = true;
+        Exec r = exec(null, 120, "podman", "start", containerName);
+        ison = r.exit == 0;
+        if (!ison) {
+            logger.warn("PodmanComputer[{}] powerOn failed: {}", roleId(), r.output);
+        }
     }
 
     @Override
@@ -90,7 +93,32 @@ public class PodmanComputer extends Computer {
         return r.exit == 0;
     }
 
+    private boolean imageExists() {
+        Exec r = exec(null, 30, "podman", "image", "exists", defaultImage());
+        return r.exit == 0;
+    }
+
+    /** 基础镜像不存在时，用项目根目录的 Containerfile 构建（master 的既有行为）。 */
+    private void buildImage() {
+        String containerfile = containerfile();
+        logger.info("PodmanComputer[{}] base image {} missing; building from {} (this may take a while)",
+                roleId(), defaultImage(), containerfile);
+        Exec r = exec(null, 900, "podman", "build", "-t", defaultImage(), "-f", containerfile, ".");
+        if (r.exit != 0) {
+            logger.warn("PodmanComputer[{}] image build failed: {}", roleId(), r.output);
+        }
+    }
+
     private void createContainer() {
+        try {
+            java.nio.file.Files.createDirectories(hostDir());
+            java.nio.file.Files.createDirectories(driveDir());
+        } catch (java.io.IOException e) {
+            logger.warn("PodmanComputer[{}] cannot create host dirs", roleId(), e);
+        }
+        if (!imageExists()) {
+            buildImage();
+        }
         List<String> cmd = new ArrayList<>(List.of("podman", "run", "-d", "--name", containerName));
         cmd.add("-v");
         cmd.add(hostDir() + ":/home/agent");

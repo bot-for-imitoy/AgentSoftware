@@ -1,5 +1,7 @@
 package com.agent.software;
 
+import com.agent.software.event.Priority;
+import com.agent.software.event.Task;
 import com.agent.software.io.WebInput;
 import com.agent.software.role.Role;
 import com.agent.software.web.ChatWebServer;
@@ -27,6 +29,16 @@ public class Main {
         } catch (Exception e) {
             System.out.println("Web UI failed to start: " + e.getMessage());
         }
+
+        // 开局任务：第 1 天 09:00 让 CEO 找甲方沟通。
+        // 不排这个任务的话，全员空闲会让时钟一路快进（08:00 → 18:00 → 次日），什么都不会发生。
+        long kickoffTick = system.getTimeBus().getShiftStartTick() + 3_600L;   // shiftStart(=08:00) + 1h = 09:00
+        Task kickoff = new Task("system", "CEO", kickoffTick,
+                "It is 09:00. Use talk_to_client to greet the client (Client A) and collect today's project "
+                        + "requirements. When you have them, briefly summarize the plan and hand work to the team.",
+                Priority.HIGH);
+        system.getEventBus().schedule(kickoff);
+        System.out.println("Scheduled CEO kickoff at tick " + kickoffTick + " (09:00)");
 
         system.start();
         System.out.println("System started: " + system.getTimeBus().currentDateTime()

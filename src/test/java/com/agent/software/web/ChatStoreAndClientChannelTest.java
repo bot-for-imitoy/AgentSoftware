@@ -56,4 +56,26 @@ class ChatStoreAndClientChannelTest {
         assertEquals("answer", reply.get(3, TimeUnit.SECONDS));
         assertTrue(channel.isFree());
     }
+
+    @Test
+    void cancelWaitUnblocksTheTalker() throws Exception {
+        ChatStore store = new ChatStore();
+        ClientChannel channel = new ClientChannel(new Client("CLIENT", "Client A", "client@x"), store);
+
+        CompletableFuture<String> talking = CompletableFuture.supplyAsync(() -> channel.talk("CEO", "q", true));
+        Thread.sleep(100);
+        channel.cancelWait("[shift end] closed for today");
+
+        String result = talking.get(3, TimeUnit.SECONDS);
+        assertTrue(result.startsWith("[client] [shift end]"), result);
+        assertTrue(channel.isFree(), "被打断后通道要释放，否则次日没人能再找客户");
+    }
+
+    @Test
+    void receiveFromIsRejectedWhileAnotherRoleIsTalking() {
+        ChatStore store = new ChatStore();
+        ClientChannel channel = new ClientChannel(new Client("CLIENT", "Client A", "client@x"), store);
+        channel.talk("CEO", "hello", false);
+        assertTrue(channel.receiveFrom("CTO", "hi").startsWith("talk_to_client failed"));
+    }
 }

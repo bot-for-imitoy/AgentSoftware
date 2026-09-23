@@ -1,10 +1,13 @@
 package com.agent.software;
 
 import com.agent.software.io.WebInput;
+import com.agent.software.role.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -57,6 +60,25 @@ class AgentSystemTest {
         } finally {
             a.stop();
             b.stop();
+        }
+    }
+
+    @Test
+    void shiftEndInterruptsClientWait(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            CompletableFuture<String> talking = CompletableFuture.supplyAsync(
+                    () -> system.getClientChannel().receiveFrom("CEO", "hello client"));
+            Thread.sleep(100);
+
+            ceo.onShiftEnd();   // 时间线程在下班时做的事
+
+            String result = talking.get(3, TimeUnit.SECONDS);
+            assertTrue(result.contains("shift end"), result);
+            assertTrue(system.getClientChannel().isFree(), "下班后客户通道要释放");
+        } finally {
+            system.stop();
         }
     }
 }

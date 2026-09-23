@@ -222,8 +222,14 @@ public final class Role extends UUIDObject implements Data {
         this.llm.setContext(this.context);
         this.llm.setSystemPrompt(buildSystemPrompt());
         this.computer = system.getComputerManager().create(computerKind(), this);
+        try {
+            this.computer.powerOn();   // 未指定电脑时默认 podman：创建即上电（容器随之创建/启动）
+        } catch (Exception e) {
+            logger.warn("Role[{}] failed to power on computer at setup", roleId, e);
+        }
         this.toolkits.addAll(Toolkits.defaults(this, system.getToolkitConfig(),
                 system.getMailService(), system.getMcpManager(), system.getSkillManager()));
+        this.llm.setTools(getTools());   // 把工具声明交给 LLM，否则请求不带 tools 字段、模型无法调用
         this.setupDone = true;
         logger.info("Role[{}] setup: {} toolkit(s)", roleId, toolkits.size());
     }
@@ -259,13 +265,25 @@ public final class Role extends UUIDObject implements Data {
             waitAborted = false;
             abortMessage = null;
         }
+        if (computer != null && !computer.isOn()) {
+            try {
+                computer.powerOn();
+            } catch (Exception e) {
+                logger.warn("Role[{}] failed to power on computer at shift start", roleId, e);
+            }
+        }
         journal("Shift start");
     }
 
-    /** 下班：由时间线程直调；终止正在等待的 talkTo 并把上下文旧消息移出 prompt。 */
+    /** 下班：由时间线程直调；终止正在等待的 talkTo / 客户对话，并把上下文旧消息移出 prompt。 */
     public void onShiftEnd() {
         if (isWaiting()) {
             abortWait("[shift end] the colleague you were waiting for is off duty; treat this as their reply.");
+        }
+        if (system != null && system.getClientChannel() != null) {
+            // talk_to_client 的等待在客户端通道里，不在 waitForReply 上，必须单独打断
+            system.getClientChannel().cancelWait(
+                    "[shift end] the client conversation is closed for today; continue tomorrow.");
         }
         if (context != null) {
             context.forgetAll();
@@ -317,6 +335,7 @@ public final class Role extends UUIDObject implements Data {
     public void addToolkit(Toolkit t) {
         if (t != null) {
             toolkits.add(t);
+            refreshLlmTools();
         }
     }
 
@@ -331,6 +350,13 @@ public final class Role extends UUIDObject implements Data {
             }
         };
         toolkits.add(single);
+        refreshLlmTools();
+    }
+
+    private void refreshLlmTools() {
+        if (llm != null) {
+            llm.setTools(getTools());
+        }
     }
 
     public List<Tool> getTools() {
@@ -700,7 +726,8 @@ public final class Role extends UUIDObject implements Data {
     private String computerKind() {
         String kind = employee == null ? null : employee.templateString("computer_kind", null);
         if (kind == null || kind.isBlank()) {
-            kind = System.getenv().getOrDefault("AGENTSOFTWARE_COMPUTER_KIND", "local");
+            // 未指定电脑时默认 podman；无 podman 环境可用 AGENTSOFTWARE_COMPUTER_KIND=local 覆盖
+            kind = System.getenv().getOrDefault("AGENTSOFTWARE_COMPUTER_KIND", "podman");
         }
         return kind;
     }

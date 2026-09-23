@@ -4,10 +4,6 @@ import com.agent.software.web.ChatStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.TimeUnit;
-
 /**
  * 客户的"口头"通道：同一时间只允许和一个角色对话。
  *
@@ -16,18 +12,27 @@ import java.util.concurrent.TimeUnit;
  *   <li>客户发起：{@link #talk(String, String, boolean)}（Web/控制台 UI 调用）。</li>
  *   <li>角色发起：{@link #receiveFrom(String, String)}（{@code talk_to_client} 工具调用），忙则拒绝。</li>
  * </ul>
+ *
+ * <p>等待可以被 {@link #cancelWait(String)} 打断 —— 下班时由时间线程调用，
+ * 避免甲方不回消息时把跨天滚动卡到超时。
  */
 public final class ClientChannel {
 
     private static final Logger logger = LoggerFactory.getLogger(ClientChannel.class);
     private static final long REPLY_TIMEOUT_MILLIS = 300_000L;
+    /** 每次最多睡这么久；wait/notify 通常能立即唤醒，这里是兜底。 */
+    private static final long WAIT_SLICE_MILLIS = 1_000L;
 
     private final Client client;
     private final ChatStore store;
     private final Object lock = new Object();
 
     private String currentRoleId;
-    private final BlockingQueue<String> replies = new ArrayBlockingQueue<>(16);
+
+    private final Object waitLock = new Object();
+    private String pendingReply;
+    private boolean cancelled;
+    private String cancelReason;
 
     public ClientChannel(Client client, ChatStore store) {
         this.client = client;
@@ -50,7 +55,7 @@ public final class ClientChannel {
         }
     }
 
-    /** 客户发起一次对话；wait=true 时阻塞等待角色回复。 */
+    /** 客户发起一次对话；wait=true 时阻塞等待角色回复（可被 {@link #cancelWait(String)} 打断）。 */
     public String talk(String roleId, String message, boolean wait) {
         if (roleId == null || roleId.isBlank()) {
             return "client talk failed: no target role";
@@ -61,6 +66,7 @@ public final class ClientChannel {
             }
             currentRoleId = roleId;
         }
+        beginWait();
         record("client", roleId, message);
         if (!wait) {
             return "client: message sent to " + roleId;
@@ -68,7 +74,7 @@ public final class ClientChannel {
         return awaitReply();
     }
 
-    /** 角色发起一次对话；通道被别的角色占用时拒绝。返回角色的到回复（或超时提示）。 */
+    /** 角色发起一次对话；通道被别的角色占用时拒绝。返回等待到的回复（或超时/被打断提示）。 */
     public String receiveFrom(String roleId, String message) {
         synchronized (lock) {
             if (currentRoleId != null && !currentRoleId.equals(roleId)) {
@@ -76,13 +82,31 @@ public final class ClientChannel {
             }
             currentRoleId = roleId;
         }
+        beginWait();
         record("client", roleId, message);
         return awaitReply();
     }
 
-    /** 客户回复。 */
+    /** 客户回复，唤醒等待方。 */
     public void reply(String text) {
-        replies.offer(text == null ? "" : text);
+        synchronized (waitLock) {
+            pendingReply = text == null ? "" : text;
+            cancelled = false;
+            cancelReason = null;
+            waitLock.notifyAll();
+        }
+    }
+
+    /**
+     * 打断当前等待（下班/停机时由时间线程调用）。等待方会立即返回 {@code reason}。
+     * 空闲时调用无副作用。
+     */
+    public void cancelWait(String reason) {
+        synchronized (waitLock) {
+            cancelled = true;
+            cancelReason = reason == null ? "client conversation cancelled" : reason;
+            waitLock.notifyAll();
+        }
     }
 
     public void release() {
@@ -91,18 +115,42 @@ public final class ClientChannel {
         }
     }
 
+    /** 开始新一轮等待：清掉上一轮的回复/取消标记（在 cancelWait 可能到来之前调用，标记不会被吞掉）。 */
+    private void beginWait() {
+        synchronized (waitLock) {
+            pendingReply = null;
+            cancelled = false;
+            cancelReason = null;
+        }
+    }
+
     private String awaitReply() {
-        try {
-            String reply = replies.poll(REPLY_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-            if (reply == null) {
-                return "[client] no reply within " + (REPLY_TIMEOUT_MILLIS / 1000) + "s";
+        long deadline = System.currentTimeMillis() + REPLY_TIMEOUT_MILLIS;
+        synchronized (waitLock) {
+            while (true) {
+                if (cancelled) {
+                    release();
+                    return "[client] " + cancelReason;
+                }
+                if (pendingReply != null) {
+                    String reply = pendingReply;
+                    pendingReply = null;
+                    release();
+                    return reply;
+                }
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) {
+                    release();
+                    return "[client] no reply within " + (REPLY_TIMEOUT_MILLIS / 1000) + "s";
+                }
+                try {
+                    waitLock.wait(Math.min(remain, WAIT_SLICE_MILLIS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    release();
+                    return "[client] interrupted while waiting for the client";
+                }
             }
-            return reply;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return "[client] interrupted while waiting for the client";
-        } finally {
-            release();
         }
     }
 

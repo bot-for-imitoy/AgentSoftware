@@ -25,11 +25,11 @@ public class ComputerManager extends UUIDObjectManager<Computer> {
     }
 
     public Computer create(String kind, Role role) {
-        String k = kind == null || kind.isBlank() ? "local" : kind.toLowerCase();
+        String k = kind == null || kind.isBlank() ? "podman" : kind.toLowerCase();
         Computer c = switch (k) {
-            case "podman" -> new PodmanComputer(role);
+            case "local" -> new LocalComputer(role);
             case "ssh" -> new LocalComputer(role);   // SSH 实现后补，先本地
-            default -> new LocalComputer(role);
+            default -> new PodmanComputer(role);
         };
         add(c);
         return c;

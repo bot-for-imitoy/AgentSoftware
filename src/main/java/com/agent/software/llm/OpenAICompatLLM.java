@@ -47,8 +47,27 @@ public class OpenAICompatLLM extends LLM {
     public OpenAICompatLLM(String apiKey, String model, ConfigStore config) {
         this.apiKey = firstNonBlank(apiKey, env("OPENAI_API_KEY"), configString(config, "llm.api_key"));
         this.model = firstNonBlank(model, env("OPENAI_MODEL"), configString(config, "llm.model"), "gpt-4o-mini");
-        this.baseUrl = stripTrailingSlash(firstNonBlank(
-                env("OPENAI_BASE_URL"), configString(config, "llm.base_url"), "https://api.openai.com/v1"));
+        this.baseUrl = normalizeBaseUrl(stripTrailingSlash(firstNonBlank(
+                env("OPENAI_BASE_URL"), configString(config, "llm.base_url"), "https://api.openai.com/v1")));
+    }
+
+    /**
+     * 规范化 base_url：只给域名（路径为空或 "/"）时自动补 "/v1"。
+     * 例如 {@code https://hhcoding.fun} → {@code https://hhcoding.fun/v1}；已经带路径则原样保留。
+     */
+    private static String normalizeBaseUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(url);
+            String path = uri.getPath();
+            if (path == null || path.isEmpty() || "/".equals(path)) {
+                return url + "/v1";
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+        return url;
     }
 
     @Override
@@ -103,6 +122,7 @@ public class OpenAICompatLLM extends LLM {
                     continue;
                 }
                 String detail = resp.body() == null ? "" : resp.body();
+                logger.warn("LLM HTTP {} from {}: {}", status, baseUrl, Text.truncate(detail, 300));
                 return new Response("API error: HTTP " + status + " " + Text.truncate(detail, 300),
                         "", List.of(), 0);
             } catch (InterruptedException e) {
@@ -117,6 +137,8 @@ public class OpenAICompatLLM extends LLM {
                 }
             }
         }
+        logger.warn("LLM request failed after {} attempt(s): {}", MAX_ATTEMPTS,
+                lastError == null ? "unknown" : lastError.toString());
         return new Response("API error: " + (lastError == null ? "unknown" : lastError.getMessage()),
                 "", List.of(), 0);
     }
@@ -212,6 +234,7 @@ public class OpenAICompatLLM extends LLM {
                 }
             }
         }
+        logger.info("LLM ok: model={}, tokens={}, toolCalls={}", model, tokens, toolCalls.size());
         return new Response(content, reasoning, toolCalls, tokens);
     }
 
