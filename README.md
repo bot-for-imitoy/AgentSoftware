@@ -294,7 +294,7 @@ console output.
 │ AgentRole's personal computer (podman container)             │
 │  · MCP servers run inside the container (podman exec)        │
 │  · default MCP group file_ops auto-installed at role setup   │
-│  · tools: notes/time/task/pc/mcp/skill/email/talk…           │
+│  · tools: notes/time/task/memory/pc/mcp/skill/email/talk…   │
 │  · talk (same group) / email (cross group) / talk_to_client  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -360,7 +360,7 @@ OpenAI-style function schemas. `Toolkits.defaultToolkits(role)` auto-assembles f
 
 | Toolkit | Tools | Purpose |
 |---|---|---|
-| `memory.Memory` | `summary` | end-of-day summary (memory + triggers power-off) |
+| `memory.Memory` | `search_memory` | semantic search over the role's whole past memory, including messages dropped from the prompt (needs `embedding.model`) |
 | `note.Note` | `write_note` `read_note` `edit_note` `delete_note` `list_notes` | the role's own markdown notes, kept across days (refactor3: no reminder — scheduling is `task`) |
 | `time.Time` | `get_time` `take_rest` | work-rest schedule |
 | `todo.Todo` | `todo_add` `todo_list` `todo_update` `todo_delete` | personal todo list |

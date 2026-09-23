@@ -29,6 +29,7 @@ class ToolkitsTest {
         assertTrue(names.contains("time"), names.toString());
         assertTrue(names.contains("task"));
         assertTrue(names.contains("note"));
+        assertTrue(names.contains("memory"));
         assertTrue(names.contains("pc"));
         assertTrue(names.contains("mcp_manager"));
         assertTrue(names.contains("skill"));

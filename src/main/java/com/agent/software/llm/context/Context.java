@@ -27,9 +27,33 @@ public final class Context extends UUIDObjectManager<Message> implements Data {
     }
 
     private int day = 1;
+    /** 语义记忆（可选，由 Role 装配）；null = 不做向量化/淘汰。 */
+    private SemanticMemory memory;
+    /** 恢复持久化数据时不要为每条消息去调 embedding（向量已经一起存下来了）。 */
+    private boolean restoring = false;
 
     public Context() {
         super();
+    }
+
+    public SemanticMemory memory() {
+        return memory;
+    }
+
+    public void setMemory(SemanticMemory memory) {
+        this.memory = memory;
+    }
+
+    /**
+     * 消息入上下文：唯一的写入口（{@code LLM.append*} 全部走这里），
+     * 所以语义向量的计算与阈值淘汰挂在这里就覆盖了"角色每次添加内容"。
+     */
+    @Override
+    public void add(Message value) {
+        super.add(value);
+        if (!restoring && memory != null) {
+            memory.onAdded(this, value);
+        }
     }
 
     /** 只返回 remember=true 的消息（喂给 LLM 的那部分）。 */
@@ -128,23 +152,28 @@ public final class Context extends UUIDObjectManager<Message> implements Data {
         if (raw == null || raw.isBlank()) {
             return;
         }
-        for (Object o : Json.parseArray(raw)) {
-            if (!(o instanceof Map<?, ?> m)) {
-                continue;
+        restoring = true;
+        try {
+            for (Object o : Json.parseArray(raw)) {
+                if (!(o instanceof Map<?, ?> m)) {
+                    continue;
+                }
+                Map<String, String> record = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> e : m.entrySet()) {
+                    record.put(String.valueOf(e.getKey()), e.getValue() == null ? "" : String.valueOf(e.getValue()));
+                }
+                String type = record.getOrDefault("data_type", UserMessage.DATA_TYPE);
+                if (!DataRegistry.supports(type)) {
+                    continue;
+                }
+                Data created = DataRegistry.create(type);
+                created.loadData(record);
+                if (created instanceof Message msg) {
+                    add(msg);
+                }
             }
-            Map<String, String> record = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> e : m.entrySet()) {
-                record.put(String.valueOf(e.getKey()), e.getValue() == null ? "" : String.valueOf(e.getValue()));
-            }
-            String type = record.getOrDefault("data_type", UserMessage.DATA_TYPE);
-            if (!DataRegistry.supports(type)) {
-                continue;
-            }
-            Data created = DataRegistry.create(type);
-            created.loadData(record);
-            if (created instanceof Message msg) {
-                add(msg);
-            }
+        } finally {
+            restoring = false;
         }
     }
 

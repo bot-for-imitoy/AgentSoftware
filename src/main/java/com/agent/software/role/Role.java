@@ -11,6 +11,7 @@ import com.agent.software.llm.LLM;
 import com.agent.software.llm.OpenAICompatLLM;
 import com.agent.software.llm.Response;
 import com.agent.software.llm.context.Context;
+import com.agent.software.llm.context.SemanticMemory;
 import com.agent.software.store.NoteStore;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.ToolResult;
@@ -262,6 +263,15 @@ public final class Role extends UUIDObject implements Data {
             throw new IllegalStateException("role already set up: " + roleId);
         }
         this.context = new Context();
+        // 语义记忆：每条消息入上下文时算向量，条数超阈值就把离新消息最远的一条移出 prompt
+        // （remember=false，但仍在内存里，search_memory 依然能检索到）。
+        this.context.setMemory(SemanticMemory.fromConfig(system.getConfigStore()));
+        if (this.context.memory().enabled()) {
+            logger.info("Role[{}] semantic memory: model={}, threshold={}", roleId,
+                    this.context.memory().embedding().getModel(), this.context.memory().threshold());
+        } else {
+            logger.info("Role[{}] semantic memory off (no embedding.model configured)", roleId);
+        }
         if (this.llm == null) {
             // 传 null 让 OpenAICompatLLM 按 环境变量 > 配置文件 > 默认值 解析；
             // 传死默认值会把 config.json 里的 llm.model / llm.api_key 顶掉。
@@ -1006,6 +1016,13 @@ public final class Role extends UUIDObject implements Data {
                 + "waiting in a loop: the task wakes the assignee when it is due. list_tasks shows what "
                 + "is scheduled but not due yet; my_tasks shows what is already in your queue plus how "
                 + "your recent tasks ended.");
+        if (context != null && context.memory() != null && context.memory().enabled()) {
+            parts.add("Memory search: search_memory(query, limit?) finds the most semantically similar "
+                    + "messages from everything you have read, said or done before — including older "
+                    + "messages that have been dropped from the recent prompt to save context. Use it when "
+                    + "you half-remember an earlier decision, file path, instruction or agreement, instead "
+                    + "of guessing.");
+        }
         if (group != null && !group.isBlank()) {
             parts.add("You belong to the " + group + ", and your company email is " + mailAddress() + ". "
                     + "Colleague communication rules: the talk tool can only message members of your own group "

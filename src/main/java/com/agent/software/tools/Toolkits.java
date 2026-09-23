@@ -8,6 +8,7 @@ import com.agent.software.tools.toolkits.email.Email;
 import com.agent.software.tools.toolkits.hr.Hr;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.mcp.McpManager;
+import com.agent.software.tools.toolkits.memory.Memory;
 import com.agent.software.tools.toolkits.note.Note;
 import com.agent.software.tools.toolkits.pc.Pc;
 import com.agent.software.tools.toolkits.skill.Skill;
@@ -31,7 +32,7 @@ public final class Toolkits {
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     private static final List<String> DEFAULT_NAMES =
-            List.of("time", "task", "note", "pc", "mcp_manager", "skill", "email");
+            List.of("time", "task", "note", "memory", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
@@ -51,6 +52,7 @@ public final class Toolkits {
                 // "task_view" 是旧名字，配置里可能还留着，一起认
                 case "task", "task_view" -> out.add(new Task(role));
                 case "note" -> out.add(new Note(role));
+                case "memory" -> out.add(new Memory(role));
                 case "pc" -> out.add(new Pc(role));
                 case "mcp_manager" -> out.add(new McpManager(role, mcp));
                 case "skill", "skill_manager" -> out.add(new Skill(role, skill));

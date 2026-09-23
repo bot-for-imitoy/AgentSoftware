@@ -770,8 +770,8 @@ public class AgentSystem {
 - **utils**：`UUIDObject`（含 equals/hashCode/toString）、`UUIDObjectManager`（泛型返回 + `CopyOnWriteArrayList`）`、Data`、`DataRegistry`、`Json`、`Text`
 - **event**：`EventType`、`Priority`、`Event`、`Task extends Event`、`TimeBus`、`EventBus`
 - **role**：`RoleState`、`MembershipState`、`Employee`、`CompanyRoster`、`Role`、`RolePool`、`Staffing`
-- **llm**：`Message` + `UserMessage`/`AssistantMessage`/`ToolMessage`（独立文件）、`Context`、`Response`（独立文件）、`LLM`、`OpenAICompatLLM`
-- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 11 个工具包（time/task/note/pc/mcp/skill/email/client/talk/staffing/hr）
+- **llm**：`Message` + `UserMessage`/`AssistantMessage`/`ToolMessage`（独立文件）、`Context`、`SemanticMemory`、`Response`（独立文件）、`LLM`、`OpenAICompatLLM`、`Embedding`、`OpenAICompatEmbedding`
+- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 12 个工具包（time/task/note/memory/pc/mcp/skill/email/client/talk/staffing/hr）
 - **computers**：`Computer`、`MCPServer`（stdio JSON-RPC）、`PodmanComputer`、`LocalComputer`、`ComputerManager`
 - **io/client/mail/web**：`Input`/`StdInput`/`WebInput`、`Client`/`ClientChannel`、`MailService`(abstract)/`VirtualMailService`、`ChatStore`/`ChatWebServer`
 - **store**：`JsonStore`、`RoleTemplateStore`、`ToolkitConfig`；`ConfigStore` 适配新 `Json`
@@ -793,6 +793,9 @@ public class AgentSystem {
 | `Role.pendingEvents()` / `Role.taskHistory(int)` | `my_tasks` 要列出整个队列 + 最近任务历史（含状态与 token）；原来只能 `peekEvent()` 看队首，任务"静默失败"时无人可见 |
 | `EventBus.schedule/cancel/scheduled` 之上的 task 工具 | 排期任务增删改查：`update_task` 用 `cancel(id)` + `schedule(e)` 重新挂键（`targetTime` 是 TreeMap 的 key，改了必须摘下再挂回），因此 `EventBus` 本身不需要新 API |
 | `Toolkits` 配置名 `task`（兼容旧名 `task_view`） | `taskview/TaskView` 按需求更名为 `task/Task`；`data/toolkits.default.json` 同步改键，旧配置仍能加载 |
+| `Message.embedding`（`double[]`，随 `getData/loadData` 持久化） | 语义记忆要把向量挂在消息上；空/缺省 = 没算或算不出来 |
+| `Context.add(Message)` 覆写 + `Context.memory()/setMemory(...)` | `LLM.append*` 全部经 `Context.add` 落库，这是"角色每次添加内容"的唯一写入口，语义向量的计算与阈值淘汰挂在这里；`loadData` 期间置 `restoring` 跳过（向量已经一起存了） |
+| `SemanticMemory`、`Embedding`/`OpenAICompatEmbedding`、`memory` 工具包（`search_memory`） | 需求新增：embedding 请求类 + 语义记忆 + 阈值淘汰 + 记忆检索 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
 
@@ -931,6 +934,39 @@ public class AgentSystem {
   跨组派活沿用 talk 规则（同组可以，跨组只有管理组可以），未进组的"假死"员工不能派活。
   这是给"角色自己安排未来工作"补上的缺环：以前没有任何工具能造出未来事件，于是全员
   `take_rest` 之后 `hasFutureWork()` 必然为假、公司只能靠人手动 resume。
+
+- **语义记忆：Embedding 请求类 + 阈值淘汰 + `search_memory`**（需求新增）。
+  - **请求类**：`llm/Embedding`（抽象，和 `LLM` 对称）+ `llm/OpenAICompatEmbedding`
+    （`POST {base_url}/embeddings`，body `{"model":…,"input":…}`，取 `data[0].embedding`）。
+    配置解析口径与 `OpenAICompatLLM` 一致（环境变量 &gt; 配置文件 &gt; 默认值）：
+    - `embedding.model`（或 `OPENAI_EMBEDDING_MODEL`）—— **必填，没配就整个功能空转**；
+    - `embedding.api_key` / `embedding.base_url`（或 `OPENAI_EMBEDDING_API_KEY/_BASE_URL`）
+      **回落到 `llm.api_key` / `llm.base_url`**，同一个网关跑两种模型时不用重复填；
+    - `base_url` 只给域名时自动补 `/v1`。
+
+    ```json
+    { "llm": { "base_url": "https://…", "api_key": "sk-…", "model": "deepseek-v4.1-flash" },
+      "embedding": { "model": "text-embedding-3-small" } }
+    ```
+  - **每次添加内容都算向量**：`Context.add` 是唯一写入口（`LLM.appendUserMessage/appendAssistantMessage/
+    appendToolResult` 全走它），所以钩子挂在 `Context.add` 上就覆盖了"角色每次添加内容"。
+    算出来的向量存在 `Message.embedding`，并随 `getData/loadData` 一起持久化。
+  - **阈值淘汰**：remember=true 的消息条数超过 `memory.threshold`
+    （或 `AGENTSOFTWARE_MEMORY_THRESHOLD`，默认 **40**）时，把其中与**刚加入的那条**余弦相似度
+    最低（距离最远）的一条 `remember` 置 false —— 只是移出 prompt，消息和向量都还在内存里。
+    - **成组淘汰**：只丢一条 `assistant(tool_calls)` 或一条 `tool` 结果会让 prompt 出现
+      "tool 结果没有对应 tool_call"（或反之），网关会 400。所以淘汰时连带把配对的
+      tool_call / tool 结果一起移出（`SemanticMemory.evictionGroup`）。
+    - 没有向量（未配置/调用失败/维度不一致/零向量）时不淘汰，行为与加此功能前一致。
+  - **熔断与降级**：embedding 调用失败重试 3 次；4xx（模型不存在/未授权）**立即熔断**，连续失败
+    3 次也熔断，之后本进程不再尝试。没有这两道闸，模型名写错会让**每条消息**都去撞墙，把任务循环拖死。
+    没配 `embedding.model` 时 `Role.setup` 打印一行 `semantic memory off`，不做任何 HTTP。
+  - **`search_memory(query, limit?)`**（`memory` 工具包）：把 query 向量化，对**全部**历史消息
+    （含 `remember=false` 的）算余弦相似度，返回最近的若干条，并标出每条是 `in-prompt` 还是
+    `forgotten`、在原上下文里的序号、时间与相似度。**淘汰 ≠ 遗忘**，这是该工具存在的意义。
+  - 提示词只在 `SemanticMemory.enabled()` 时才介绍 `search_memory`，不宣传一个必然报错的工具。
+  - 实测（真模型）：把"客户截止日期 2026-09-30"的消息 `forgetAll()` 移出 prompt 后，
+    模型自己调用 `search_memory {query=client deadline date}` 找回，并答出正确日期。
 
 
 
