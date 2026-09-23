@@ -582,8 +582,8 @@ defaults.
 | `SMTP_USER` / `SMTP_PASSWORD` | *(empty)* | SMTP credentials (optional) |
 | `SMTP_FROM` | `SMTP_USER` or sender | real-mail sender address (optional) |
 | `SMTP_USE_SSL` | by port | force SSL (`true`) or non-SSL (`false`) |
-| `AGENTSOFTWARE_WEB_HOST` | `0.0.0.0` | Web UI listen address |
-| `AGENTSOFTWARE_WEB_PORT` | `8787` | Web UI port |
+| `AGENTSOFTWARE_WEB_HOST` | `0.0.0.0` | Web UI listen address (system property `agentsoftware.webHost` wins; set `127.0.0.1` to keep it local-only) |
+| `AGENTSOFTWARE_WEB_PORT` | `8787` | Web UI port (`0` = random free port; if the fixed port is busy it falls back to a random one). System property `agentsoftware.webPort` wins |
 | `AGENTSOFTWARE_CLIENT_REPLY_TIMEOUT` | `1200000` (20 min) | Client A reply timeout in Web-input mode (ms) |
 | `AGENTSOFTWARE_SECONDS_PER_TICK` | `1.0` | Tick ↔ simulated-time conversion: simulated seconds that one tick represents (default 1 Tick = 1 simulated second; rescales the shift/day tick geometry) |
 | `AGENTSOFTWARE_SIM_SECONDS_PER_REAL_SECOND` | `1.0` | busy-clock speed: simulated seconds that pass per real second while at least one role is working (`0` freezes the clock while busy) |

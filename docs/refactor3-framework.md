@@ -796,6 +796,7 @@ public class AgentSystem {
 | `Message.embedding`（`double[]`，随 `getData/loadData` 持久化） | 语义记忆要把向量挂在消息上；空/缺省 = 没算或算不出来 |
 | `Context.add(Message)` 覆写 + `Context.memory()/setMemory(...)` | `LLM.append*` 全部经 `Context.add` 落库，这是"角色每次添加内容"的唯一写入口，语义向量的计算与阈值淘汰挂在这里；`loadData` 期间置 `restoring` 跳过（向量已经一起存了） |
 | `SemanticMemory`、`Embedding`/`OpenAICompatEmbedding`、`memory` 工具包（`search_memory`） | 需求新增：embedding 请求类 + 语义记忆 + 阈值淘汰 + 记忆检索 |
+| `ChatWebServer(AgentSystem)` 便捷构造器 + `resolveHost()`/`resolvePort()`（static） | 需求新增：Web UI 的 host 可配置、端口固定（原来 `Main` 写死 `127.0.0.1:0`）；单测仍用原来的三参构造器 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
 
@@ -967,6 +968,20 @@ public class AgentSystem {
   - 提示词只在 `SemanticMemory.enabled()` 时才介绍 `search_memory`，不宣传一个必然报错的工具。
   - 实测（真模型）：把"客户截止日期 2026-09-30"的消息 `forgetAll()` 移出 prompt 后，
     模型自己调用 `search_memory {query=client deadline date}` 找回，并答出正确日期。
+
+- **Web UI 监听地址可配置 + 端口固定**：`Main` 不再写死 `127.0.0.1:0`（局域网根本连不上，
+  端口还随机到只能从日志里抠），改为 `new ChatWebServer(system)`，解析顺序
+  **系统属性 `agentsoftware.webHost`/`agentsoftware.webPort` &gt; 环境变量
+  `AGENTSOFTWARE_WEB_HOST`/`AGENTSOFTWARE_WEB_PORT` &gt; 默认 `0.0.0.0:8787`**
+  （README 早就写了这两个环境变量，但代码里一直没实现）。要点：
+  - `port=0` 仍表示"随机空闲端口"；固定端口被占用时**不让系统起不来**：
+    `ChatWebServer.start()` 打一条 warn 后改用随机端口，`port()` 返回真实端口。
+  - 启动时打印 `Web UI: http://localhost:PORT/`，绑 `0.0.0.0` 时再逐个打印非回环 IPv4 的
+    `http://<lan-ip>:PORT/ (LAN)` —— 只打 `0.0.0.0` 对使用者没有意义。
+  - ⚠️ 这只是"应用愿意被访问"；**宿主机防火墙是另一道**：本机 firewalld 默认 `public` 区
+    只放行 `ssh`/`dhcpv6-client`，不放行自定义端口的话局域网仍然连不上
+    （`firewall-cmd --add-port=8787/tcp --permanent && firewall-cmd --reload`，需要 root）。
+  - ⚠️ 该界面**没有鉴权**：能连上的人可以 pause/resume、以"客户"身份发言/发信、结束会话。
 
 
 

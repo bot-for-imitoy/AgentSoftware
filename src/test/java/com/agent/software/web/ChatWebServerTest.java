@@ -133,6 +133,81 @@ class ChatWebServerTest {
         }
     }
 
+    /**
+     * 需求：Web UI 的 host 要可配置、端口要固定（默认 0.0.0.0:8787），
+     * 这样 URL 才能记住并让局域网里的机器访问。
+     */
+    @Test
+    void listenAddressComesFromConfiguration(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        String oldHost = System.getProperty("agentsoftware.webHost");
+        String oldPort = System.getProperty("agentsoftware.webPort");
+        try {
+            System.clearProperty("agentsoftware.webHost");
+            System.clearProperty("agentsoftware.webPort");
+            assertEquals(ChatWebServer.DEFAULT_HOST, ChatWebServer.resolveHost());
+            assertEquals(ChatWebServer.DEFAULT_PORT, ChatWebServer.resolvePort());
+            assertEquals(8787, ChatWebServer.DEFAULT_PORT);
+
+            System.setProperty("agentsoftware.webHost", "127.0.0.1");
+            System.setProperty("agentsoftware.webPort", "0");
+            assertEquals("127.0.0.1", ChatWebServer.resolveHost());
+            assertEquals(0, ChatWebServer.resolvePort());
+
+            ChatWebServer web = new ChatWebServer(system);   // 应用入口用的构造器
+            try {
+                web.start();
+                assertEquals("127.0.0.1", web.host());
+                assertTrue(web.port() > 0, "port=0 时要报出真实端口");
+                String state = get(HttpClient.newHttpClient(),
+                        "http://127.0.0.1:" + web.port() + "/api/state");
+                assertTrue(state.contains("\"ok\":true"), state);
+            } finally {
+                web.stop();
+            }
+
+            System.setProperty("agentsoftware.webPort", "not-a-port");
+            assertEquals(ChatWebServer.DEFAULT_PORT, ChatWebServer.resolvePort());
+            System.setProperty("agentsoftware.webPort", "70000");
+            assertEquals(ChatWebServer.DEFAULT_PORT, ChatWebServer.resolvePort());
+        } finally {
+            restore("agentsoftware.webHost", oldHost);
+            restore("agentsoftware.webPort", oldPort);
+            system.stop();
+        }
+    }
+
+    /** 固定端口被别的进程占用时不能让整个系统起不来 —— 退化成随机端口并报出真实端口。 */
+    @Test
+    void fixedPortFallsBackToAnEphemeralPortWhenBusy(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try (java.net.ServerSocket blocker =
+                     new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))) {
+            int taken = blocker.getLocalPort();
+            ChatWebServer web = new ChatWebServer(system, "127.0.0.1", taken);
+            try {
+                web.start();
+                assertTrue(web.port() != taken, "端口被占时应退化，而不是抛异常");
+                assertTrue(web.port() > 0);
+                String state = get(HttpClient.newHttpClient(),
+                        "http://127.0.0.1:" + web.port() + "/api/state");
+                assertTrue(state.contains("\"ok\":true"), state);
+            } finally {
+                web.stop();
+            }
+        } finally {
+            system.stop();
+        }
+    }
+
+    private static void restore(String key, String oldValue) {
+        if (oldValue == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, oldValue);
+        }
+    }
+
     /** 立即返回的假 LLM，避免测试里真的发 HTTP。 */
     private static final class FakeLlm extends com.agent.software.llm.LLM {
         @Override

@@ -39,6 +39,13 @@ public class ChatWebServer {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatWebServer.class);
 
+    /** 默认监听地址：所有网卡（局域网可访问；要只给本机用就设成 127.0.0.1）。 */
+    public static final String DEFAULT_HOST = "0.0.0.0";
+    /** 默认端口（固定，便于把 URL 记下来/发给别人；被占用时自动退化成随机端口）。 */
+    public static final int DEFAULT_PORT = 8787;
+    public static final String HOST_ENV = "AGENTSOFTWARE_WEB_HOST";
+    public static final String PORT_ENV = "AGENTSOFTWARE_WEB_PORT";
+
     private final AgentSystem system;
     private final String host;
     private final int requestedPort;
@@ -50,28 +57,90 @@ public class ChatWebServer {
         this.requestedPort = port;
     }
 
+    /**
+     * 用配置里的监听地址/端口（见 {@link #resolveHost()} / {@link #resolvePort()}）。
+     * 应用入口（{@code Main}）走这个构造器，单测仍然显式传 host/port。
+     */
+    public ChatWebServer(AgentSystem system) throws IOException {
+        this(system, resolveHost(), resolvePort());
+    }
+
+    /**
+     * 监听地址：系统属性 {@code agentsoftware.webHost} &gt; 环境变量 {@code AGENTSOFTWARE_WEB_HOST}
+     * &gt; {@link #DEFAULT_HOST}（0.0.0.0）。
+     */
+    public static String resolveHost() {
+        String v = firstNonBlank(System.getProperty("agentsoftware.webHost"), System.getenv(HOST_ENV));
+        return v == null ? DEFAULT_HOST : v;
+    }
+
+    /**
+     * 监听端口：系统属性 {@code agentsoftware.webPort} &gt; 环境变量 {@code AGENTSOFTWARE_WEB_PORT}
+     * &gt; {@link #DEFAULT_PORT}（8787）。{@code 0} 表示"随机空闲端口"，非法值退回默认。
+     */
+    public static int resolvePort() {
+        String v = firstNonBlank(System.getProperty("agentsoftware.webPort"), System.getenv(PORT_ENV));
+        if (v == null) {
+            return DEFAULT_PORT;
+        }
+        try {
+            int p = Integer.parseInt(v);
+            if (p < 0 || p > 65535) {
+                logger.warn("{} is out of range ({}), using {}", PORT_ENV, v, DEFAULT_PORT);
+                return DEFAULT_PORT;
+            }
+            return p;
+        } catch (NumberFormatException e) {
+            logger.warn("{} is not a port number ({}), using {}", PORT_ENV, v, DEFAULT_PORT);
+            return DEFAULT_PORT;
+        }
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a.trim();
+        }
+        return b != null && !b.isBlank() ? b.trim() : null;
+    }
+
     public void start() {
         if (server != null) {
             return;
         }
         try {
-            server = HttpServer.create(new InetSocketAddress(host, requestedPort), 0);
-            server.createContext("/", this::handleStatic);
-            server.createContext("/api/state", this::handleState);
-            server.createContext("/api/messages", this::handleMessages);
-            server.createContext("/api/reply", this::handleReply);
-            server.createContext("/api/pause", this::handlePause);
-            server.createContext("/api/resume", this::handleResume);
-            server.createContext("/api/talk", this::handleTalk);
-            server.createContext("/api/client_mail", this::handleClientMail);
-            server.createContext("/api/client_end", this::handleClientEnd);
-            server.createContext("/api/roles", this::handleRoles);
-            server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
-            server.start();
-            logger.info("ChatWebServer started: http://{}:{}/", host, port());
+            server = bind(requestedPort);
         } catch (IOException e) {
-            throw new RuntimeException("cannot start web server", e);
+            if (requestedPort == 0) {
+                throw new RuntimeException("cannot start web server", e);
+            }
+            // 固定端口被占用时不要让整个系统起不来：退化成随机端口，把实际端口打出来
+            logger.warn("ChatWebServer cannot bind {}:{} ({}); falling back to an ephemeral port",
+                    host, requestedPort, e.getMessage());
+            try {
+                server = bind(0);
+            } catch (IOException e2) {
+                throw new RuntimeException("cannot start web server", e2);
+            }
         }
+        server.start();
+        logger.info("ChatWebServer started: http://{}:{}/", host, port());
+    }
+
+    /** 建 HttpServer 并挂上所有路由（还没 start）。create 阶段就会真正绑定端口，占用会抛 IOException。 */
+    private HttpServer bind(int port) throws IOException {
+        HttpServer created = HttpServer.create(new InetSocketAddress(host, port), 0);
+        created.createContext("/", this::handleStatic);
+        created.createContext("/api/state", this::handleState);
+        created.createContext("/api/messages", this::handleMessages);
+        created.createContext("/api/reply", this::handleReply);
+        created.createContext("/api/pause", this::handlePause);
+        created.createContext("/api/resume", this::handleResume);
+        created.createContext("/api/talk", this::handleTalk);
+        created.createContext("/api/client_mail", this::handleClientMail);
+        created.createContext("/api/client_end", this::handleClientEnd);
+        created.createContext("/api/roles", this::handleRoles);
+        created.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+        return created;
     }
 
     public void stop() {
