@@ -327,6 +327,9 @@ public class AgentSystem {
                 : "Shift end at " + tb.currentDateTime();
         return Event.builder()
                 .type(type)
+                // 班次事件固定 HIGH：压得住普通邮件/任务（NORMAL），但**不高于 HIGH** ——
+                // 高于 HIGH 的事件会被塞进正在跑的任务的工具结果里（Role.urgentEventNotice），
+                // 而"上班/下班"只是日程信号，不该在模型干到一半时插进它的工具结果。
                 .priority(Priority.HIGH)
                 .at(tb.now())
                 .content(content)

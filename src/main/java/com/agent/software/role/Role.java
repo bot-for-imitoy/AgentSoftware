@@ -89,6 +89,10 @@ public final class Role extends UUIDObject implements Data {
     private final List<String> journal = new CopyOnWriteArrayList<>();
     /** 最近处理完的任务（成功/失败都留痕，供 my_tasks 查看 —— 任务静默失败过一次）。 */
     private final List<Task> taskHistory = new CopyOnWriteArrayList<>();
+    /**
+     * 已经往工具结果里附过的"高于 HIGH"的事件 id（同一事件只附一次，见 {@link #urgentEventNotice()}）。
+     */
+    private volatile String announcedUrgentEventId;
 
     // 优先级队列：同优先级按入队序号 FIFO
     private record Slot(long seq, Event event) {
@@ -814,6 +818,7 @@ public final class Role extends UUIDObject implements Data {
         }
         setState(RoleState.BUSY);
         task.markRunning();
+        announcedUrgentEventId = null;   // 每条任务重新给一次"紧急事件"提醒
         int tokens = 0;
         String answer = "";
         int failingRounds = 0;
@@ -847,8 +852,10 @@ public final class Role extends UUIDObject implements Data {
                     logger.info("Role[{}] tool call: id={} name={}", roleId, callId, toolName);
                     Map<String, Object> args = toolArgs(call);
                     ToolResult res = invokeTool(toolName, args);
-                    getLlm().appendToolResult(callId, toolName, res.text);
-                    recordToolCall(toolName, Json.stringify(args), res.text, task.uuid, round);
+                    // 工具结果的"额外选项"：队列里有优先级高于 HIGH 的事件就附在最近这条结果后面
+                    String resultText = res.text + urgentEventNotice();
+                    getLlm().appendToolResult(callId, toolName, resultText);
+                    recordToolCall(toolName, Json.stringify(args), resultText, task.uuid, round);
                     if (!res.ok) {
                         // 关键：所有 tool_call 都必须回喂结果，否则下一轮 call_id 对不上；
                         // 失败也不立刻结束任务，把错误文本交给模型让它自己纠正。
@@ -888,6 +895,46 @@ public final class Role extends UUIDObject implements Data {
             rememberTask(task);
             setState(RoleState.IDLE);
         }
+    }
+
+    /**
+     * 队列里优先级严格高于 {@link Priority#HIGH} 的事件（即 EMERGENCY）。
+     *
+     * <p>队列按优先级排序，所以真有一个就一定在队首；没有就返回 null。
+     */
+    private Event peekUrgentEvent() {
+        Event head = peekEvent();
+        if (head == null || head.priority == null) {
+            return null;
+        }
+        return head.priority.value > Priority.HIGH.value ? head : null;
+    }
+
+    /**
+     * 工具结果的"额外选项"：当前队列里有优先级高于 HIGH 的事件时，把它附在**最近这条**工具结果后面，
+     * 让模型在工具循环里就能看到，而不是等整个任务跑完才发现；没有就返回空串（也就是不给结果加这个参数）。
+     *
+     * <p>同一个事件只附一次（{@link #announcedUrgentEventId}），否则每一轮都会重复塞同一段文字。
+     * 提醒归提醒，**不消费事件** —— 它仍然留在队列里，等当前任务结束后照常被处理。
+     */
+    private String urgentEventNotice() {
+        Event urgent = peekUrgentEvent();
+        if (urgent == null || urgent.uuid.equals(announcedUrgentEventId)) {
+            return "";
+        }
+        announcedUrgentEventId = urgent.uuid;
+        String from = urgent.fromRoleId == null || urgent.fromRoleId.isBlank()
+                ? "system" : urgent.fromRoleId;
+        String content = urgent.content == null ? "" : urgent.content.strip();
+        if (content.length() > 400) {
+            content = content.substring(0, 400) + "…";
+        }
+        logger.info("Role[{}] urgent event surfaced in a tool result: {} / {} / from {}",
+                roleId, urgent.priority, urgent.type, from);
+        return "\n\n[urgent event waiting in your queue — priority above HIGH]\n"
+                + "- " + urgent.priority + " / " + urgent.type + " / from " + from + "\n"
+                + "  " + content.replace("\n", "\n  ") + "\n"
+                + "Wrap up the current step, then deal with this.";
     }
 
     private static String str(Object o) {

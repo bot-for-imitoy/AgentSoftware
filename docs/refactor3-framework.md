@@ -983,5 +983,27 @@ public class AgentSystem {
     （`firewall-cmd --add-port=8787/tcp --permanent && firewall-cmd --reload`，需要 root）。
   - ⚠️ 该界面**没有鉴权**：能连上的人可以 pause/resume、以"客户"身份发言/发信、结束会话。
 
+- **工具结果的"额外选项"：把"高于 HIGH"的事件带进工具循环**。队列里存在优先级**严格高于 HIGH**
+  （即 `EMERGENCY`）的事件时，`Role.runTask` 会把**最近那一条**工具结果后面附加一段：
+
+  ```
+  [urgent event waiting in your queue — priority above HIGH]
+  - EMERGENCY / TALK / from COO
+    EMERGENCY: the client is calling, drop everything and reply now
+  Wrap up the current step, then deal with this.
+  ```
+
+  没有这样的事件就什么都不加（"这个参数"不存在）。要点：
+  - **只附一次**：同一条事件按 uuid 去重（`announcedUrgentEventId`，每条任务开头重置），
+    否则每轮工具调用都会重复塞同一段文字；一条任务里若出现新的紧急事件会再附一次。
+  - **不消费事件**：它仍然留在队列里，等当前任务结束后照常被处理 —— 提醒 ≠ 插队执行。
+  - 判定只看队首：队列本来就按优先级排序，真有 EMERGENCY 一定在最前面。
+  - 附的是"给模型看的文本"，所以工具成功/失败的判定不受影响（`isToolFailure` 在附加之前就已判完）。
+  - `SHIFT_START` / `SHIFT_END` 固定 **HIGH**：压得住 NORMAL 的邮件/任务，但**不高于 HIGH**，
+    所以班次信号不会插进模型正跑着的工具结果里（`AgentSystem.shiftEvent` 里有注释）。
+  - 目前 EMERGENCY 的现实来源只有两个：`talk(urgency=EMERGENCY)` 与 `create_task(priority=EMERGENCY)`
+    （客户端口信走的是 HIGH，不会触发）。实测（真模型）：任务跑第一轮时塞入一条 EMERGENCY TALK，
+    模型在 `my_tasks` 的工具结果里看到了这段附加文本，并在最终答复里主动提到"COO 的紧急请求"。
+
 
 
