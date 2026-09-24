@@ -190,6 +190,22 @@ class AgentSystemTest {
         }
     }
 
+    /** 下班必须是最高优先级（EMERGENCY），这样它才能插进模型正在跑的工具循环里提醒收工。 */
+    @Test
+    void shiftEndIsTheHighestPriorityEvent() {
+        com.agent.software.event.TimeBus tb = new com.agent.software.event.TimeBus();
+        com.agent.software.event.Event end =
+                AgentSystem.shiftEvent(com.agent.software.event.EventType.SHIFT_END, tb);
+        com.agent.software.event.Event start =
+                AgentSystem.shiftEvent(com.agent.software.event.EventType.SHIFT_START, tb);
+
+        assertEquals(com.agent.software.event.Priority.EMERGENCY, end.priority,
+                "SHIFT_END 要高于 HIGH，否则不会出现在工具结果的额外选项里");
+        assertTrue(end.priority.value > com.agent.software.event.Priority.HIGH.value);
+        assertEquals(com.agent.software.event.Priority.HIGH, start.priority,
+                "上班只是日程信号，保持 HIGH");
+    }
+
     /** 立即返回的假 LLM，避免测试里真的发 HTTP。 */
     private static final class FakeLlm extends com.agent.software.llm.LLM {
         @Override

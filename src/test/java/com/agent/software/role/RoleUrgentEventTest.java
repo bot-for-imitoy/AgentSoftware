@@ -58,16 +58,16 @@ class RoleUrgentEventTest {
         }
     }
 
-    /** HIGH 本身（比如下班广播）不算"高于 HIGH"，不许塞进工具结果。 */
+    /** HIGH 本身不算"高于 HIGH"，不许塞进工具结果（阈值是严格的）。 */
     @Test
     void highPriorityAloneAddsNothing(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
             Role ceo = system.getRolePool().find("CEO");
             Event high = Event.builder()
-                    .from("system").to("CEO").type(EventType.SHIFT_END)
+                    .from("CTO").to("CEO").type(EventType.TALK)
                     .priority(Priority.HIGH)
-                    .content("Shift end at 2026-09-24 18:00")
+                    .content("HIGH but not above HIGH")
                     .build();
             ScriptedLlm llm = new ScriptedLlm(ceo, high, 1);
             ceo.setLlm(llm);
@@ -76,7 +76,31 @@ class RoleUrgentEventTest {
 
             assertEquals(1, llm.toolResults.size());
             assertFalse(llm.toolResults.get(0).contains(MARKER), llm.toolResults.get(0));
-            assertFalse(llm.toolResults.get(0).contains("Shift end"), llm.toolResults.get(0));
+            assertFalse(llm.toolResults.get(0).contains("HIGH but not above HIGH"), llm.toolResults.get(0));
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 下班广播现在是最高优先级，所以它必须出现在正在跑的工具结果里（这是"收工提醒"的落点）。 */
+    @Test
+    void shiftEndRidesIntoTheRunningToolLoop(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            Event shiftEnd = Event.builder()
+                    .from("system").to("CEO").type(EventType.SHIFT_END)
+                    .priority(Priority.EMERGENCY)
+                    .content("Shift end at 2026-09-24 18:00")
+                    .build();
+            ScriptedLlm llm = new ScriptedLlm(ceo, shiftEnd, 1);
+            ceo.setLlm(llm);
+            ceo.enqueue(new Task("system", "CEO", 0, "long afternoon work", Priority.NORMAL));
+            awaitFinished(ceo);
+
+            String result = llm.toolResults.get(0);
+            assertTrue(result.contains(MARKER), result);
+            assertTrue(result.contains("Shift end at 2026-09-24 18:00"), result);
         } finally {
             system.stop();
         }

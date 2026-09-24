@@ -999,11 +999,15 @@ public class AgentSystem {
   - **不消费事件**：它仍然留在队列里，等当前任务结束后照常被处理 —— 提醒 ≠ 插队执行。
   - 判定只看队首：队列本来就按优先级排序，真有 EMERGENCY 一定在最前面。
   - 附的是"给模型看的文本"，所以工具成功/失败的判定不受影响（`isToolFailure` 在附加之前就已判完）。
-  - `SHIFT_START` / `SHIFT_END` 固定 **HIGH**：压得住 NORMAL 的邮件/任务，但**不高于 HIGH**，
-    所以班次信号不会插进模型正跑着的工具结果里（`AgentSystem.shiftEvent` 里有注释）。
-  - 目前 EMERGENCY 的现实来源只有两个：`talk(urgency=EMERGENCY)` 与 `create_task(priority=EMERGENCY)`
-    （客户端口信走的是 HIGH，不会触发）。实测（真模型）：任务跑第一轮时塞入一条 EMERGENCY TALK，
-    模型在 `my_tasks` 的工具结果里看到了这段附加文本，并在最终答复里主动提到"COO 的紧急请求"。
+  - **`SHIFT_END` = EMERGENCY（最高优先级）、`SHIFT_START` = HIGH**（`AgentSystem.shiftEvent`，
+    包内可见以便单测直接断言）：下班必须能插进模型正跑着的工具循环里提醒"今天到此为止"——
+    这就是对付"18:00 之后还在猛干、模拟时间被拖到 23:58"的落点；上班只是日程信号，
+    压得住 NORMAL 的邮件/任务就够了，不需要插进当前这一步。
+    ⚠️ 它只是**提醒**（附着在工具结果文本里），不是硬中断：模型仍可以先做完手头这一步。
+  - 目前 EMERGENCY 的现实来源：`SHIFT_END`、`talk(urgency=EMERGENCY)`、
+    `create_task(priority=EMERGENCY)`（客户端口信走的是 HIGH，不触发）。
+  - 实测（真模型）：任务跑第一轮时塞入一条 EMERGENCY TALK，模型在 `my_tasks` 的工具结果里
+    看到了这段附加文本，并在最终答复里主动提到"COO 的紧急请求"。
 
 
 

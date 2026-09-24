@@ -319,18 +319,28 @@ public class AgentSystem {
         }
     }
 
-    private static Event shiftEvent(EventType type, TimeBus tb) {
+    /**
+     * 班次边界事件。
+     *
+     * <p>优先级按语义分档（包内可见是为了单测能直接断言）：
+     * <ul>
+     *   <li><b>SHIFT_END = EMERGENCY（最高）</b>：下班要能在模型正跑着工具循环时插进去提醒
+     *       "今天到此为止"，否则它会把下午的任务一路干到深夜（实测 18:00 之后还在干、模拟时间
+     *       被拖到 23:58）。附着逻辑见 {@code Role.urgentEventNotice()}。</li>
+     *   <li><b>SHIFT_START = HIGH</b>：上班只是日程信号，压得住 NORMAL 的邮件/任务就够了，
+     *       不需要插进正在跑的那一步。</li>
+     * </ul>
+     */
+    static Event shiftEvent(EventType type, TimeBus tb) {
         // SHIFT_START 的 content 会作为"开工"任务的正文发给每个大组成员，所以要带上日期和时刻
         String content = type == EventType.SHIFT_START
                 ? "Shift start at " + tb.currentDateTime() + " (day " + tb.getDay()
                         + "). You are on duty now."
                 : "Shift end at " + tb.currentDateTime();
+        Priority priority = type == EventType.SHIFT_END ? Priority.EMERGENCY : Priority.HIGH;
         return Event.builder()
                 .type(type)
-                // 班次事件固定 HIGH：压得住普通邮件/任务（NORMAL），但**不高于 HIGH** ——
-                // 高于 HIGH 的事件会被塞进正在跑的任务的工具结果里（Role.urgentEventNotice），
-                // 而"上班/下班"只是日程信号，不该在模型干到一半时插进它的工具结果。
-                .priority(Priority.HIGH)
+                .priority(priority)
                 .at(tb.now())
                 .content(content)
                 .source("time")
