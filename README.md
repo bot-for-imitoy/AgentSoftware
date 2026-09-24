@@ -363,7 +363,7 @@ OpenAI-style function schemas. `Toolkits.defaultToolkits(role)` auto-assembles f
 | `memory.Memory` | `search_memory` | semantic search over the role's whole past memory, including messages dropped from the prompt (needs `embedding.model`) |
 | `note.Note` | `write_note` `read_note` `edit_note` `delete_note` `list_notes` | the role's own markdown notes, kept across days (refactor3: no reminder — scheduling is `task`) |
 | `time.Time` | `get_time` `take_rest` | work-rest schedule |
-| `todo.Todo` | `todo_add` `todo_list` `todo_update` `todo_delete` | personal todo list |
+| `todo.Todo` | `todo_add` `todo_list` `todo_update` `todo_delete` + `todo_group_list` `todo_group_switch` | personal todos **bucketed by group**; every change is saved immediately and one group is your switchable baseline |
 | `task.Task` | `my_tasks` `create_task` `list_tasks` `update_task` `delete_task` | the role's task queue + history, and CRUD over future scheduled tasks |
 | `pc.Pc` | `run_command` `computer_status` `lan_devices` `reboot` | operations on its own computer |
 | `mcp.McpManager` | `mcp_search` `mcp_list` `mcp_add` `mcp_remove` `mcp_my_tools` | self-service MCP tool management |

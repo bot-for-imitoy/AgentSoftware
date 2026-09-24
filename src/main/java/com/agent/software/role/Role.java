@@ -13,6 +13,7 @@ import com.agent.software.llm.Response;
 import com.agent.software.llm.context.Context;
 import com.agent.software.llm.context.SemanticMemory;
 import com.agent.software.store.NoteStore;
+import com.agent.software.store.TodoStore;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.ToolResult;
 import com.agent.software.tools.Toolkit;
@@ -31,6 +32,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -81,6 +84,7 @@ public final class Role extends UUIDObject implements Data {
     private LLM llm;
     private Computer computer;
     private NoteStore noteStore;
+    private TodoStore todoStore;
     private boolean setupDone = false;
     private volatile boolean running = false;
     private Thread worker;
@@ -90,9 +94,10 @@ public final class Role extends UUIDObject implements Data {
     /** 最近处理完的任务（成功/失败都留痕，供 my_tasks 查看 —— 任务静默失败过一次）。 */
     private final List<Task> taskHistory = new CopyOnWriteArrayList<>();
     /**
-     * 已经往工具结果里附过的"高于 HIGH"的事件 id（同一事件只附一次，见 {@link #urgentEventNotice()}）。
+     * 已经往工具结果里附过的待处理事件 id（每个事件只附一次，见 {@link #pendingEventNotice()}）。
+     * 每条任务开头清空。
      */
-    private volatile String announcedUrgentEventId;
+    private final Set<String> announcedEventIds = ConcurrentHashMap.newKeySet();
 
     // 优先级队列：同优先级按入队序号 FIFO
     private record Slot(long seq, Event event) {
@@ -417,6 +422,18 @@ public final class Role extends UUIDObject implements Data {
             noteStore = new NoteStore(base == null ? null : base.resolve("notes"), roleId);
         }
         return noteStore;
+    }
+
+    /**
+     * 本角色的待办库（{@code <dataDir>/todos/<roleId>.json}，懒创建）。
+     * 事项按组存放，每次改动实时落盘。
+     */
+    public synchronized TodoStore todoStore() {
+        if (todoStore == null) {
+            Path base = system == null ? null : system.getDataDir();
+            todoStore = new TodoStore(base == null ? null : base.resolve("todos"), roleId);
+        }
+        return todoStore;
     }
 
     // ── 工具 ────────────────────────────────────────────────────
@@ -847,7 +864,7 @@ public final class Role extends UUIDObject implements Data {
         }
         setState(RoleState.BUSY);
         task.markRunning();
-        announcedUrgentEventId = null;   // 每条任务重新给一次"紧急事件"提醒
+        announcedEventIds.clear();   // 每条任务重新给一次"待处理事件"提醒
         int tokens = 0;
         String answer = "";
         int failingRounds = 0;
@@ -882,7 +899,7 @@ public final class Role extends UUIDObject implements Data {
                     Map<String, Object> args = toolArgs(call);
                     ToolResult res = invokeTool(toolName, args);
                     // 工具结果的"额外选项"：队列里有优先级高于 HIGH 的事件就附在最近这条结果后面
-                    String resultText = res.text + urgentEventNotice();
+                    String resultText = res.text + pendingEventNotice();
                     getLlm().appendToolResult(callId, toolName, resultText);
                     recordToolCall(toolName, Json.stringify(args), resultText, task.uuid, round);
                     if (!res.ok) {
@@ -930,62 +947,77 @@ public final class Role extends UUIDObject implements Data {
     }
 
     /**
-     * 队列里优先级严格高于 {@link Priority#HIGH} 的事件（即 EMERGENCY）。
+     * 队列里"能被实时看见"的待处理事件：优先级 {@code >= NORMAL}。
      *
-     * <p>队列按优先级排序，所以真有一个就一定在队首；没有就返回 null。
+     * <p>LOW 事件不算（那是"空闲/下班后再依次通知"的通道）。队列本来就按优先级排序，
+     * 所以返回的顺序就是 worker 将来的取用顺序。
      */
-    private Event peekUrgentEvent() {
-        Event head = peekEvent();
-        if (head == null || head.priority == null) {
-            return null;
+    private List<Event> pendingVisibleEvents() {
+        List<Event> out = new ArrayList<>();
+        for (Event e : pendingEvents()) {
+            if (e.priority != null && e.priority.value >= Priority.NORMAL.value) {
+                out.add(e);
+            }
         }
-        return head.priority.value > Priority.HIGH.value ? head : null;
+        return out;
     }
 
     /**
-     * 工具结果的"额外选项"：当前队列里有优先级高于 HIGH 的事件时，把它附在**最近这条**工具结果后面，
-     * 让模型在工具循环里就能看到，而不是等整个任务跑完才发现；没有就返回空串（也就是不给结果加这个参数）。
+     * 工具结果的"额外选项"：队列里有优先级 {@code >= NORMAL} 的待处理事件时，把它们附在
+     * **最近这条**工具结果后面，让模型在工具循环里就能看到（实时被看见），而不是等整个任务跑完；
+     * 没有就返回空串（也就是不给结果加这个参数）。
      *
-     * <p>同一个事件只附一次（{@link #announcedUrgentEventId}），否则每一轮都会重复塞同一段文字。
-     * 提醒归提醒，**不消费事件** —— 它仍然留在队列里，等当前任务结束后照常被处理。
+     * <p>每个事件只附一次（{@link #announcedEventIds}，每条任务开头重置），否则每一轮工具调用都会
+     * 重复塞同一段文字。提醒归提醒，**不消费事件** —— 它们仍然留在队列里，等当前任务结束后照常被处理。
      */
-    private String urgentEventNotice() {
-        Event urgent = peekUrgentEvent();
-        if (urgent == null || urgent.uuid.equals(announcedUrgentEventId)) {
+    private String pendingEventNotice() {
+        List<Event> fresh = new ArrayList<>();
+        for (Event e : pendingVisibleEvents()) {
+            if (announcedEventIds.add(e.uuid)) {
+                fresh.add(e);
+            }
+        }
+        if (fresh.isEmpty()) {
             return "";
         }
-        announcedUrgentEventId = urgent.uuid;
-        String from = urgent.fromRoleId == null || urgent.fromRoleId.isBlank()
-                ? "system" : urgent.fromRoleId;
-        String content = urgent.content == null ? "" : urgent.content.strip();
-        if (content.length() > 400) {
-            content = content.substring(0, 400) + "…";
+        StringBuilder sb = new StringBuilder("\n\n[events waiting in your queue]\n");
+        for (Event e : fresh) {
+            String from = e.fromRoleId == null || e.fromRoleId.isBlank() ? "system" : e.fromRoleId;
+            String content = e.content == null ? "" : e.content.strip();
+            if (content.length() > 400) {
+                content = content.substring(0, 400) + "…";
+            }
+            sb.append("- ").append(e.priority).append(" / ").append(e.type)
+                    .append(" / from ").append(from).append('\n')
+                    .append("  ").append(content.replace("\n", "\n  ")).append('\n');
         }
-        logger.info("Role[{}] urgent event surfaced in a tool result: {} / {} / from {}",
-                roleId, urgent.priority, urgent.type, from);
-        return "\n\n[urgent event waiting in your queue — priority above HIGH]\n"
-                + "- " + urgent.priority + " / " + urgent.type + " / from " + from + "\n"
-                + "  " + content.replace("\n", "\n  ") + "\n"
-                + urgentGuidance(urgent);
+        logger.info("Role[{}] surfaced {} queued event(s) in a tool result: {}", roleId, fresh.size(),
+                fresh.stream().map(e -> e.priority + "/" + e.type).toList());
+        sb.append(noticeGuidance(fresh));
+        return sb.toString();
     }
 
     /**
-     * 附在紧急事件后面的"该怎么做"。
+     * 附在待处理事件后面的"该怎么做"。
      *
-     * <p>下班是特例：它自带一套收尾流程（停手 → 整理 → 排明天 → 写每日总结 → 休息）。
-     * 别的紧急事件（EMERGENCY 的 talk / task）只需要提醒模型"先收尾再处理它"。
+     * <p>三档：下班自带收尾流程；EMERGENCY 要求先收尾再优先处理；NORMAL/HIGH 只是**告知**——
+     * 它们本来就会在当前任务之后按顺序执行，不该让模型丢下手上的事。
      */
-    private static String urgentGuidance(Event urgent) {
-        if (urgent.type == EventType.SHIFT_END) {
+    private static String noticeGuidance(List<Event> events) {
+        if (events.stream().anyMatch(e -> e.type == EventType.SHIFT_END)) {
             return endOfDayInstructions();
         }
-        return "Wrap up the current step, then deal with this.";
+        if (events.stream().anyMatch(e -> e.priority != null && e.priority.value > Priority.HIGH.value)) {
+            return "Wrap up the current step, then deal with the EMERGENCY event above.";
+        }
+        return "These are already queued and will run in order after the current step — keep them in mind, "
+                + "but there is no need to abandon what you are doing.";
     }
 
     /**
      * 下班收尾流程：停手 → 整理 → 排明天 → 每日总结 → 休息。
      *
-     * <p>两处共用同一段文字：正在跑的任务里附在工具结果上的提醒（{@link #urgentEventNotice()}），
+     * <p>两处共用同一段文字：正在跑的任务里附在工具结果上的提醒（{@link #pendingEventNotice()}），
      * 以及下班时给每个角色的"收工"任务（见 {@code dispatch}）。
      */
     private static String endOfDayInstructions() {

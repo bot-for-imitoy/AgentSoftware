@@ -22,97 +22,106 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 工具结果的"额外选项"：队列里有**优先级高于 HIGH**（即 EMERGENCY）的事件时，
- * 把它附在最近那条工具结果上让模型当场看到；没有就不加这个参数。
+ * 工具结果的"额外选项"：队列里**优先级 NORMAL 及以上**的待处理事件，都要附在最近那条工具结果上
+ * 让模型实时看见；LOW 不算。同一事件只附一次，新来的事件再附。
  */
 class RoleUrgentEventTest {
 
-    private static final String MARKER = "priority above HIGH";
+    private static final String MARKER = "events waiting in your queue";
 
     @Test
-    void attachesTheUrgentEventToTheNearestToolResult(@TempDir Path dir) throws Exception {
+    void normalMailIsSurfacedToTheRunningTask(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
             Role ceo = system.getRolePool().find("CEO");
-            Event urgent = Event.builder()
-                    .from("COO").to("CEO").type(EventType.TALK)
-                    .priority(Priority.EMERGENCY)
-                    .content("EMERGENCY: the client is on the line")
-                    .build();
-            ScriptedLlm llm = new ScriptedLlm(ceo, urgent, 2);
-            ceo.setLlm(llm);
-            ceo.enqueue(new Task("system", "CEO", 0, "routine work", Priority.NORMAL));
-            awaitFinished(ceo);
+            ScriptedLlm llm = run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.NEW_MAIL, Priority.NORMAL, "hr@agentsoftware.local",
+                            "New mail from HR, subject: \"policy\", message_id=m1"))));
 
-            assertEquals(2, llm.toolResults.size());
             String first = llm.toolResults.get(0);
             assertTrue(first.contains(MARKER), first);
-            assertTrue(first.contains("EMERGENCY"), first);
-            assertTrue(first.contains("TALK"), first);
-            assertTrue(first.contains("from COO"), first);
-            assertTrue(first.contains("the client is on the line"), first);
-            assertTrue(first.contains("Wrap up the current step"), first);
-            assertFalse(first.contains("daily summary"),
-                    "收尾流程只属于下班事件，别的事件不该带上: " + first);
-            assertFalse(llm.toolResults.get(1).contains(MARKER),
-                    "同一个事件只附到最近的一条，别每条结果都重复: " + llm.toolResults.get(1));
+            assertTrue(first.contains("NORMAL / NEW_MAIL"), first);
+            assertTrue(first.contains("policy"), first);
+            assertTrue(first.contains("already queued"), "NORMAL 只是告知，不该让人丢下手上的事: " + first);
+            assertFalse(first.contains("workday is over"), first);
         } finally {
             system.stop();
         }
     }
 
-    /** HIGH 本身不算"高于 HIGH"，不许塞进工具结果（阈值是严格的）。 */
     @Test
-    void highPriorityAloneAddsNothing(@TempDir Path dir) throws Exception {
+    void lowPriorityEventsStayOutOfTheToolResult(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
             Role ceo = system.getRolePool().find("CEO");
-            Event high = Event.builder()
-                    .from("CTO").to("CEO").type(EventType.TALK)
-                    .priority(Priority.HIGH)
-                    .content("HIGH but not above HIGH")
-                    .build();
-            ScriptedLlm llm = new ScriptedLlm(ceo, high, 1);
-            ceo.setLlm(llm);
-            ceo.enqueue(new Task("system", "CEO", 0, "routine work", Priority.NORMAL));
-            awaitFinished(ceo);
+            ScriptedLlm llm = run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.CUSTOM, Priority.LOW, "CTO", "purely informational"))));
 
-            assertEquals(1, llm.toolResults.size());
-            assertFalse(llm.toolResults.get(0).contains(MARKER), llm.toolResults.get(0));
-            assertFalse(llm.toolResults.get(0).contains("HIGH but not above HIGH"), llm.toolResults.get(0));
+            String first = llm.toolResults.get(0);
+            assertFalse(first.contains(MARKER), first);
+            assertFalse(first.contains("purely informational"), first);
         } finally {
             system.stop();
         }
     }
 
-    /** 下班广播现在是最高优先级，所以它必须出现在正在跑的工具结果里（这是"收工提醒"的落点）。 */
     @Test
-    void shiftEndRidesIntoTheRunningToolLoop(@TempDir Path dir) throws Exception {
+    void emergencyKeepsItsOwnWording(@TempDir Path dir) throws Exception {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
             Role ceo = system.getRolePool().find("CEO");
-            Event shiftEnd = Event.builder()
-                    .from("system").to("CEO").type(EventType.SHIFT_END)
-                    .priority(Priority.EMERGENCY)
-                    .content("Shift end at 2026-09-24 18:00")
-                    .build();
-            ScriptedLlm llm = new ScriptedLlm(ceo, shiftEnd, 1);
-            ceo.setLlm(llm);
-            ceo.enqueue(new Task("system", "CEO", 0, "long afternoon work", Priority.NORMAL));
-            awaitFinished(ceo);
+            ScriptedLlm llm = run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.TALK, Priority.EMERGENCY, "COO", "the client is on the line"))));
+
+            String first = llm.toolResults.get(0);
+            assertTrue(first.contains("EMERGENCY / TALK"), first);
+            assertTrue(first.contains("deal with the EMERGENCY"), first);
+        } finally {
+            system.stop();
+        }
+    }
+
+    @Test
+    void shiftEndBringsTheWholeRitual(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            ScriptedLlm llm = run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.SHIFT_END, Priority.EMERGENCY, "system",
+                            "Shift end at 2026-09-24 18:00"))));
 
             String result = llm.toolResults.get(0);
-            assertTrue(result.contains(MARKER), result);
-            assertTrue(result.contains("Shift end at 2026-09-24 18:00"), result);
-            // 下班提醒要带完整的收尾流程：停手 → 整理 → 排明天 → 每日总结 → 休息
             assertTrue(result.contains("workday is over"), result);
             assertTrue(result.contains("Stop what you are doing immediately"), result);
             assertTrue(result.contains("Tidy up the current state"), result);
             assertTrue(result.contains("Plan tomorrow"), result);
-            assertTrue(result.contains("create_task"), result);
             assertTrue(result.contains("daily summary"), result);
             assertTrue(result.contains("take_rest"), result);
-            assertTrue(result.contains("go off duty"), result);
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 多条一起列出；同一条只附一次；下一轮新来的事件会再附一次。 */
+    @Test
+    void severalEventsAreListedOnceAndNewOnesShowUpLater(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            ScriptedLlm llm = run(ceo, 2, Map.of(
+                    1, List.of(
+                            event(EventType.NEW_MAIL, Priority.NORMAL, "hr@agentsoftware.local", "mail A"),
+                            event(EventType.TASK, Priority.HIGH, "COO", "task B")),
+                    2, List.of(event(EventType.TALK, Priority.NORMAL, "CTO", "talk C"))));
+
+            String first = llm.toolResults.get(0);
+            assertTrue(first.contains("mail A"), first);
+            assertTrue(first.contains("task B"), first);
+            assertTrue(first.contains("NORMAL / NEW_MAIL") && first.contains("HIGH / TASK"), first);
+
+            String second = llm.toolResults.get(1);
+            assertFalse(second.contains("mail A"), "同一条事件不该重复附: " + second);
+            assertTrue(second.contains("talk C"), "下一轮新到的事件要能看见: " + second);
         } finally {
             system.stop();
         }
@@ -123,43 +132,49 @@ class RoleUrgentEventTest {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
             Role ceo = system.getRolePool().find("CEO");
-            ScriptedLlm llm = new ScriptedLlm(ceo, null, 1);
-            ceo.setLlm(llm);
-            ceo.enqueue(new Task("system", "CEO", 0, "routine work", Priority.NORMAL));
-            awaitFinished(ceo);
+            ScriptedLlm llm = run(ceo, 1, Map.of());
 
             assertEquals(1, llm.toolResults.size());
             assertFalse(llm.toolResults.get(0).contains(MARKER), llm.toolResults.get(0));
-            assertFalse(llm.toolResults.get(0).contains("urgent"), llm.toolResults.get(0));
+            assertFalse(llm.toolResults.get(0).contains("waiting in your queue"), llm.toolResults.get(0));
         } finally {
             system.stop();
         }
     }
 
-    private static void awaitFinished(Role role) throws Exception {
+    // ── 脚手架 ──────────────────────────────────────────────────
+
+    private static Event event(EventType type, Priority priority, String from, String content) {
+        return Event.builder().from(from).to("CEO").type(type).priority(priority).content(content).build();
+    }
+
+    /** 让 CEO 跑一条任务：第 N 轮请求前把事件塞进它的队列，第 toolRounds 轮都发工具调用。 */
+    private static ScriptedLlm run(Role role, int toolRounds, Map<Integer, List<Event>> injections)
+            throws Exception {
+        ScriptedLlm llm = new ScriptedLlm(role, toolRounds, injections);
+        role.setLlm(llm);
+        role.enqueue(new Task("system", "CEO", 0, "routine work", Priority.NORMAL));
         long deadline = System.currentTimeMillis() + 5_000;
         while (System.currentTimeMillis() < deadline && role.taskHistory(1).isEmpty()) {
             Thread.sleep(20);
         }
         assertFalse(role.taskHistory(1).isEmpty(), role.roleId + " 任务没跑完: " + role.readJournal());
+        assertEquals(toolRounds, llm.toolResults.size());
+        return llm;
     }
 
-    /**
-     * 脚本化 LLM：第一轮返回 N 个工具调用（并在返回前把"紧急事件"塞进队列，
-     * 模拟"任务跑到一半来了紧急事件"），之后直接给最终答复。
-     */
     private static final class ScriptedLlm extends LLM {
 
         private final Role role;
-        private final Event urgent;
-        private final int toolCallsPerRound;
+        private final int toolRounds;
+        private final Map<Integer, List<Event>> injections;
         private int requests = 0;
         final List<String> toolResults = new ArrayList<>();
 
-        ScriptedLlm(Role role, Event urgent, int toolCallsPerRound) {
+        ScriptedLlm(Role role, int toolRounds, Map<Integer, List<Event>> injections) {
             this.role = role;
-            this.urgent = urgent;
-            this.toolCallsPerRound = toolCallsPerRound;
+            this.toolRounds = toolRounds;
+            this.injections = injections;
         }
 
         @Override
@@ -175,15 +190,11 @@ class RoleUrgentEventTest {
         @Override
         public Response request() {
             requests++;
-            if (requests == 1) {
-                if (urgent != null) {
-                    role.enqueue(urgent);
-                }
-                List<Map<String, Object>> calls = new ArrayList<>();
-                for (int i = 0; i < toolCallsPerRound; i++) {
-                    calls.add(call("call_" + i, "get_time"));
-                }
-                return new Response("working", "", calls, 0);
+            for (Event e : injections.getOrDefault(requests, List.of())) {
+                role.enqueue(e);
+            }
+            if (requests <= toolRounds) {
+                return new Response("working", "", List.of(call("call_" + requests, "get_time")), 0);
             }
             return new Response("done", "", List.of(), 0);
         }

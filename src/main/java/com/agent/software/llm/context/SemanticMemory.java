@@ -21,8 +21,9 @@ import java.util.Set;
  * <ol>
  *   <li><b>入上下文即算向量</b>：{@link Context#add} 是唯一的写入口（{@code LLM.append*} 全走它），
  *       所以挂在这里就覆盖了"角色每次添加内容"。</li>
- *   <li><b>阈值淘汰</b>：remember=true 的消息条数超过 {@link #threshold()} 时，把其中与**刚加入的
- *       那条**余弦相似度最低（距离最远）的一条的 {@code remember} 置 false —— 只移出 prompt，
+ *   <li><b>阈值淘汰</b>：remember=true 的消息条数超过 {@link #threshold()} 时，把其中"加权距离"
+ *       最大的一条的 {@code remember} 置 false。加权距离 = 语义距离 × (1 - 位置邻近权重)，
+ *       位置邻近权重随"离刚加入那条的绝对距离"衰减（越近权重越大）—— 也就是**只移出 prompt**，
  *       消息本体和向量都留在内存里，之后还能被 {@code search_memory} 检索到。</li>
  *   <li><b>成组淘汰</b>：不能只丢一条 {@code assistant(tool_calls)} 或一条 {@code tool} 结果，
  *       否则 prompt 里会出现"tool 结果没有对应的 tool_call"或反之，网关直接 400。
@@ -124,24 +125,57 @@ public class SemanticMemory {
         evictFurthest(context, added, v);
     }
 
+    /**
+     * 位置邻近权重：离当前消息越近越大（0 → 1.0，1 → 0.5，2 → 0.33，5 → 0.17…）。
+     *
+     * <p>它作用在"加权距离"上作为**保护**：越近，加权距离被压得越小，越不容易被裁。
+     */
+    static double proximityWeight(int distance) {
+        return 1.0 / (1.0 + Math.max(0, distance));
+    }
+
+    /**
+     * 淘汰"加权距离"最大的一条。
+     *
+     * <pre>
+     *   语义距离 = 1 - cos(候选, 当前)
+     *   加权距离 = 语义距离 × (1 - 位置邻近权重)      // 邻近权重越近越大
+     * </pre>
+     *
+     * 于是"又旧又跑题"的先被移出 prompt；只旧不跑题（语义近）或只跑题不旧（位置近）的都能留下 ——
+     * 这就是"离当前消息越近权重越大"的落点。
+     */
     private void evictFurthest(Context context, Message added, double[] addedVector) {
         List<Message> remembered = context.messages();
         if (remembered.size() <= threshold) {
             return;
         }
+        List<Message> all = context.all();
+        int addedAt = all.indexOf(added);
+        if (addedAt < 0) {
+            addedAt = all.size() - 1;
+        }
         Message victim = null;
-        double lowest = Double.POSITIVE_INFINITY;
-        for (Message m : remembered) {
-            if (m == added || m.embedding == null || m.embedding.length == 0) {
-                continue;   // 不淘汰刚加进来的那条；没向量的没法比距离
+        double worst = Double.NEGATIVE_INFINITY;
+        double worstSemantic = 0;
+        int worstDistance = 0;
+        for (int i = 0; i < all.size(); i++) {
+            Message m = all.get(i);
+            if (!m.remember || m == added || m.embedding == null || m.embedding.length == 0) {
+                continue;   // 只管 prompt 里的；不淘汰刚加进来的那条；没向量的没法比
             }
             double sim = cosine(addedVector, m.embedding);
             if (Double.isNaN(sim)) {
                 continue;
             }
-            if (sim < lowest) {
-                lowest = sim;
+            int distance = Math.abs(i - addedAt);
+            double semanticDistance = 1.0 - sim;
+            double weighted = semanticDistance * (1.0 - proximityWeight(distance));
+            if (weighted > worst) {
+                worst = weighted;
                 victim = m;
+                worstSemantic = semanticDistance;
+                worstDistance = distance;
             }
         }
         if (victim == null) {
@@ -157,8 +191,9 @@ public class SemanticMemory {
         }
         if (forgotten > 0) {
             logger.info("Semantic memory: context over threshold {} ({} remembered), forgot {} message(s) "
-                            + "furthest from the new one (lowest similarity {})",
-                    threshold, remembered.size(), forgotten, String.format("%.3f", lowest));
+                            + "with the largest weighted distance (semantic {} x proximity, {} message(s) back)",
+                    threshold, remembered.size(), forgotten,
+                    String.format("%.3f", worstSemantic), worstDistance);
         }
     }
 

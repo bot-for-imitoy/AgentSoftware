@@ -16,6 +16,7 @@ import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.tools.toolkits.staffing.StaffingToolkit;
 import com.agent.software.tools.toolkits.task.Task;
 import com.agent.software.tools.toolkits.time.Time;
+import com.agent.software.tools.toolkits.todo.Todo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,7 @@ public final class Toolkits {
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     private static final List<String> DEFAULT_NAMES =
-            List.of("time", "task", "note", "memory", "pc", "mcp_manager", "skill", "email");
+            List.of("time", "task", "note", "todo", "memory", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
@@ -52,6 +53,7 @@ public final class Toolkits {
                 // "task_view" 是旧名字，配置里可能还留着，一起认
                 case "task", "task_view" -> out.add(new Task(role));
                 case "note" -> out.add(new Note(role));
+                case "todo" -> out.add(new Todo(role));
                 case "memory" -> out.add(new Memory(role));
                 case "pc" -> out.add(new Pc(role));
                 case "mcp_manager" -> out.add(new McpManager(role, mcp));

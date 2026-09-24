@@ -709,7 +709,7 @@ public class AgentSystem {
 **新增**：`staffing/Staffing`（COO 专用：`draft_in/draft_out/list_employees/list_active`）、
 `task/Task`（原 `taskview/TaskView`，见 §9：`my_tasks` + `create_task/list_tasks/update_task/delete_task` 增删改查）、
 `note/Note`（`write_note/read_note/edit_note/delete_note/list_notes`，见 §9）。
-**暂缓/删除**：`hr/Hr` 曾被删又回归（见 §9）、`memory/Memory`、`todo/Todo`、`hermes/Hermes`。
+**暂缓/删除**：`hr/Hr` 曾被删又回归（见 §9）、`memory/Memory` 与 `todo/Todo` 已补回、`hermes/Hermes` 仍未做。
 
 ---
 
@@ -773,10 +773,10 @@ public class AgentSystem {
 - **event**：`EventType`、`Priority`、`Event`、`Task extends Event`、`TimeBus`、`EventBus`
 - **role**：`RoleState`、`MembershipState`、`Employee`、`CompanyRoster`、`Role`、`RolePool`、`Staffing`
 - **llm**：`Message` + `UserMessage`/`AssistantMessage`/`ToolMessage`（独立文件）、`Context`、`SemanticMemory`、`Response`（独立文件）、`LLM`、`OpenAICompatLLM`、`Embedding`、`OpenAICompatEmbedding`
-- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 12 个工具包（time/task/note/memory/pc/mcp/skill/email/client/talk/staffing/hr）
+- **tools**：`Tool`、`OpenAITool`、`ToolResult`、`Toolkit`、`Toolkits` 工厂 + 13 个工具包（time/task/note/todo/memory/pc/mcp/skill/email/client/talk/staffing/hr）
 - **computers**：`Computer`、`MCPServer`（stdio JSON-RPC）、`PodmanComputer`、`LocalComputer`、`ComputerManager`
 - **io/client/mail/web**：`Input`/`StdInput`/`WebInput`、`Client`/`ClientChannel`、`MailService`(abstract)/`VirtualMailService`、`ChatStore`/`ChatWebServer`
-- **store**：`JsonStore`、`RoleTemplateStore`、`ToolkitConfig`；`ConfigStore` 适配新 `Json`
+- **store**：`JsonStore`、`RoleTemplateStore`、`ToolkitConfig`、`NoteStore`、`TodoStore`；`ConfigStore` 适配新 `Json`
 - **组合根**：`AgentSystem`、`Main`、`Types`（精简为失败文本判定）
 
 ### 8.2 公共成员偏差（v3 冻结 API 之外，落地时新增）
@@ -798,6 +798,7 @@ public class AgentSystem {
 | `Message.embedding`（`double[]`，随 `getData/loadData` 持久化） | 语义记忆要把向量挂在消息上；空/缺省 = 没算或算不出来 |
 | `Context.add(Message)` 覆写 + `Context.memory()/setMemory(...)` | `LLM.append*` 全部经 `Context.add` 落库，这是"角色每次添加内容"的唯一写入口，语义向量的计算与阈值淘汰挂在这里；`loadData` 期间置 `restoring` 跳过（向量已经一起存了） |
 | `SemanticMemory`、`Embedding`/`OpenAICompatEmbedding`、`memory` 工具包（`search_memory`） | 需求新增：embedding 请求类 + 语义记忆 + 阈值淘汰 + 记忆检索 |
+| `store.TodoStore`、`Role.todoStore()`、`todo` 工具包（6 个工具） | 需求新增：带「组」的待办；`Toolkits` 配置名 `todo`，`data/toolkits.default.json` 同步改键 |
 | `ChatWebServer(AgentSystem)` 便捷构造器 + `resolveHost()`/`resolvePort()`（static） | 需求新增：Web UI 的 host 可配置、端口固定（原来 `Main` 写死 `127.0.0.1:0`）；单测仍用原来的三参构造器 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
@@ -814,7 +815,7 @@ public class AgentSystem {
 
 ### 8.5 仍暂缓
 
-`TodoStore`/`StateStore`、`SMTPMailService`、`SSHComputer`、provider 目录（已删）、每日总结（改为 `Context.forgetAll()`）。
+`StateStore`、`SMTPMailService`、`SSHComputer`、provider 目录（已删）、每日总结（改为 `Context.forgetAll()` + 语义记忆）。
 （`NoteStore` 与 note 工具包已按需求补回，见 §9；`todo` 仍未做 —— 排期类需求由 `task` 工具包承担。）
 
 ---
@@ -924,6 +925,26 @@ public class AgentSystem {
   为什么必须有它：`Context.forgetAll()` 每天下班把对话移出 prompt，跨天要记住的事只能落到笔记。
   笔记**不做提醒**——"未来某时刻要做什么"是 `task` 工具包的事，两者职责不重叠。
 
+- **todo 工具包（带"组"的待办）**：`store/TodoStore` 把每个角色的待办落成
+  `<dataDir>/todos/<role_id>.json`，结构是"组 → 事项数组"：
+
+  ```json
+  { "current_group": "default",
+    "groups": { "default": [ {"id","title","detail","status","created_at","updated_at"} ] } }
+  ```
+
+  工具：`todo_add(title, detail?, group?)` / `todo_list(status?, group?)` /
+  `todo_update(todo_id, status?, title?, detail?)` / `todo_delete(todo_id)` /
+  `todo_group_list()` / `todo_group_switch(name)`。
+  - **组**：每个组有自己的一套事项，互不影响（`data/todos/<role>.json` 一个文件装全部组）。
+  - **基线组**：`current_group` 决定"不带 group 参数的操作"作用在哪个组上；
+    `todo_group_switch(name)` 随时切换（组不存在就新建）——这就是"随时切换另一个 todo 组作为基线"。
+  - **实时保存**：`add / update / delete / switchGroup` 每次改完立刻 `Json.writeFile` 落盘，
+    所以"组内事项的完成情况"不会因为进程退出而丢。
+  - 状态沿用 master/Python 版：`pending / in_progress / completed`（`done`、`doing`、`wip` 等别名会归一化）。
+  - **旧格式迁移**：master 时代的 `data/todos/<role>.json` 是"裸数组"，读到会自动装进 `default` 组
+    （加载时打一条 `migrated N legacy todo item(s)` 日志），老数据不会白丢。
+
 - **task 工具包（原 `taskview`，排期任务的增删改查）**：包名 `tools/toolkits/task`，
   工具包名 `task`（配置名同步改；旧名 `task_view` 仍被 `Toolkits` 接受），工具：
   - `create_task(content, in_minutes | day+tick, target?, priority?)`：把一条 `Task` 排到未来某刻
@@ -954,9 +975,19 @@ public class AgentSystem {
   - **每次添加内容都算向量**：`Context.add` 是唯一写入口（`LLM.appendUserMessage/appendAssistantMessage/
     appendToolResult` 全走它），所以钩子挂在 `Context.add` 上就覆盖了"角色每次添加内容"。
     算出来的向量存在 `Message.embedding`，并随 `getData/loadData` 一起持久化。
-  - **阈值淘汰**：remember=true 的消息条数超过 `memory.threshold`
-    （或 `AGENTSOFTWARE_MEMORY_THRESHOLD`，默认 **40**）时，把其中与**刚加入的那条**余弦相似度
-    最低（距离最远）的一条 `remember` 置 false —— 只是移出 prompt，消息和向量都还在内存里。
+  - **阈值淘汰（语义距离 × 位置邻近权重）**：remember=true 的消息条数超过 `memory.threshold`
+    （或 `AGENTSOFTWARE_MEMORY_THRESHOLD`，默认 **40**）时，淘汰**加权距离最大**的一条：
+
+    ```
+    语义距离 = 1 - cos(候选, 刚加入的那条)
+    邻近权重 = 1 / (1 + |候选位置 - 刚加入那条的位置|)      // 越近越大
+    加权距离 = 语义距离 × (1 - 邻近权重)
+    ```
+
+    也就是"**只移出 prompt**"：消息和向量都还在内存里，`search_memory` 仍能检索到。这样
+    "又旧又跑题"的先出局，"只旧不跑题"或"只跑题不旧"的都能留下 —— 这是"离当前消息越近权重越大"
+    的落点（`SemanticMemory.proximityWeight` / `evictFurthest`）。位置用的是消息在**当天完整历史**
+    里的下标（绝对距离）。
     - **成组淘汰**：只丢一条 `assistant(tool_calls)` 或一条 `tool` 结果会让 prompt 出现
       "tool 结果没有对应 tool_call"（或反之），网关会 400。所以淘汰时连带把配对的
       tool_call / tool 结果一起移出（`SemanticMemory.evictionGroup`）。
@@ -985,20 +1016,29 @@ public class AgentSystem {
     （`firewall-cmd --add-port=8787/tcp --permanent && firewall-cmd --reload`，需要 root）。
   - ⚠️ 该界面**没有鉴权**：能连上的人可以 pause/resume、以"客户"身份发言/发信、结束会话。
 
-- **工具结果的"额外选项"：把"高于 HIGH"的事件带进工具循环**。队列里存在优先级**严格高于 HIGH**
-  （即 `EMERGENCY`）的事件时，`Role.runTask` 会把**最近那一条**工具结果后面附加一段：
+- **工具结果的"额外选项"：把优先级 `>= NORMAL` 的待处理事件带进工具循环**。队列里存在
+  NORMAL / HIGH / EMERGENCY 的事件时，`Role.runTask` 会把**最近那一条**工具结果后面附加一段，
+  把这些事件一次列清，让模型在工具循环里就能实时看见（LOW 事件不在这里出现，留给"空闲/下班后
+  依次通知"那条通道）。
 
   ```
-  [urgent event waiting in your queue — priority above HIGH]
-  - EMERGENCY / TALK / from COO
-    EMERGENCY: the client is calling, drop everything and reply now
-  Wrap up the current step, then deal with this.
+  [events waiting in your queue]
+  - NORMAL / NEW_MAIL / from hr@agentsoftware.local
+    New mail from HR, subject: "policy", message_id=...
+  - HIGH / TASK / from COO
+    ...
+  These are already queued and will run in order after the current step — keep them in mind,
+  but there is no need to abandon what you are doing.
   ```
 
-  **下班是特例**：`SHIFT_END` 附的不是一句"收尾"，而是一整套收工流程（`Role.urgentGuidance`）：
+  "该怎么做"分三档（`Role.noticeGuidance`）：含 `SHIFT_END` → 整套收工流程（下一段）；
+  含 `EMERGENCY` → "Wrap up the current step, then deal with the EMERGENCY event above."；
+  其余（NORMAL/HIGH）→ 只告知"已排队、做完手上这步就轮到"，**不让人丢下手上的事**。
+
+  **下班是特例**：`SHIFT_END` 附的不是一句"收尾"，而是一整套收工流程（`Role.endOfDayInstructions`）：
 
   ```
-  [urgent event waiting in your queue — priority above HIGH]
+  [events waiting in your queue]
   - EMERGENCY / SHIFT_END / from system
     Shift end at 2026-09-24 18:00
   The workday is over NOW. Stop what you are doing immediately — do not start anything new:
@@ -1015,20 +1055,21 @@ public class AgentSystem {
   → `take_rest`，最终答复就是 `take_rest: idle, waiting for events` —— 停手、整理、写总结、下班全套都做了。
 
   没有这样的事件就什么都不加（"这个参数"不存在）。要点：
-  - **只附一次**：同一条事件按 uuid 去重（`announcedUrgentEventId`，每条任务开头重置），
-    否则每轮工具调用都会重复塞同一段文字；一条任务里若出现新的紧急事件会再附一次。
-  - **不消费事件**：它仍然留在队列里，等当前任务结束后照常被处理 —— 提醒 ≠ 插队执行。
-  - 判定只看队首：队列本来就按优先级排序，真有 EMERGENCY 一定在最前面。
+  - **每条事件只附一次**：按 uuid 去重（`announcedEventIds`，每条任务开头 `clear()`），否则每轮工具调用
+    都会重复塞同一段文字；同一条任务里后到的**新事件**会再附一次。
+  - **不消费事件**：它们仍然留在队列里，等当前任务结束后照常按顺序被处理 —— 提醒 ≠ 插队执行。
   - 附的是"给模型看的文本"，所以工具成功/失败的判定不受影响（`isToolFailure` 在附加之前就已判完）。
   - **`SHIFT_END` = EMERGENCY（最高优先级）、`SHIFT_START` = HIGH**（`AgentSystem.shiftEvent`，
     包内可见以便单测直接断言）：下班必须能插进模型正跑着的工具循环里提醒"今天到此为止"——
     这就是对付"18:00 之后还在猛干、模拟时间被拖到 23:58"的落点；上班只是日程信号，
     压得住 NORMAL 的邮件/任务就够了，不需要插进当前这一步。
     ⚠️ 它只是**提醒**（附着在工具结果文本里），不是硬中断：模型仍可以先做完手头这一步。
-  - 目前 EMERGENCY 的现实来源：`SHIFT_END`、`talk(urgency=EMERGENCY)`、
-    `create_task(priority=EMERGENCY)`（客户端口信走的是 HIGH，不触发）。
-  - 实测（真模型）：任务跑第一轮时塞入一条 EMERGENCY TALK，模型在 `my_tasks` 的工具结果里
-    看到了这段附加文本，并在最终答复里主动提到"COO 的紧急请求"。
+  - EMERGENCY 的现实来源：`SHIFT_END`、`talk(urgency=EMERGENCY)`、`create_task(priority=EMERGENCY)`；
+    NORMAL 的来源就多了：邮件通知、`talk`、`create_task` 默认值。
+  - ⚠️ **LOW 事件的"空闲/下班后依次通知"通道还没做**（需求 2）：目前全代码里没有任何地方产生
+    `Priority.LOW` 事件，这段机制暂时是空转的，等确认语义（什么算 LOW、按什么顺序、什么时候放行）
+    之后再实现。
+
 
 - **下班 = 一条给每个角色的"收工"LLM 任务**（`Role.dispatch(SHIFT_END)`）。只把提醒附在工具结果上
   有个洞：18:00 恰好**空闲**的角色根本没有工具结果可附，于是完全不收尾就进入待命 ——

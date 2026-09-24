@@ -1,3 +1,3 @@
 {
-  "default_toolkits": ["time", "task", "note", "memory", "pc", "mcp_manager", "skill_manager", "email"]
+  "default_toolkits": ["time", "task", "note", "todo", "memory", "pc", "mcp_manager", "skill_manager", "email"]
 }

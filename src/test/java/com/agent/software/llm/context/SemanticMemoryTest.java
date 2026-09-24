@@ -147,6 +147,36 @@ class SemanticMemoryTest {
         assertFalse(assistant.remember, "反过来也要成组：tool_call 不能孤零零留在 prompt 里");
     }
 
+    /**
+     * 位置邻近权重真的能改变淘汰结果：纯看余弦会丢"最不相似的那条"，
+     * 加权后"离得近但也跑题"的那条反而先出局，"又旧又跑题"的留下。
+     */
+    @Test
+    void proximityWeightingCanChangeWhichMessageIsForgotten() {
+        FakeEmbedding embedder = new FakeEmbedding(new double[0])
+                .put("far", new double[]{-0.4, Math.sqrt(1 - 0.16)})    // cos=-0.4（离得远，d=3）
+                .put("near", new double[]{-0.8, Math.sqrt(1 - 0.64)})   // cos=-0.8（离得近，d=1）
+                .put("same", new double[]{1, 0})                        // cos=1
+                .put("current", new double[]{1, 0});
+        SemanticMemory memory = new SemanticMemory(embedder, 3);
+        Context context = new Context();
+        context.setMemory(memory);
+
+        UserMessage far = msg("far");
+        UserMessage same = msg("same");
+        UserMessage near = msg("near");
+        UserMessage current = msg("current");
+        context.add(far);      // 位置 0：语义距离 1.4 × (1-0.25) = 1.05  ← 加权后最大
+        context.add(same);     // 位置 1：语义距离 0    × …      = 0
+        context.add(near);     // 位置 2：语义距离 1.8 × (1-0.5) = 0.9
+        context.add(current);  // 位置 3（当前）
+
+        // 纯余弦会淘汰 near（-0.8 最不相似）；加权位置后淘汰的是 far。
+        assertFalse(far.remember, "又旧又跑题的应先出局: far");
+        assertTrue(near.remember, "离当前近的即使话题偏一点也留下: near");
+        assertTrue(same.remember && current.remember);
+    }
+
     @Test
     void searchFindsNearestMemoriesIncludingForgottenOnes() {
         SemanticMemory memory = new SemanticMemory(embedder(), 2);
