@@ -28,7 +28,8 @@ public final class ToolkitConfig {
     }
 
     public List<String> defaultsFor(String roleId, String group) {
-        List<String> out = new ArrayList<>(stringList(store.get(DEFAULTS)));
+        // DEFAULTS 是个数组键：必须用 list()，get() 只认对象值（否则配置永远读不到，退回代码默认值）
+        List<String> out = new ArrayList<>(stringList(store.list(DEFAULTS)));
         Map<String, Object> byGroup = store.get(BY_GROUP);
         if (group != null && byGroup.get(group) != null) {
             out = new ArrayList<>(stringList(byGroup.get(group)));

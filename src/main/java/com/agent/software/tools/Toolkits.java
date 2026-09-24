@@ -34,7 +34,7 @@ public final class Toolkits {
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     private static final List<String> DEFAULT_NAMES =
-            List.of("time", "task", "note", "todo", "memory", "talk", "pc", "mcp_manager", "skill", "email");
+            List.of("time", "task", "note", "todo", "memory", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
@@ -55,6 +55,7 @@ public final class Toolkits {
                 case "task", "task_view" -> out.add(new Task(role));
                 case "note" -> out.add(new Note(role));
                 case "todo" -> out.add(new Todo(role));
+                // talk 暂时不进默认工具集（已知有问题，待修）；配置里显式写 "talk" 仍可启用
                 case "talk" -> out.add(new Talk(role));
                 case "memory" -> out.add(new Memory(role));
                 case "pc" -> out.add(new Pc(role));

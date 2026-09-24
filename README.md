@@ -371,7 +371,7 @@ OpenAI-style function schemas. `Toolkits.defaultToolkits(role)` auto-assembles f
 | `email.Email` | `send_email` `read_mail` `open_mail` `mail_address_book` | company email |
 | `client.Client` | `talk_to_client` | talking to you, the client (Leadership Group members) |
 | `hr.Hr` | `post_job_posting` `list_candidates` | hiring (HR; added explicitly in `Main`) |
-| `talk.Talk` | `talk` `list_roles` | inter-role chat, auto-registered at pool start |
+| `talk.Talk` | `talk` `list_roles` | inter-role chat; **not in the default set** — add `"talk"` to `default_toolkits` to enable |
 
 Exclusive/conditional wiring: the CEO (and the rest of the Leadership Group) can reach the
 client; HR can post jobs. `hermes.Hermes` (`hermes_new_conversation` / `hermes_send`) is also

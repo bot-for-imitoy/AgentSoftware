@@ -5,6 +5,7 @@ import com.agent.software.role.Role;
 import com.agent.software.tools.toolkits.mcp.MCPManager;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.util.List;
 
@@ -30,15 +31,29 @@ class ToolkitsTest {
         assertTrue(names.contains("task"));
         assertTrue(names.contains("note"));
         assertTrue(names.contains("todo"));
-        assertTrue(names.contains("talk"));
         assertTrue(names.contains("memory"));
         assertTrue(names.contains("pc"));
         assertTrue(names.contains("mcp_manager"));
         assertTrue(names.contains("skill"));
         assertTrue(names.contains("email"));
-        assertTrue(names.contains("talk"), "同组沟通用的 talk 应该人人都有");
+        assertFalse(names.contains("talk"), "talk 暂时不进默认工具集（待修）");
         assertFalse(names.contains("client"), "非管理组没有 talk_to_client");
         assertFalse(names.contains("staffing_toolkit"));
+    }
+
+    /** talk 不在默认集里，但配置显式写 "talk" 时仍应生效（能力没删，只是默认关掉）。 */
+    @Test
+    void talkCanStillBeEnabledExplicitly(@TempDir java.nio.file.Path dir) throws Exception {
+        java.nio.file.Path cfg = dir.resolve("toolkits.default.json");
+        com.agent.software.utils.Json.writeFile(cfg,
+                java.util.Map.of("default_toolkits", java.util.List.of("talk")));
+        Role r = role("architect", "Architecture & Release Group");
+        List<String> names = Toolkits.defaults(r,
+                        new com.agent.software.store.ToolkitConfig(
+                                com.agent.software.store.JsonStore.of(cfg)),
+                        null, new MCPManager(), new SkillManager())
+                .stream().map(Toolkit::getName).sorted().toList();
+        assertTrue(names.contains("talk"), names.toString());
     }
 
     @Test

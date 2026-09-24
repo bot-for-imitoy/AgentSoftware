@@ -800,7 +800,8 @@ public class AgentSystem {
 | `SemanticMemory`、`Embedding`/`OpenAICompatEmbedding`、`memory` 工具包（`search_memory`） | 需求新增：embedding 请求类 + 语义记忆 + 阈值淘汰 + 记忆检索 |
 | `store.TodoStore`、`Role.todoStore()`、`todo` 工具包（4 个工具） | 需求新增：基础待办清单（无组）；`Toolkits` 配置名 `todo` |
 | `store.TaskBoard`、`Role.taskBoard()`、`task_group_list`/`task_group_switch`、`Task.group` 语义上的分组 | 需求新增：任务按组存放 + 基线组 + 完成状态实时回写 |
-| `talk` 工具包接入默认工具集（`change: case "talk"` + `toolkits.default.json`） | 之前有代码没接线，角色实际拿不到 `talk`/`list_roles` |
+| `talk` 工具包加了 `case "talk"`（但**不在默认集**） | 之前有代码没接线；现在按需求默认关闭，配置显式写 `"talk"` 可启用 |
+| `JsonStore.list(String)` | `get()` 只返回对象值，数组键（如 `default_toolkits`）读不到，导致 `ToolkitConfig` 静默失效；补一个数组访问器 |
 | `ChatWebServer(AgentSystem)` 便捷构造器 + `resolveHost()`/`resolvePort()`（static） | 需求新增：Web UI 的 host 可配置、端口固定（原来 `Main` 写死 `127.0.0.1:0`）；单测仍用原来的三参构造器 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
@@ -841,6 +842,13 @@ public class AgentSystem {
 - **配置文件**：顺序解析 `$AGENTSOFTWARE_CONFIG_DIR/config.json` → `$XDG_CONFIG_HOME/AgentSoftware/config.json`
   （默认 `~/.config/AgentSoftware/config.json`）→ `<dataDir>/config.json`；
   密钥优先级 `环境变量 > 配置文件 > 默认值`；`base_url` 只给域名时自动补 `/v1`。
+- **`toolkits.default.json` 现在真的生效了（修了一个静默失效的 bug）**：`JsonStore.get(key)` 只认
+  "对象"值，遇到 `"default_toolkits": [...]` 这种**数组键**会返回空 Map，于是 `ToolkitConfig`
+  读出来永远是空 → `Toolkits.defaults` 每次都退回代码里的 `DEFAULT_NAMES`（**配置文件从来没被用过**，
+  改它当然没反应）。修法：给 `JsonStore` 加了 `list(key)`（数组值，缺失返回空 List），
+  `ToolkitConfig` 改用 `store.list(DEFAULTS)`。现在改 `data/toolkits.default.json`
+  （或 `by_group` / `by_role`）能真正改变角色拿到的工具包了 —— 想让 talk 回来的话，
+  现在有两条路：改代码默认值，或在配置文件里加 `"talk"`。
 - **电脑默认 podman**：未指定电脑时创建 `agentsoftware-<role_id>` 容器（首次自动用根目录 `Containerfile` 构建基础镜像）；无 podman 环境用 `AGENTSOFTWARE_COMPUTER_KIND=local`。
 - **下班打断客户等待**：`ClientChannel.cancelWait(String)` 由时间线程在 `Role.onShiftEnd()` 调用，避免甲方不回消息把跨天卡到超时。
 
@@ -1096,10 +1104,12 @@ public class AgentSystem {
     - LOW 事件因此不再需要单独的通道：它和 NORMAL 一样下班暂存、一样排最后；区别只是它不会出现在
       工具结果的"额外选项"里（那是 NORMAL 及以上）。
 
-- **`talk` / `list_roles` 已接线**：`tools/toolkits/talk/Talk.java` 以前有代码没入口（`Toolkits.defaults`
-  和 `toolkits.default.json` 都没有它，也从没被 `new` 过），于是角色只能发邮件、而提示词却在描述
-  "talk 只能找同组同事"。现在默认工具集里加了 `talk`，同组口头沟通可用（`talk(urgency, wait)` 走
-  `Role.talkTo`，跨组仍受 `canTalkTo` 限制，管理组豁免）。
+- **`talk` / `list_roles` 暂时不在默认工具集里**：`tools/toolkits/talk/Talk.java` 有完整实现，
+  `Toolkits.defaults` 里也保留了 `case "talk"`，但按需求**不放进 `DEFAULT_NAMES`，两份
+  `toolkits.default.json` 里也没有它** —— 因为该工具目前有些问题，待修。要启用就在
+  `toolkits.default.json` 的 `default_toolkits` 里显式加 `"talk"`（单测
+  `ToolkitsTest.talkCanStillBeEnabledExplicitly` 钉住了这条路径），或者改 `DEFAULT_NAMES`。
+  代价：在它回到默认集之前，角色只能发邮件，不能同组口头沟通。
 
 
 - **下班 = 一条给每个角色的"收工"LLM 任务**（`Role.dispatch(SHIFT_END)`）。只把提醒附在工具结果上

@@ -34,6 +34,21 @@ public class JsonStore {
         }
     }
 
+    /**
+     * 取某个顶层键的数组值；不是数组/不存在时返回空 List。
+     *
+     * <p>补这个是因为 {@link #get(String)} 只认"对象"值：像 {@code "default_toolkits": [...]}
+     * 这种数组键以前会被当成空 Map，导致配置文件里的清单**从来没生效过**（一直退回代码里的默认值）。
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object> list(String key) {
+        Object v = merged.get(key);
+        if (v instanceof List<?> l) {
+            return (List<Object>) l;
+        }
+        return new ArrayList<>();
+    }
+
     /** 取某个顶层键的对象值；不是对象/不存在时返回空 Map。 */
     @SuppressWarnings("unchecked")
     public Map<String, Object> get(String key) {
