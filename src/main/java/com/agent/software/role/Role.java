@@ -934,7 +934,26 @@ public final class Role extends UUIDObject implements Data {
         return "\n\n[urgent event waiting in your queue — priority above HIGH]\n"
                 + "- " + urgent.priority + " / " + urgent.type + " / from " + from + "\n"
                 + "  " + content.replace("\n", "\n  ") + "\n"
-                + "Wrap up the current step, then deal with this.";
+                + urgentGuidance(urgent);
+    }
+
+    /**
+     * 附在紧急事件后面的"该怎么做"。
+     *
+     * <p>下班是特例：它自带一套收尾流程（停手 → 整理 → 排明天 → 写每日总结 → 休息）。
+     * 别的紧急事件（EMERGENCY 的 talk / task）只需要提醒模型"先收尾再处理它"。
+     */
+    private static String urgentGuidance(Event urgent) {
+        if (urgent.type == EventType.SHIFT_END) {
+            return "The workday is over NOW. Stop what you are doing immediately — do not start anything new:\n"
+                    + "  1) Tidy up the current state (write_note / edit_note): what you did, where the files are, "
+                    + "what is unfinished, what the next person needs. Tomorrow's context will not remember it.\n"
+                    + "  2) Plan tomorrow: put anything that must happen later on the schedule with create_task "
+                    + "(day + tick, or in_minutes), and send any mail that has to go out today.\n"
+                    + "  3) Write your daily summary (write_note \"daily summary <today's date>\"): done / blocked / next.\n"
+                    + "  4) Then take_rest and go off duty — you will be woken again at the next shift start.";
+        }
+        return "Wrap up the current step, then deal with this.";
     }
 
     private static String str(Object o) {

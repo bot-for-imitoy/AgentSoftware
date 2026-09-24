@@ -51,6 +51,9 @@ class RoleUrgentEventTest {
             assertTrue(first.contains("TALK"), first);
             assertTrue(first.contains("from COO"), first);
             assertTrue(first.contains("the client is on the line"), first);
+            assertTrue(first.contains("Wrap up the current step"), first);
+            assertFalse(first.contains("daily summary"),
+                    "收尾流程只属于下班事件，别的事件不该带上: " + first);
             assertFalse(llm.toolResults.get(1).contains(MARKER),
                     "同一个事件只附到最近的一条，别每条结果都重复: " + llm.toolResults.get(1));
         } finally {
@@ -101,6 +104,15 @@ class RoleUrgentEventTest {
             String result = llm.toolResults.get(0);
             assertTrue(result.contains(MARKER), result);
             assertTrue(result.contains("Shift end at 2026-09-24 18:00"), result);
+            // 下班提醒要带完整的收尾流程：停手 → 整理 → 排明天 → 每日总结 → 休息
+            assertTrue(result.contains("workday is over"), result);
+            assertTrue(result.contains("Stop what you are doing immediately"), result);
+            assertTrue(result.contains("Tidy up the current state"), result);
+            assertTrue(result.contains("Plan tomorrow"), result);
+            assertTrue(result.contains("create_task"), result);
+            assertTrue(result.contains("daily summary"), result);
+            assertTrue(result.contains("take_rest"), result);
+            assertTrue(result.contains("go off duty"), result);
         } finally {
             system.stop();
         }

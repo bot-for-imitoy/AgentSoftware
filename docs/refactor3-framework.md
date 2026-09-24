@@ -993,6 +993,25 @@ public class AgentSystem {
   Wrap up the current step, then deal with this.
   ```
 
+  **下班是特例**：`SHIFT_END` 附的不是一句"收尾"，而是一整套收工流程（`Role.urgentGuidance`）：
+
+  ```
+  [urgent event waiting in your queue — priority above HIGH]
+  - EMERGENCY / SHIFT_END / from system
+    Shift end at 2026-09-24 18:00
+  The workday is over NOW. Stop what you are doing immediately — do not start anything new:
+    1) Tidy up the current state (write_note / edit_note): what you did, where the files are,
+       what is unfinished, what the next person needs. Tomorrow's context will not remember it.
+    2) Plan tomorrow: put anything that must happen later on the schedule with create_task
+       (day + tick, or in_minutes), and send any mail that has to go out today.
+    3) Write your daily summary (write_note "daily summary <today's date>"): done / blocked / next.
+    4) Then take_rest and go off duty — you will be woken again at the next shift start.
+  ```
+
+  实测（真模型，`deepseek-v4-flash`）：给一个"正在干活"的任务并在第一轮注入真 `SHIFT_END`，
+  模型依次调用 `list_notes` / `my_tasks` / `get_time` → **`write_note`（`daily_summary_2026-09-24`，225 字符）**
+  → `take_rest`，最终答复就是 `take_rest: idle, waiting for events` —— 停手、整理、写总结、下班全套都做了。
+
   没有这样的事件就什么都不加（"这个参数"不存在）。要点：
   - **只附一次**：同一条事件按 uuid 去重（`announcedUrgentEventId`，每条任务开头重置），
     否则每轮工具调用都会重复塞同一段文字；一条任务里若出现新的紧急事件会再附一次。
