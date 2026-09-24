@@ -515,6 +515,26 @@ structured `extra` metadata (`tool`: `{tool, args, result, round, taskId}`; `ans
 Client A coordination) + `web/ChatWebServer.java`; tests in `ChatStoreTest` /
 `ChatWebServerTest` / `TalkToClientWebTest` / `RoleTraceTest`.
 
+**Auto-pause at a given day** — `tools/pause-at-day.sh` polls `GET /api/state` (read-only) and,
+as soon as the simulated day reaches the target (default day 8), calls `POST /api/pause`, so a run
+left overnight stops instead of burning quota:
+
+```bash
+nohup tools/pause-at-day.sh --day 8 > /tmp/pause-at-day.log 2>&1 &   # 到第 8 天自动暂停
+tools/pause-at-day.sh --day 8 --at 17:30                             # 第 7 天 17:30 就停（跳过跨天前的收工）
+tools/pause-at-day.sh --day 8 --max-minutes 480                      # 兜底：墙钟跑满 8h 也暂停
+tools/pause-at-day.sh --once --dry-run                               # 只看一眼当前进度，什么都不做
+```
+
+Options: `--day N`, `--at HH:MM` (pause at that time on day `N-1`), `--url`
+(default `http://localhost:8787`), `--interval SECONDS`, `--max-minutes M`, `--max-failures N`,
+`--dry-run`, `--once`, `--guard` (keep watching and re-pause if a Client A interaction resumes
+the run). Note what pause means: the clock freezes so **no new task is created**, but the task
+already running and anything already queued finish first — so if the target is a day boundary,
+that day's end-of-shift wrap-up (every role writing its daily summary) has already run; use
+`--at HH:MM` to stop before it. Resume from the Web UI or `POST /api/resume`. Exit codes: `0`
+paused/finished, `2` UI unreachable, `130` interrupted (never pauses).
+
 ### 12. Tool & MCP management
 
 - `ToolRegistry` is the unified registry: registering a `Tool` / `Toolkit` immediately makes it
