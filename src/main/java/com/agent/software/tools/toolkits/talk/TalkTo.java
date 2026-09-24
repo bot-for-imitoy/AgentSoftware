@@ -58,10 +58,27 @@ public class TalkTo extends Tool {
             return "talk error: no target";
         }
         String result = role.talkTo(target, message, urgency);
+        if (!result.startsWith("talk:")) {
+            return result;   // 发送失败（解析/权限/没有系统）：不加下班提醒，免得掩盖真正的错因
+        }
         if (wait && !result.startsWith("talk: replied")) {
             String reply = role.waitForReply(target, DEFAULT_WAIT_MILLIS);
-            return result + "\n" + reply;
+            return result + "\n" + reply + offDutyNotice();
         }
-        return result;
+        return result + offDutyNotice();
+    }
+
+    /**
+     * 下班时段发出去的 talk 会被 EventBus 暂存到次日上班，对方当时根本收不到 ——
+     * 在结果里再提醒一次"该收工了"。
+     */
+    private String offDutyNotice() {
+        if (role == null || role.getSystem() == null
+                || role.getSystem().getTimeBus().isWorkingHours()) {
+            return "";
+        }
+        return "\n\n[off duty] It is past shift end, so the recipient is off duty and will NOT see this "
+                + "message until the next shift start. Watch the clock and finish your wrap-up "
+                + "(tidy up, plan tomorrow, daily summary, take_rest) as soon as you can.";
     }
 }

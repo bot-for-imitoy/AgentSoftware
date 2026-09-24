@@ -67,7 +67,21 @@ public class SendEmail extends Tool {
         String body = args.get("body") == null ? "" : String.valueOf(args.get("body"));
         String result = mail.send(mail.getAddress(role.roleId), to, cc, subject, body);
         role.journal("Sent mail: \"" + subject + "\" -> " + to);
-        return result;
+        return result + offDutyNotice();
+    }
+
+    /**
+     * 下班时段发出去的邮件要等到次日上班才会把收件人唤醒（EventBus 的下班暂存），
+     * 所以在结果里再提醒一次"该收工了"。
+     */
+    private String offDutyNotice() {
+        if (role == null || role.getSystem() == null
+                || role.getSystem().getTimeBus().isWorkingHours()) {
+            return "";
+        }
+        return "\n\n[off duty] It is past shift end, so the recipient is off duty and will NOT see this "
+                + "mail until the next shift start. Watch the clock and finish your wrap-up "
+                + "(tidy up, plan tomorrow, daily summary, take_rest) as soon as you can.";
     }
 
     /** 支持 role_id / 显示名 / 姓名片段 / 邮箱 / client；无法解析的收集到 unresolved。 */

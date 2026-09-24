@@ -1103,6 +1103,18 @@ public class AgentSystem {
     除非以后再加"队列也整体推到明早"。
     - LOW 事件因此不再需要单独的通道：它和 NORMAL 一样下班暂存、一样排最后；区别只是它不会出现在
       工具结果的"额外选项"里（那是 NORMAL 及以上）。
+    - **`send_email` / `talk` 的返回里再提醒一次**：既然下班时段发出的邮件、`talk` 都要等到次日
+      上班才会把对方唤醒，这两个工具在**当前不是工作时段**（`TimeBus.isWorkingHours() == false`）时，
+      会在返回文本末尾附一段
+      `[off duty] It is past shift end, so the recipient is off duty and will NOT see this mail/message
+      until the next shift start. Watch the clock and finish your wrap-up … as soon as you can.`
+      （两个工具各自的私有 `offDutyNotice()`，没有改动公共 API）。
+      只加在**发送成功**的返回上：解析不到收件人、没有绑定系统这类失败照旧只返回错误文本，
+      免得真正的错因被这段提醒盖住（`failedSendDoesNotCarryTheReminder` 钉住）。
+      单测：`tools/OffDutyNoticeTest`（工具层）+ `role/OffDutyToolNoticeTest`（真工具循环，
+      断言回到模型上下文里的工具结果确实带着这段）。
+      ⚠️ 已知遗留：`talk(wait=true)` 在下班时仍会照原样阻塞最多 5 分钟（`onShiftEnd()` 只打断
+      **那一刻**已有的等待，之后新发起的等待没人打断）。提醒到了，但工具本身还没学会"下班就别等"。
 
 - **`talk` / `list_roles` 暂时不在默认工具集里**：`tools/toolkits/talk/Talk.java` 有完整实现，
   `Toolkits.defaults` 里也保留了 `case "talk"`，但按需求**不放进 `DEFAULT_NAMES`，两份
