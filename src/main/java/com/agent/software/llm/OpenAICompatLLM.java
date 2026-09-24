@@ -30,8 +30,15 @@ import java.util.Map;
 public class OpenAICompatLLM extends LLM {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAICompatLLM.class);
-    private static final int MAX_ATTEMPTS = 3;
+    /** 一次请求最多尝试多少次（含首次）。网关抽风（502/503/429/超时）时靠它扛过去。 */
+    private static final int MAX_ATTEMPTS = 200;
+    /** 退避基数：第 N 次重试前睡 {@code min(N * 基数, RETRY_MAX_MILLIS)} 毫秒。 */
     private static final long RETRY_BASE_MILLIS = 1000L;
+    /**
+     * 单次退避上限。不加这个，线性退避到第 200 次要睡 200 秒、累计约 5.5 小时 ——
+     * 角色会一直卡在"重试中"，整个仿真跟着停摆。
+     */
+    private static final long RETRY_MAX_MILLIS = 30_000L;
 
     private final String apiKey;
     private final String model;
@@ -102,6 +109,10 @@ public class OpenAICompatLLM extends LLM {
 
         Exception lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            if (Thread.currentThread().isInterrupted()) {
+                // stop()/下班打断：别把剩下的重试次数打完再去打网关
+                return new Response("API error: interrupted", "", List.of(), 0);
+            }
             try {
                 HttpRequest.Builder rb = HttpRequest.newBuilder()
                         .uri(URI.create(baseUrl + "/chat/completions"))
@@ -117,8 +128,10 @@ public class OpenAICompatLLM extends LLM {
                     return parseResponse(resp.body());
                 }
                 if (isRetryable(status) && attempt < MAX_ATTEMPTS) {
-                    logger.warn("LLM HTTP {} (attempt {}/{}), retrying", status, attempt, MAX_ATTEMPTS);
-                    sleep(RETRY_BASE_MILLIS * attempt);
+                    if (shouldLogAttempt(attempt)) {
+                        logger.warn("LLM HTTP {} (attempt {}/{}), retrying", status, attempt, MAX_ATTEMPTS);
+                    }
+                    sleep(backoffMillis(attempt));
                     continue;
                 }
                 String detail = resp.body() == null ? "" : resp.body();
@@ -131,8 +144,10 @@ public class OpenAICompatLLM extends LLM {
             } catch (Exception e) {
                 lastError = e;
                 if (attempt < MAX_ATTEMPTS) {
-                    logger.warn("LLM request failed (attempt {}/{}): {}", attempt, MAX_ATTEMPTS, e.toString());
-                    sleep(RETRY_BASE_MILLIS * attempt);
+                    if (shouldLogAttempt(attempt)) {
+                        logger.warn("LLM request failed (attempt {}/{}): {}", attempt, MAX_ATTEMPTS, e.toString());
+                    }
+                    sleep(backoffMillis(attempt));
                     continue;
                 }
             }
@@ -261,6 +276,16 @@ public class OpenAICompatLLM extends LLM {
 
     private static boolean isRetryable(int status) {
         return status == 429 || status == 408 || status >= 500;
+    }
+
+    /** 第 N 次重试前的退避时长：线性增长但有上限（见 {@link #RETRY_MAX_MILLIS}）。 */
+    static long backoffMillis(int attempt) {
+        return Math.min(RETRY_BASE_MILLIS * Math.max(1, attempt), RETRY_MAX_MILLIS);
+    }
+
+    /** 200 次重试不能每次都打日志（会刷屏），前几次都打、之后每 25 次打一条。 */
+    private static boolean shouldLogAttempt(int attempt) {
+        return attempt <= 3 || attempt % 25 == 0;
     }
 
     private static void sleep(long millis) {
