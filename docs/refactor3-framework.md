@@ -716,7 +716,9 @@ public class AgentSystem {
 ## 4. 关键机制（细节见 deep-dive）
 
 1. **talkTo 等待**：内部 handoff + 环检测 + 超时 + 下班中断；`deliverReply` 为 package-private。
-2. **上下班**：`onShiftStart/onShiftEnd` 由时间线程直调（WAIT 中的 worker 收不到队列事件）。
+2. **上下班**：`onShiftStart/onShiftEnd` 由时间线程直调（WAIT 中的 worker 收不到队列事件）；
+   `SHIFT_START/SHIFT_END` 广播还会各自变成一条角色任务（开工唤醒 / 收工收尾，见 §9），
+   收工任务跑完才 `forgetAll() + endDay()`。
 3. **下班不派活**：`EventBus` 非工作时段 hold 普通事件，次日释放。
 4. **跨天**：全员 IDLE ∧ 超过下班时间 → 强制结束等待 → 跳到次日 shiftStart。
 5. **事件**：不过滤；广播只到大组；下班后不放行。
@@ -1027,6 +1029,22 @@ public class AgentSystem {
     `create_task(priority=EMERGENCY)`（客户端口信走的是 HIGH，不触发）。
   - 实测（真模型）：任务跑第一轮时塞入一条 EMERGENCY TALK，模型在 `my_tasks` 的工具结果里
     看到了这段附加文本，并在最终答复里主动提到"COO 的紧急请求"。
+
+- **下班 = 一条给每个角色的"收工"LLM 任务**（`Role.dispatch(SHIFT_END)`）。只把提醒附在工具结果上
+  有个洞：18:00 恰好**空闲**的角色根本没有工具结果可附，于是完全不收尾就进入待命 ——
+  没人整理、没人写每日总结。现在 SHIFT_END 事件本身会变成一条任务（`runTask(task, closesDay=true)`），
+  工具结果里的提醒和这条任务共用同一段收尾流程（`Role.endOfDayInstructions()`）。
+  顺序与注意点：
+  - `onShiftEnd()` 只做**必须立刻生效**的事（打断 `waitForReply`、`ClientChannel.cancelWait`）；
+    `forgetAll() + endDay()` 从它里面**搬到了收工任务之后**（`Role.finishDay()`）—— 否则模型写
+    每日总结时已经看不到今天的内容了。`closesDay=true` 的任务在 `runTask` 的 finally 里调 `finishDay()`。
+  - 空闲角色由这条任务唤醒；正在忙的角色等手上任务结束后也会吃到它（SHIFT_END 是队列里最高优先级）。
+  - `Context.forgetAll()` 只是把消息移出 **prompt**，消息本体仍在内存里（`search_memory` 仍可检索）。
+  - ⚠️ 仍然**没有硬中断**：18:00 正在跑的任务不会被掐断，它可能跨过下班点很久（"工时预算"另说）。
+  - 实测（真模型 `deepseek-v4-flash`，只让 CEO 用真 LLM）：直接把 SHIFT_END 投给全员（此时全员空闲），
+    5 个角色的 `context.getDay()` 都变成 2、prompt 清空；CEO 依次调用
+    `get_time` / `my_tasks` / `list_notes` / **`write_note` ×2**（落盘 `daily_summary_2026-09-24`
+    与 `state_handover_2026-09-24`）/ `take_rest`，最终答复 `take_rest: idle, waiting for events`。
 
 - **LLM 重试：最多 200 次**（`OpenAICompatLLM.MAX_ATTEMPTS = 200`）。README 里一直写着
   `retryMax = 200`（原 Python/Java 版的行为），refactor3 首版只剩 3 次，网关抖一下任务就废，

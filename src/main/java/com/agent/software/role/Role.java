@@ -338,6 +338,13 @@ public final class Role extends UUIDObject implements Data {
     }
 
     /** 下班：由时间线程直调；终止正在等待的 talkTo / 客户对话，并把上下文旧消息移出 prompt。 */
+    /**
+     * 下班：由时间线程直调（也会在派发 SHIFT_END 事件时再调一次）。
+     *
+     * <p>这里只做**必须立刻生效**的事：打断正在等的 talk / 客户对话。
+     * 把这一天从 prompt 里翻篇（{@code forgetAll} + {@code endDay}）**不在这里做** ——
+     * 那要等"收工"任务跑完，否则模型写每日总结时已经看不到今天的内容了（见 {@link #finishDay()}）。
+     */
     public void onShiftEnd() {
         if (isWaiting()) {
             abortWait("[shift end] the colleague you were waiting for is off duty; treat this as their reply.");
@@ -347,11 +354,18 @@ public final class Role extends UUIDObject implements Data {
             system.getClientChannel().cancelWait(
                     "[shift end] the client conversation is closed for today; continue tomorrow.");
         }
-        if (context != null) {
-            context.forgetAll();
-            context.endDay(context.getDay());
-        }
         journal("Shift end");
+    }
+
+    /** 收工任务跑完之后：旧消息移出 prompt，日期前进（幂等）。 */
+    private void finishDay() {
+        if (context == null) {
+            return;
+        }
+        int day = context.getDay();
+        context.forgetAll();
+        context.endDay(day);
+        journal("Day " + day + " closed");
     }
 
     // ── 协作者 ──────────────────────────────────────────────────
@@ -771,7 +785,15 @@ public final class Role extends UUIDObject implements Data {
             return;
         }
         if (e.type == EventType.SHIFT_END) {
+            // 立刻生效的部分：打断等待、关闭客户会话（时间线程也会直调一次）
             onShiftEnd();
+            // 然后给**每个**角色一条"收工"任务：整理 → 排队明天 → 写每日总结 → 休息。
+            // 只在工具结果里附提醒的话，18:00 正好空闲的角色根本收不到任何收尾指令；
+            // 这条任务把那个洞补上。任务跑完才把这一天从 prompt 里翻篇（见 finishDay），
+            // 否则模型没有上下文可总结。
+            String end = e.content == null || e.content.isBlank() ? "Shift end" : e.content;
+            runTask(new Task(e.fromRoleId, roleId, System.currentTimeMillis(),
+                    "[time] " + end + "\n\n" + endOfDayInstructions(), e.priority), true);
             return;
         }
         if (e instanceof Task task) {
@@ -811,6 +833,13 @@ public final class Role extends UUIDObject implements Data {
     }
 
     private void runTask(Task task) {
+        runTask(task, false);
+    }
+
+    /**
+     * @param closesDay true = 这是下班"收工"任务，跑完就把这一天从 prompt 里翻篇
+     */
+    private void runTask(Task task, boolean closesDay) {
         if (state == RoleState.WAIT) {
             // 正在等回复，不接新任务；退回队列下轮再处理
             enqueue(task);
@@ -894,6 +923,9 @@ public final class Role extends UUIDObject implements Data {
         } finally {
             rememberTask(task);
             setState(RoleState.IDLE);
+            if (closesDay) {
+                finishDay();
+            }
         }
     }
 
@@ -945,15 +977,25 @@ public final class Role extends UUIDObject implements Data {
      */
     private static String urgentGuidance(Event urgent) {
         if (urgent.type == EventType.SHIFT_END) {
-            return "The workday is over NOW. Stop what you are doing immediately — do not start anything new:\n"
-                    + "  1) Tidy up the current state (write_note / edit_note): what you did, where the files are, "
-                    + "what is unfinished, what the next person needs. Tomorrow's context will not remember it.\n"
-                    + "  2) Plan tomorrow: put anything that must happen later on the schedule with create_task "
-                    + "(day + tick, or in_minutes), and send any mail that has to go out today.\n"
-                    + "  3) Write your daily summary (write_note \"daily summary <today's date>\"): done / blocked / next.\n"
-                    + "  4) Then take_rest and go off duty — you will be woken again at the next shift start.";
+            return endOfDayInstructions();
         }
         return "Wrap up the current step, then deal with this.";
+    }
+
+    /**
+     * 下班收尾流程：停手 → 整理 → 排明天 → 每日总结 → 休息。
+     *
+     * <p>两处共用同一段文字：正在跑的任务里附在工具结果上的提醒（{@link #urgentEventNotice()}），
+     * 以及下班时给每个角色的"收工"任务（见 {@code dispatch}）。
+     */
+    private static String endOfDayInstructions() {
+        return "The workday is over NOW. Stop what you are doing immediately — do not start anything new:\n"
+                + "  1) Tidy up the current state (write_note / edit_note): what you did, where the files are, "
+                + "what is unfinished, what the next person needs. Tomorrow's context will not remember it.\n"
+                + "  2) Plan tomorrow: put anything that must happen later on the schedule with create_task "
+                + "(day + tick, or in_minutes), and send any mail that has to go out today.\n"
+                + "  3) Write your daily summary (write_note \"daily summary <today's date>\"): done / blocked / next.\n"
+                + "  4) Then take_rest and go off duty — you will be woken again at the next shift start.";
     }
 
     private static String str(Object o) {

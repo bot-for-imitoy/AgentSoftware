@@ -98,9 +98,16 @@ class ShiftWakeTest {
         }
     }
 
-    /** 被唤醒（跑完）过几次：每个任务收尾都会写一条 answer 日志。 */
+    /**
+     * 被"开工"任务唤醒过几次。
+     *
+     * <p>数的是上下文里的任务正文（收工任务也会写一条，不能笼统地数 answer 日志），
+     * 且旧消息只是被移出 prompt、仍留在 {@code history()} 里，所以跨天也能累计。
+     */
     private static long wakes(Role role) {
-        return role.readJournal().stream().filter(l -> l.contains("answer(")).count();
+        return role.getContext().history().stream()
+                .filter(m -> m.content != null && m.content.startsWith("[time] Shift start at"))
+                .count();
     }
 
     private static String history(Role role) {
