@@ -105,6 +105,9 @@ public class UpdateTask extends Tool {
         // targetTime 可能变了：先摘下来再按新时间挂回去（TreeMap 的 key 必须跟着变）
         role.getSystem().getEventBus().cancel(task.uuid);
         role.getSystem().getEventBus().schedule(task);
+        // 看板上的记录同步（记录的是派活人的那份）
+        role.taskBoard().update(task.uuid, task.content, null, task.targetRoleId,
+                TaskSupport.describeTime(role.getSystem().getTimeBus(), task.targetTime));
         role.journal("update_task " + TaskSupport.shortId(task.uuid) + ": " + String.join(", ", changes));
         return "update_task: task " + TaskSupport.shortId(task.uuid) + " updated ("
                 + String.join(", ", changes) + "). Now: "

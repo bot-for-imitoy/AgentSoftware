@@ -39,6 +39,8 @@ public class CreateTask extends Tool {
                 "(Optional) tick inside that day's shift: 0 = 08:00, 36000 = 18:00. Default: 0 when day is given."));
         schema.put("target", "(Optional) role_id or name of the assignee (must be in the cohort). Default: yourself.");
         schema.put("priority", "(Optional) LOW / NORMAL / HIGH / EMERGENCY. Default: NORMAL.");
+        schema.put("group", "(Optional) which task group to file it under; default = your current baseline "
+                + "group (see task_group_switch). A group that does not exist yet is created.");
         return schema;
     }
 
@@ -47,7 +49,9 @@ public class CreateTask extends Tool {
         return "Schedule a task for the future (for yourself by default, or for a colleague in the same team; "
                 + "the management group may assign across teams). The task is delivered at the given simulated "
                 + "time and wakes the assignee up. Give the time either as in_minutes, or as day + tick. "
-                + "Use this instead of idling in a loop when you need to act at a later time.";
+                + "Use this instead of idling in a loop when you need to act at a later time. "
+                + "The task is also registered on your task board under a group, so its completion can be "
+                + "tracked later.";
     }
 
     @Override
@@ -76,13 +80,16 @@ public class CreateTask extends Tool {
             Role target = TaskSupport.resolveTarget(role, TaskSupport.str(args.get("target")));
             TaskSupport.Slot slot = TaskSupport.resolveTime(role.getSystem().getTimeBus(),
                     inMinutes, day, tick, args.get("day") != null);
+            String group = role.taskBoard().resolveGroup(TaskSupport.str(args.get("group")));
             Task task = new Task(role.roleId, target.roleId, slot.tick(), content, priority);
             role.getSystem().getEventBus().schedule(task);
+            role.taskBoard().add(task.uuid, content, "", target.roleId, slot.when(), group);
             role.journal("create_task " + TaskSupport.shortId(task.uuid) + " for " + target.roleId
-                    + " at " + slot.when());
+                    + " at " + slot.when() + " (group " + group + ")");
             return "create_task: scheduled task " + TaskSupport.shortId(task.uuid)
                     + " for " + target.roleId + " (" + target.name + ") at " + slot.when()
-                    + ", priority " + priority + ". It will wake them up when due.";
+                    + ", priority " + priority + ", group " + group
+                    + ". It will wake them up when due.";
         } catch (IllegalArgumentException e) {
             return "create_task error: " + e.getMessage();
         }

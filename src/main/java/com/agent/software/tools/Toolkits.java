@@ -14,6 +14,7 @@ import com.agent.software.tools.toolkits.pc.Pc;
 import com.agent.software.tools.toolkits.skill.Skill;
 import com.agent.software.tools.toolkits.skill.SkillManager;
 import com.agent.software.tools.toolkits.staffing.StaffingToolkit;
+import com.agent.software.tools.toolkits.talk.Talk;
 import com.agent.software.tools.toolkits.task.Task;
 import com.agent.software.tools.toolkits.time.Time;
 import com.agent.software.tools.toolkits.todo.Todo;
@@ -33,7 +34,7 @@ public final class Toolkits {
     public static final String LEADERSHIP_GROUP = "Leadership Group";
 
     private static final List<String> DEFAULT_NAMES =
-            List.of("time", "task", "note", "todo", "memory", "pc", "mcp_manager", "skill", "email");
+            List.of("time", "task", "note", "todo", "memory", "talk", "pc", "mcp_manager", "skill", "email");
 
     private Toolkits() {
     }
@@ -54,6 +55,7 @@ public final class Toolkits {
                 case "task", "task_view" -> out.add(new Task(role));
                 case "note" -> out.add(new Note(role));
                 case "todo" -> out.add(new Todo(role));
+                case "talk" -> out.add(new Talk(role));
                 case "memory" -> out.add(new Memory(role));
                 case "pc" -> out.add(new Pc(role));
                 case "mcp_manager" -> out.add(new McpManager(role, mcp));

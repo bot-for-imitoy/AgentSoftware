@@ -38,7 +38,8 @@ class TaskToolsTest {
         try {
             Role ceo = system.getRolePool().find("CEO");
             List<String> names = toolkit(ceo).getTools().stream().map(Tool::getToolName).sorted().toList();
-            assertEquals(List.of("create_task", "delete_task", "list_tasks", "my_tasks", "update_task"), names);
+            assertEquals(List.of("create_task", "delete_task", "list_tasks", "my_tasks",
+                    "task_group_list", "task_group_switch", "update_task"), names);
         } finally {
             system.stop();
         }
@@ -50,11 +51,12 @@ class TaskToolsTest {
         try {
             Role ceo = system.getRolePool().find("CEO");
             Toolkit task = toolkit(ceo);
-            assertTrue(task.trigger("list_tasks", Map.of()).contains("no scheduled tasks"));
+            assertTrue(task.trigger("list_tasks", Map.of()).contains("(empty)"), "看板一开始是空的");
 
             String created = task.trigger("create_task",
                     Map.of("content", "write the SRS", "in_minutes", "90", "priority", "HIGH"));
             assertTrue(created.contains("scheduled task"), created);
+            assertTrue(created.contains("group default"), created);
             assertEquals(1, system.getEventBus().scheduled().size());
             Task scheduled = (Task) system.getEventBus().scheduled().get(0);
             assertEquals(Task.PENDING, scheduled.status);
@@ -63,7 +65,8 @@ class TaskToolsTest {
 
             String listed = task.trigger("list_tasks", Map.of());
             assertTrue(listed.contains("write the SRS"), listed);
-            assertTrue(listed.contains("HIGH"), listed);
+            assertTrue(listed.contains("pending"), listed);
+            assertTrue(listed.contains("group default"), listed);
 
             String updated = task.trigger("update_task",
                     Map.of("task_id", shortIdOf(listed), "content", "write the SRS v2", "in_minutes", "30"));
@@ -77,12 +80,75 @@ class TaskToolsTest {
             assertTrue(deleted.contains("cancelled"), deleted);
             assertTrue(system.getEventBus().scheduled().isEmpty());
             assertTrue(system.getEventBus().nextDue() == null, "删掉后不应再有后续工作");
+            assertTrue(task.trigger("list_tasks", Map.of()).contains("(empty)"), "看板上的记录也要一并删掉");
         } finally {
             system.stop();
         }
     }
 
+    /** 任务按组存放：不写 group 就走基线组，切换基线后新任务进新组，旧组不受影响。 */
     @Test
+    void taskGroupsAreIsolatedAndSwitchable(@TempDir Path dir) {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            Toolkit task = toolkit(ceo);
+            assertTrue(task.trigger("task_group_list", Map.of()).contains("baseline = default"));
+
+            task.trigger("create_task", Map.of("content", "plan S1", "in_minutes", "30", "group", "s1"));
+            assertTrue(task.trigger("create_task",
+                    Map.of("content", "plan S2", "in_minutes", "30")).contains("group default"));
+
+            String groups = task.trigger("task_group_list", Map.of());
+            assertTrue(groups.contains("default (1 task(s)"), groups);
+            assertTrue(groups.contains("s1 (1 task(s)"), groups);
+
+            String switched = task.trigger("task_group_switch", Map.of("name", "s1"));
+            assertTrue(switched.contains("baseline is now 's1'"), switched);
+            // 基线切到 s1 之后，不带 group 的新任务进 s1
+            assertTrue(task.trigger("create_task", Map.of("content", "plan S1 detail", "in_minutes", "45"))
+                    .contains("group s1"));
+            assertTrue(task.trigger("list_tasks", Map.of()).contains("plan S1 detail"));
+            assertFalse(task.trigger("list_tasks", Map.of()).contains("plan S2"),
+                    "基线组之外的组不该出现在默认列表里");
+            assertTrue(task.trigger("list_tasks", Map.of("group", "default")).contains("plan S2"));
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 任务跑完后，完成情况要实时写回派活人的看板。 */
+    @Test
+    void completedTaskStatusIsWrittenBackToTheBoard(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            ceo.setLlm(new FakeLlm());
+            Toolkit task = toolkit(ceo);
+            assertTrue(task.trigger("create_task",
+                    Map.of("content", "follow up", "in_minutes", "1", "group", "release"))
+                    .contains("group release"));
+
+            system.getTimeBus().setNow(60);   // 到点 → 投递 → worker 跑掉
+            long deadline = System.currentTimeMillis() + 5_000;
+            while (System.currentTimeMillis() < deadline
+                    && !task.trigger("list_tasks", Map.of("group", "release")).contains("done")) {
+                Thread.sleep(50);
+            }
+            String listed = task.trigger("list_tasks", Map.of("group", "release"));
+            assertTrue(listed.contains("done"), listed);
+            assertTrue(listed.contains("follow up"), listed);
+
+            // 换个看板实例从磁盘复核（实时保存）
+            var reread = new com.agent.software.store.TaskBoard(dir.resolve("task_groups"), "CEO");
+            assertEquals("done", reread.items("release").get(0).status);
+            assertTrue(task.trigger("list_tasks", Map.of("group", "release", "status", "pending"))
+                    .contains("(empty)"));
+        } finally {
+            system.stop();
+        }
+    }
+
     void rejectsBadArguments(@TempDir Path dir) {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {
@@ -119,7 +185,7 @@ class TaskToolsTest {
             String created = toolkit(cto).trigger("create_task",
                     Map.of("content", "design the schema", "in_minutes", "10", "target", "architect"));
             assertTrue(created.contains("scheduled task"), created);
-            String id = shortIdOf(toolkit(cto).trigger("list_tasks", Map.of("scope", "all")));
+            String id = shortIdOf(toolkit(cto).trigger("list_tasks", Map.of()));
 
             // 被指派者可以改自己的任务
             assertTrue(toolkit(architect).trigger("update_task", Map.of("task_id", id, "content", "v2"))

@@ -6,7 +6,7 @@ import com.agent.software.tools.Tool;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** todo_update：改当前基线组里某条事项的状态/标题/描述（改完立刻落盘）。 */
+/** todo_update：改自己待办清单里某条事项的状态/标题/描述（改完立刻落盘）。 */
 public class TodoUpdate extends Tool {
 
     private final TodoStore store;
@@ -32,8 +32,8 @@ public class TodoUpdate extends Tool {
 
     @Override
     public String getDescription() {
-        return "Update one todo item of your current baseline group: mark it in_progress / completed, "
-                + "or fix its title and detail. The change is saved immediately.";
+        return "Update one of your todo items: mark it in_progress / completed, or fix its title and "
+                + "detail. The change is saved immediately.";
     }
 
     @Override
@@ -54,10 +54,8 @@ public class TodoUpdate extends Tool {
         }
         TodoStore.Item item = store.update(id, status, title, detail);
         if (item == null) {
-            return "todo_update error: no unique item '" + id + "' in group "
-                    + store.currentGroup() + " (see todo_list; use todo_group_switch first if it is in another group)";
+            return "todo_update error: no unique item '" + id + "' (see todo_list)";
         }
-        return "todo_update: [" + item.id + "] " + item.status + " | " + item.title
-                + " (group " + store.currentGroup() + ")";
+        return "todo_update: [" + item.id + "] " + item.status + " | " + item.title;
     }
 }

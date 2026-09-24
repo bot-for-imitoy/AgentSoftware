@@ -10,27 +10,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * 待办存储：一个角色一个 JSON 文件，按**组**分桶，每次改动立刻落盘。
+ * 待办存储：一个角色一个 JSON 文件，**一层平铺的事项列表**（没有"组"的概念 —— 那是 task 系列的东西）。
  *
  * <pre>
  *   &lt;base&gt;/&lt;role_id&gt;.json
- *   {
- *     "current_group": "default",
- *     "groups": { "default": [ {"id","title","detail","status","created_at","updated_at"} ], ... }
- *   }
+ *   [ {"id","title","detail","status","created_at","updated_at"} ]
  * </pre>
  *
- * <p>组是"套在待办外面的一层"：每个组有自己的事项，可以单独增删改；
- * {@code current_group} 是"基线组"，不带 {@code group} 参数的操作都作用在它上面，
- * 员工随时可以 {@link #switchGroup(String)} 换一个组当基线。
+ * <p>每次改动立刻落盘（add/update/delete 都保存），所以完成情况不会因为进程退出而丢。
  *
- * <p>兼容 master 时代的旧格式（文件直接是一个事项数组）：读到时自动装进 {@code default} 组。
+ * <p>兼容两种旧格式：master 时代的裸数组（本来就是本格式），以及本仓库中途出现过的
+ * {@code {"groups": {...}}} 结构（读到时把各组事项拍平合并）。
  *
  * <p>线程契约：方法都是 synchronized（角色 worker 单线程调用，加锁只是防御）。
  */
@@ -38,12 +33,10 @@ public class TodoStore {
 
     private static final Logger logger = LoggerFactory.getLogger(TodoStore.class);
 
-    /** 默认组名，也是没有任何组时的落点。 */
-    public static final String DEFAULT_GROUP = "default";
     /** 允许的事项状态（与 master/Python 版一致）。 */
     public static final List<String> STATUSES = List.of("pending", "in_progress", "completed");
 
-    /** 一条待办。字段可变（JSON 回填 + 状态更新）。 */
+    /** 一条待办。 */
     public static final class Item {
         public String id = "";
         public String title = "";
@@ -55,8 +48,7 @@ public class TodoStore {
 
     private final Path file;
     private final String roleId;
-    private final Map<String, List<Item>> groups = new LinkedHashMap<>();
-    private String currentGroup = DEFAULT_GROUP;
+    private final List<Item> items = new ArrayList<>();
 
     public TodoStore(Path baseDir, String roleId) {
         Path base = baseDir == null ? Paths.get("data", "todos") : baseDir;
@@ -77,68 +69,19 @@ public class TodoStore {
         return roleId;
     }
 
-    // ── 组 ──────────────────────────────────────────────────────
-
-    /** 所有组名（default 排最前，其余按创建/字典序），保证至少有一个组。 */
-    public synchronized List<String> groups() {
-        List<String> names = new ArrayList<>(groups.keySet());
-        names.sort((a, b) -> {
-            if (a.equals(DEFAULT_GROUP)) {
-                return -1;
-            }
-            if (b.equals(DEFAULT_GROUP)) {
-                return 1;
-            }
-            return a.compareTo(b);
-        });
-        return names;
-    }
-
-    public synchronized boolean hasGroup(String name) {
-        return name != null && groups.containsKey(name);
-    }
-
-    public synchronized String currentGroup() {
-        return currentGroup;
-    }
-
-    /**
-     * 切换基线组；组不存在就新建（"随时切换另一个 todo 组作为基线"）。
-     *
-     * @return true = 新建了这个组，false = 切到已有组
-     */
-    public synchronized boolean switchGroup(String name) {
-        String key = normalizeGroup(name);
-        boolean created = groups.putIfAbsent(key, new ArrayList<>()) == null;
-        currentGroup = key;
-        save();
-        logger.info("TodoStore[{}] baseline group = {}{}", roleId, key, created ? " (created)" : "");
-        return created;
-    }
-
-    /** 组内事项数。 */
-    public synchronized int count(String group) {
-        List<Item> items = groups.get(normalizeGroup(group));
-        return items == null ? 0 : items.size();
-    }
-
-    /** 解析用户给的组名（空 = 当前基线组），返回真正会被使用的组名。 */
-    public synchronized String resolveGroup(String name) {
-        return normalizeGroup(name);
-    }
-
     // ── 事项 ────────────────────────────────────────────────────
 
-    /** 某个组的事项（group 为空 = 当前基线组）；组不存在返回空列表。 */
-    public synchronized List<Item> items(String group) {
-        List<Item> items = groups.get(normalizeGroup(group));
-        return items == null ? List.of() : new ArrayList<>(items);
+    /** 全部事项（按加入顺序）。 */
+    public synchronized List<Item> items() {
+        return new ArrayList<>(items);
     }
 
-    /** 加一条事项（group 为空 = 当前基线组；组不存在则新建）。 */
-    public synchronized Item add(String title, String detail, String group) {
-        String key = normalizeGroup(group);
-        List<Item> items = groups.computeIfAbsent(key, k -> new ArrayList<>());
+    public synchronized int count() {
+        return items.size();
+    }
+
+    /** 加一条事项。 */
+    public synchronized Item add(String title, String detail) {
         Item item = new Item();
         item.id = newId();
         item.title = title == null ? "" : title.strip();
@@ -148,18 +91,18 @@ public class TodoStore {
         item.updatedAt = item.createdAt;
         items.add(item);
         save();
-        logger.info("TodoStore[{}] todo added to group {}: {}", roleId, key, item.id);
+        logger.info("TodoStore[{}] todo added: {}", roleId, item.id);
         return item;
     }
 
     /**
-     * 改一条事项（按 id 或 id 前缀在**当前基线组**里找）。
+     * 改一条事项（按 id 或唯一前缀）。
      *
      * @param status null/空 = 不改状态
-     * @return 改到的条目；找不到返回 null
+     * @return 改到的条目；找不到（或前缀有歧义）返回 null
      */
     public synchronized Item update(String idOrPrefix, String status, String title, String detail) {
-        Item item = find(currentGroup, idOrPrefix);
+        Item item = find(idOrPrefix);
         if (item == null) {
             return null;
         }
@@ -177,22 +120,20 @@ public class TodoStore {
         return item;
     }
 
-    /** 删一条事项（按 id 或 id 前缀在当前基线组里找）。 */
+    /** 删一条事项。 */
     public synchronized boolean delete(String idOrPrefix) {
-        Item item = find(currentGroup, idOrPrefix);
+        Item item = find(idOrPrefix);
         if (item == null) {
             return false;
         }
-        groups.get(currentGroup).remove(item);
+        items.remove(item);
         save();
         return true;
     }
 
-    /** 在当前基线组里按 id / 前缀找一条；找不到返回 null。 */
-    public synchronized Item find(String group, String idOrPrefix) {
-        String key = normalizeGroup(group);
-        List<Item> items = groups.get(key);
-        if (items == null || idOrPrefix == null || idOrPrefix.isBlank()) {
+    /** 按 id / 唯一前缀找一条；找不到或前缀有歧义返回 null。 */
+    public synchronized Item find(String idOrPrefix) {
+        if (idOrPrefix == null || idOrPrefix.isBlank()) {
             return null;
         }
         String needle = idOrPrefix.strip();
@@ -215,11 +156,8 @@ public class TodoStore {
 
     // ── 持久化 ──────────────────────────────────────────────────
 
-    @SuppressWarnings("unchecked")
     private void load() {
-        groups.clear();
-        currentGroup = DEFAULT_GROUP;
-        groups.put(DEFAULT_GROUP, new ArrayList<>());
+        items.clear();
         if (!Files.exists(file)) {
             return;
         }
@@ -236,71 +174,43 @@ public class TodoStore {
         try {
             String trimmed = text.stripLeading();
             if (trimmed.startsWith("[")) {
-                // master 时代的旧格式：文件就是一个事项数组 → 装进 default 组
-                groups.put(DEFAULT_GROUP, parseItems(Json.parseArray(text)));
-                logger.info("TodoStore[{}] migrated {} legacy todo item(s) into group '{}'",
-                        roleId, groups.get(DEFAULT_GROUP).size(), DEFAULT_GROUP);
+                items.addAll(parseItems(Json.parseArray(text)));
                 return;
             }
+            // 中途出现过的 {"groups": {...}} 结构：拍平合并
             Map<String, Object> root = Json.parseObject(text);
-            Object current = root.get("current_group");
-            if (current != null && !String.valueOf(current).isBlank()) {
-                currentGroup = String.valueOf(current).strip();
-            }
-            Object g = root.get("groups");
-            if (g instanceof Map<?, ?> map) {
-                groups.clear();
-                for (Map.Entry<?, ?> e : map.entrySet()) {
-                    String name = String.valueOf(e.getKey());
-                    List<Object> raw = e.getValue() instanceof List<?> l
-                            ? new ArrayList<>(l) : new ArrayList<>();
-                    groups.put(name, parseItems(raw));
+            Object groups = root.get("groups");
+            if (groups instanceof Map<?, ?> map) {
+                for (Object raw : map.values()) {
+                    if (raw instanceof List<?> list) {
+                        items.addAll(parseItems(list));
+                    }
                 }
-            }
-            if (groups.isEmpty()) {
-                groups.put(DEFAULT_GROUP, new ArrayList<>());
-            }
-            if (!groups.containsKey(currentGroup)) {
-                currentGroup = DEFAULT_GROUP;
+                logger.info("TodoStore[{}] flattened {} item(s) from a legacy grouped file",
+                        roleId, items.size());
             }
         } catch (Exception e) {
             logger.warn("TodoStore[{}] cannot parse {}: {}", roleId, file, e.toString());
         }
     }
 
-    /** 落盘（每次改动都调，保证"组内事项的完成情况实时保存"）。 */
+    /** 落盘（每次改动都调，保证完成情况实时保存）。 */
     private void save() {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("current_group", currentGroup);
-        Map<String, Object> g = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Item>> e : groups.entrySet()) {
-            List<Map<String, Object>> list = new ArrayList<>();
-            for (Item it : e.getValue()) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("id", it.id);
-                m.put("title", it.title);
-                m.put("detail", it.detail);
-                m.put("status", it.status);
-                m.put("created_at", it.createdAt);
-                m.put("updated_at", it.updatedAt);
-                list.add(m);
-            }
-            g.put(e.getKey(), list);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Item it : items) {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("id", it.id);
+            m.put("title", it.title);
+            m.put("detail", it.detail);
+            m.put("status", it.status);
+            m.put("created_at", it.createdAt);
+            m.put("updated_at", it.updatedAt);
+            out.add(m);
         }
-        root.put("groups", g);
-        Json.writeFile(file, root);
+        Json.writeFile(file, out);
     }
 
     // ── 小工具 ──────────────────────────────────────────────────
-
-    /** 组名规范化：空 → 当前基线组；非法字符换成下划线。 */
-    private String normalizeGroup(String name) {
-        if (name == null || name.isBlank()) {
-            return currentGroup;
-        }
-        String cleaned = name.strip().replaceAll("[\\s/\\\\:*?\"<>|]+", "_");
-        return cleaned.isEmpty() ? currentGroup : cleaned;
-    }
 
     private static String normalizeStatus(String status) {
         String s = status.strip().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');

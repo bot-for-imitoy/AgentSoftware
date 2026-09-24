@@ -53,6 +53,7 @@ public class DeleteTask extends Tool {
             return "delete_task error: task " + TaskSupport.shortId(task.uuid)
                     + " was already delivered or cancelled";
         }
+        role.taskBoard().remove(task.uuid);
         role.journal("delete_task " + TaskSupport.shortId(task.uuid) + " (was due " + when + ")");
         return "delete_task: task " + TaskSupport.shortId(task.uuid) + " cancelled (it was due "
                 + when + ", target " + task.targetRoleId + ")";

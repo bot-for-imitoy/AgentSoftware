@@ -30,11 +30,13 @@ class ToolkitsTest {
         assertTrue(names.contains("task"));
         assertTrue(names.contains("note"));
         assertTrue(names.contains("todo"));
+        assertTrue(names.contains("talk"));
         assertTrue(names.contains("memory"));
         assertTrue(names.contains("pc"));
         assertTrue(names.contains("mcp_manager"));
         assertTrue(names.contains("skill"));
         assertTrue(names.contains("email"));
+        assertTrue(names.contains("talk"), "同组沟通用的 talk 应该人人都有");
         assertFalse(names.contains("client"), "非管理组没有 talk_to_client");
         assertFalse(names.contains("staffing_toolkit"));
     }

@@ -798,7 +798,9 @@ public class AgentSystem {
 | `Message.embedding`（`double[]`，随 `getData/loadData` 持久化） | 语义记忆要把向量挂在消息上；空/缺省 = 没算或算不出来 |
 | `Context.add(Message)` 覆写 + `Context.memory()/setMemory(...)` | `LLM.append*` 全部经 `Context.add` 落库，这是"角色每次添加内容"的唯一写入口，语义向量的计算与阈值淘汰挂在这里；`loadData` 期间置 `restoring` 跳过（向量已经一起存了） |
 | `SemanticMemory`、`Embedding`/`OpenAICompatEmbedding`、`memory` 工具包（`search_memory`） | 需求新增：embedding 请求类 + 语义记忆 + 阈值淘汰 + 记忆检索 |
-| `store.TodoStore`、`Role.todoStore()`、`todo` 工具包（6 个工具） | 需求新增：带「组」的待办；`Toolkits` 配置名 `todo`，`data/toolkits.default.json` 同步改键 |
+| `store.TodoStore`、`Role.todoStore()`、`todo` 工具包（4 个工具） | 需求新增：基础待办清单（无组）；`Toolkits` 配置名 `todo` |
+| `store.TaskBoard`、`Role.taskBoard()`、`task_group_list`/`task_group_switch`、`Task.group` 语义上的分组 | 需求新增：任务按组存放 + 基线组 + 完成状态实时回写 |
+| `talk` 工具包接入默认工具集（`change: case "talk"` + `toolkits.default.json`） | 之前有代码没接线，角色实际拿不到 `talk`/`list_roles` |
 | `ChatWebServer(AgentSystem)` 便捷构造器 + `resolveHost()`/`resolvePort()`（static） | 需求新增：Web UI 的 host 可配置、端口固定（原来 `Main` 写死 `127.0.0.1:0`）；单测仍用原来的三参构造器 |
 
 已批准的调整：`TimeBus.setNextStopProvider`（B3）、持久化字段去 `final`（B1）。
@@ -925,25 +927,20 @@ public class AgentSystem {
   为什么必须有它：`Context.forgetAll()` 每天下班把对话移出 prompt，跨天要记住的事只能落到笔记。
   笔记**不做提醒**——"未来某时刻要做什么"是 `task` 工具包的事，两者职责不重叠。
 
-- **todo 工具包（带"组"的待办）**：`store/TodoStore` 把每个角色的待办落成
-  `<dataDir>/todos/<role_id>.json`，结构是"组 → 事项数组"：
+- **todo 工具包（基础清单，没有"组"）**：`store/TodoStore` 把每个角色的待办落成
+  `<dataDir>/todos/<role_id>.json`，就是**一层平铺的事项数组**：
 
   ```json
-  { "current_group": "default",
-    "groups": { "default": [ {"id","title","detail","status","created_at","updated_at"} ] } }
+  [ {"id","title","detail","status","created_at","updated_at"} ]
   ```
 
-  工具：`todo_add(title, detail?, group?)` / `todo_list(status?, group?)` /
-  `todo_update(todo_id, status?, title?, detail?)` / `todo_delete(todo_id)` /
-  `todo_group_list()` / `todo_group_switch(name)`。
-  - **组**：每个组有自己的一套事项，互不影响（`data/todos/<role>.json` 一个文件装全部组）。
-  - **基线组**：`current_group` 决定"不带 group 参数的操作"作用在哪个组上；
-    `todo_group_switch(name)` 随时切换（组不存在就新建）——这就是"随时切换另一个 todo 组作为基线"。
-  - **实时保存**：`add / update / delete / switchGroup` 每次改完立刻 `Json.writeFile` 落盘，
-    所以"组内事项的完成情况"不会因为进程退出而丢。
+  工具只有四个：`todo_add(title, detail?)` / `todo_list(status?)` /
+  `todo_update(todo_id, status?, title?, detail?)` / `todo_delete(todo_id)`。
+  - **实时保存**：add/update/delete 每次改完立刻 `Json.writeFile` 落盘，完成情况不会因为进程退出而丢。
   - 状态沿用 master/Python 版：`pending / in_progress / completed`（`done`、`doing`、`wip` 等别名会归一化）。
-  - **旧格式迁移**：master 时代的 `data/todos/<role>.json` 是"裸数组"，读到会自动装进 `default` 组
-    （加载时打一条 `migrated N legacy todo item(s)` 日志），老数据不会白丢。
+  - **旧格式兼容**：master 时代的裸数组（本来就是这个格式）直接读；本仓库中途出现过的
+    `{"groups": {...}}` 结构会被拍平合并（打一条 `flattened N item(s)` 日志），老数据不白丢。
+  - "组"的概念**不在 todo**，而在 `task`（见下一节）。
 
 - **task 工具包（原 `taskview`，排期任务的增删改查）**：包名 `tools/toolkits/task`，
   工具包名 `task`（配置名同步改；旧名 `task_view` 仍被 `Toolkits` 接受），工具：
@@ -955,6 +952,26 @@ public class AgentSystem {
     权限是创建者 / 被指派者 / 管理组。改时间用 `cancel(id)` + `schedule(e)` 重新挂键。
   - `my_tasks(scope)`：队列里已投递的（`Role.pendingEvents()`）+ 最近完成/失败历史
     （`Role.taskHistory(int)`，含状态与 token）。
+  - **任务按"组"存放（任务看板）**：`store/TaskBoard` 把"我派出去的排期任务"落成
+    `<dataDir>/task_groups/<role_id>.json`：
+
+    ```json
+    { "current_group": "default",
+      "groups": { "default": [ {"id","title","detail","status","target","due","tokens",
+                                "created_at","updated_at"} ] } }
+    ```
+
+    - `create_task(..., group?)` 在派活的同时把任务登记到看板（`id` = 那条 `event.Task` 的 uuid，
+      `group` 为空 = 当前基线组，组不存在就建）；`list_tasks(group?, status?)` 看的是**看板**
+      （含已经跑完的任务与状态），不再只是"还没到点的排期表"；`update_task` / `delete_task` 会同步
+      看板记录。
+    - `task_group_list()` / `task_group_switch(name)`：列出各组 + 任务数 + 完成数，并**切换基线组**
+      （组不存在就新建）——这就是"随时切换另一个组作为基线"。
+    - **完成情况实时保存**：任务跑完时 `Role.rememberTask` 会回调 `recordOnTaskBoard`，把状态
+      （done/failed）与 token 写回**派活人**的看板并立刻落盘；看板上没有这条记录（系统派活、
+      人已出组）就静默跳过，不会凭空建文件。
+    - 分工：`my_tasks` = "现在要我干什么"（队列 + 最近历史），`list_tasks` = "我派出去的活排在哪、
+      做到哪一步了"（按组）。
   跨组派活沿用 talk 规则（同组可以，跨组只有管理组可以），未进组的"假死"员工不能派活。
   这是给"角色自己安排未来工作"补上的缺环：以前没有任何工具能造出未来事件，于是全员
   `take_rest` 之后 `hasFutureWork()` 必然为假、公司只能靠人手动 resume。
@@ -1079,11 +1096,10 @@ public class AgentSystem {
     - LOW 事件因此不再需要单独的通道：它和 NORMAL 一样下班暂存、一样排最后；区别只是它不会出现在
       工具结果的"额外选项"里（那是 NORMAL 及以上）。
 
-- ⚠️ **已知缺口：`talk` / `list_roles` 有代码但没接线**。`tools/toolkits/talk/Talk.java`
-  （`talk` + `list_roles`）在 `Toolkits.defaults` 和 `toolkits.default.json` 里都没有对应条目，
-  也没有任何地方 `new Talk(...)`，所以**角色实际上没有 `talk` 工具**（只有 `send_email` 和
-  管理组的 `talk_to_client`）。系统提示词却在描述"talk 只能找同组同事"的规则 —— 模型真去调只会
-  拿到 `unknown tool: talk`。要恢复就加一个 `case "talk"` 并把它写进默认清单。
+- **`talk` / `list_roles` 已接线**：`tools/toolkits/talk/Talk.java` 以前有代码没入口（`Toolkits.defaults`
+  和 `toolkits.default.json` 都没有它，也从没被 `new` 过），于是角色只能发邮件、而提示词却在描述
+  "talk 只能找同组同事"。现在默认工具集里加了 `talk`，同组口头沟通可用（`talk(urgency, wait)` 走
+  `Role.talkTo`，跨组仍受 `canTalkTo` 限制，管理组豁免）。
 
 
 - **下班 = 一条给每个角色的"收工"LLM 任务**（`Role.dispatch(SHIFT_END)`）。只把提醒附在工具结果上

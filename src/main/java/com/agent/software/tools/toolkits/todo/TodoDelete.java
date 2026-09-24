@@ -6,7 +6,7 @@ import com.agent.software.tools.Tool;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** todo_delete：删掉当前基线组里的一条事项。 */
+/** todo_delete：删掉自己清单里的一条事项。 */
 public class TodoDelete extends Tool {
 
     private final TodoStore store;
@@ -29,7 +29,7 @@ public class TodoDelete extends Tool {
 
     @Override
     public String getDescription() {
-        return "Delete one todo item from your current baseline group.";
+        return "Delete one item from your todo list.";
     }
 
     @Override
@@ -42,9 +42,8 @@ public class TodoDelete extends Tool {
             return "todo_delete error: needs a todo_id (see todo_list)";
         }
         if (!store.delete(id)) {
-            return "todo_delete error: no unique item '" + id + "' in group "
-                    + store.currentGroup() + " (see todo_list)";
+            return "todo_delete error: no unique item '" + id + "' (see todo_list)";
         }
-        return "todo_delete: removed [" + id + "] from group " + store.currentGroup();
+        return "todo_delete: removed [" + id + "]";
     }
 }

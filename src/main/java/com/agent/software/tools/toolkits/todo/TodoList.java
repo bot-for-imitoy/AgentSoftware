@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** todo_list：列出某个组的事项（不写 group 就是当前基线组），可按状态过滤。 */
+/** todo_list：列出自己的待办清单（平铺，可按状态过滤）。 */
 public class TodoList extends Tool {
 
     private final TodoStore store;
@@ -28,13 +28,12 @@ public class TodoList extends Tool {
     public Map<String, Object> getSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("status", "(Optional) pending / in_progress / completed / all (default all).");
-        schema.put("group", "(Optional) group to list; default = your current baseline group.");
         return schema;
     }
 
     @Override
     public String getDescription() {
-        return "List the todo items of one group, with their id, status and detail.";
+        return "List your todo items with their id, status and detail.";
     }
 
     @Override
@@ -42,23 +41,20 @@ public class TodoList extends Tool {
         if (store == null) {
             return "todo_list error: no todo store";
         }
-        String groupArg = args.get("group") == null ? "" : String.valueOf(args.get("group"));
-        String group = store.resolveGroup(groupArg);
         String statusArg = args.get("status") == null ? "all"
                 : String.valueOf(args.get("status")).strip().toLowerCase(Locale.ROOT);
         if (statusArg.isEmpty()) {
             statusArg = "all";
         }
-        List<TodoStore.Item> items = store.items(groupArg);
+        List<TodoStore.Item> items = store.items();
         List<TodoStore.Item> shown = new ArrayList<>();
         for (TodoStore.Item it : items) {
             if (statusArg.equals("all") || statusArg.equals(it.status)) {
                 shown.add(it);
             }
         }
-        String head = "todo_list (group " + group + ", baseline " + store.currentGroup() + ": "
-                + items.size() + " item(s), showing " + shown.size()
-                + (statusArg.equals("all") ? ")" : ", status=" + statusArg + ")");
+        String head = "todo_list: " + items.size() + " item(s), showing " + shown.size()
+                + (statusArg.equals("all") ? "" : ", status=" + statusArg);
         if (shown.isEmpty()) {
             return head + "\n(empty)";
         }

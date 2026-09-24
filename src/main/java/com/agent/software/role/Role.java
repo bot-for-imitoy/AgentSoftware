@@ -13,6 +13,7 @@ import com.agent.software.llm.Response;
 import com.agent.software.llm.context.Context;
 import com.agent.software.llm.context.SemanticMemory;
 import com.agent.software.store.NoteStore;
+import com.agent.software.store.TaskBoard;
 import com.agent.software.store.TodoStore;
 import com.agent.software.tools.Tool;
 import com.agent.software.tools.ToolResult;
@@ -86,6 +87,7 @@ public final class Role extends UUIDObject implements Data {
     private Computer computer;
     private NoteStore noteStore;
     private TodoStore todoStore;
+    private TaskBoard taskBoard;
     private boolean setupDone = false;
     private volatile boolean running = false;
     private Thread worker;
@@ -267,6 +269,32 @@ public final class Role extends UUIDObject implements Data {
         while (taskHistory.size() > TASK_HISTORY_LIMIT) {
             taskHistory.remove(0);
         }
+        recordOnTaskBoard(t);
+    }
+
+    /**
+     * 任务跑完把完成情况写回**派活人**的任务看板（"组内事项的完成情况实时保存"）。
+     *
+     * <p>看板是按角色存的、记录的是"我派出去的任务"，所以这里要找到 {@code fromRoleId} 那一方；
+     * 找不到（系统派活、人已经出组）或那条记录本来就不在看板上，就静默跳过。
+     */
+    private void recordOnTaskBoard(Task t) {
+        if (system == null || t == null) {
+            return;
+        }
+        Role owner = this;
+        String from = t.fromRoleId;
+        if (from != null && !from.isBlank()) {
+            Role sender = system.getRolePool().find(from);
+            if (sender != null) {
+                owner = sender;
+            }
+        }
+        try {
+            owner.taskBoard().recordStatus(t.uuid, t.status, t.tokensConsumed);
+        } catch (Exception e) {
+            logger.warn("Role[{}] failed to write task {} back to the task board", roleId, t.uuid, e);
+        }
     }
 
     // ── 生命周期 ────────────────────────────────────────────────
@@ -442,6 +470,18 @@ public final class Role extends UUIDObject implements Data {
             todoStore = new TodoStore(base == null ? null : base.resolve("todos"), roleId);
         }
         return todoStore;
+    }
+
+    /**
+     * 本角色的任务看板（{@code <dataDir>/task_groups/<roleId>.json}，懒创建）：
+     * 它派出去的排期任务按**组**存放，带基线组和完成状态，改动实时落盘。
+     */
+    public synchronized TaskBoard taskBoard() {
+        if (taskBoard == null) {
+            Path base = system == null ? null : system.getDataDir();
+            taskBoard = new TaskBoard(base == null ? null : base.resolve("task_groups"), roleId);
+        }
+        return taskBoard;
     }
 
     // ── 工具 ────────────────────────────────────────────────────
