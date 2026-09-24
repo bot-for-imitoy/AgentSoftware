@@ -521,18 +521,25 @@ left overnight stops instead of burning quota:
 
 ```bash
 nohup tools/pause-at-day.sh --day 8 > /tmp/pause-at-day.log 2>&1 &   # 到第 8 天自动暂停
-tools/pause-at-day.sh --day 8 --at 17:30                             # 第 7 天 17:30 就停（跳过跨天前的收工）
+tools/pause-at-day.sh --day 8 --at 18:00                             # 第 7 天 18:00 停（下班时段才真正静音）
 tools/pause-at-day.sh --day 8 --max-minutes 480                      # 兜底：墙钟跑满 8h 也暂停
 tools/pause-at-day.sh --once --dry-run                               # 只看一眼当前进度，什么都不做
 ```
 
-Options: `--day N`, `--at HH:MM` (pause at that time on day `N-1`), `--url`
+Options: `--day N`, `--at HH:MM` (pause after that time on day `N-1`), `--url`
 (default `http://localhost:8787`), `--interval SECONDS`, `--max-minutes M`, `--max-failures N`,
 `--dry-run`, `--once`, `--guard` (keep watching and re-pause if a Client A interaction resumes
-the run). Note what pause means: the clock freezes so **no new task is created**, but the task
-already running and anything already queued finish first — so if the target is a day boundary,
-that day's end-of-shift wrap-up (every role writing its daily summary) has already run; use
-`--at HH:MM` to stop before it. Resume from the Web UI or `POST /api/resume`. Exit codes: `0`
+the run).
+
+**Where you pause matters.** `pause()` only freezes the clock: the task already running and
+anything already queued still finish, and — because `EventBus.post` holds non-control events
+only *off hours* — a pause **during working hours does not silence the company**: role-to-role
+mail is still delivered, which wakes the recipient, which replies, and the chain keeps the LLM
+busy (measured: 24 tasks / 30.1M tokens in 5.6 minutes while "paused" at 17:31). Pausing at or
+after 18:00 (off hours) holds that mail until the next shift start and the run goes to **0
+tokens/minute** within a couple of minutes. So use `--at 18:00`, or wait for the day boundary.
+Making a pause silent at *any* time needs the framework side (`EventBus` holding while paused) —
+see the note in §11. Resume from the Web UI or `POST /api/resume`. Exit codes: `0`
 paused/finished, `2` UI unreachable, `130` interrupted (never pauses).
 
 ### 12. Tool & MCP management

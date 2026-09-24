@@ -6,12 +6,19 @@
 # 几乎不耗资源），一旦 day >= 目标天就 POST /api/pause，把仿真停在原地 ——
 # 不杀进程、不丢上下文，第二天点 Web UI 的 Resume（或 curl /api/resume）就能接着跑。
 #
-# 暂停的确切含义（与 TimeBus 实现一致）：
-#   * 时钟停跳 —— 排期事件不会到点、班次边界（上班/下班广播）不再触发，
-#     所以**不会再产生新的任务**；
+# 暂停的确切含义（2026-09-24 在真跑着的仿真上实测）：
+#   * 时钟停跳 —— 排期事件不会到点、班次边界（上班/下班广播）不再触发；
 #   * 但**已经在跑的那条任务会跑完**，各角色队列里已经排上的事件也会被处理掉
-#     （worker 不看 paused），所以暂停后还会再花一小会儿才彻底安静下来 —— 这是
-#     有限的一小段，不是无限烧。
+#     （worker 不看 paused），所以暂停后还会响一小会儿；
+#   * ⚠️ **暂停点必须落在非工作时段（≥18:00），否则等于没停**：EventBus 只在
+#     `!isWorkingHours()` 时扣住事件。停在 17:31 这种工作时段时，角色之间发的邮件
+#     照旧即时投递 → 唤醒对方 → 回信 → 再唤醒，形成自我维持的邮件链：实测"暂停"后
+#     仍有 8~12 个角色在忙，24 个任务 / 30.1M token / 5.6 分钟（≈5.4M token/分钟），
+#     整晚不会停。改成停在 18:00 之后（下班时段）：邮件被 hold 到次日上班，队列排空后
+#     2 分钟内掉到 **0 token/分钟** 并一直保持。
+#     ⇒ **推荐 `--at 18:00`（默认 --day 8 也是安全的）**。
+#   * 要让"任意时刻暂停"都真正静音，得框架侧配合（EventBus 在 paused 时也 hold 事件）；
+#     那需要重启进程才生效，见 README §11。
 #
 # 用法：
 #   tools/pause-at-day.sh                          # 默认第 8 天 · http://localhost:8787 · 每 15s 一次
@@ -20,15 +27,15 @@
 #   tools/pause-at-day.sh --dry-run --once         # 只看一眼当前状态，什么都不做
 #
 # 后台跑（推荐，晚上丢上去就行）：
-#   nohup tools/pause-at-day.sh --day 8 --guard > /tmp/pause-at-day.log 2>&1 &
+#   nohup tools/pause-at-day.sh --day 8 --at 18:00 --guard > /tmp/pause-at-day.log 2>&1 &
 #   tail -f /tmp/pause-at-day.log
 #   # 第二天在 Web UI 点 Resume，或者： curl -X POST localhost:8787/api/resume
 #
 # 参数（括号里是同名环境变量）：
 #   --day N           (PAUSE_AT_DAY)          到达/超过这个模拟日就暂停。默认 8
-#   --at HH:MM        (PAUSE_AT_TIME)         可选：在第 N-1 天的 HH:MM 就提前暂停。
-#                                             用来避开跨天前的大规模"收工"（每个角色都要写
-#                                             每日总结，是全天最烧 token 的一波）。例：--day 8 --at 17:30
+#   --at HH:MM        (PAUSE_AT_TIME)         可选：第 N-1 天的 HH:MM 之后再暂停。
+#                                             ⚠️ 请用 18:00 及以后（非工作时段才真正静音，
+#                                             见上面"暂停的确切含义"）。例：--day 8 --at 18:00
 #   --url URL         (AGENTSOFTWARE_WEB_URL) Web UI 地址。默认 http://localhost:8787
 #   --interval SEC    (PAUSE_POLL_SECONDS)    轮询间隔秒。默认 15
 #   --max-minutes M   (PAUSE_MAX_MINUTES)     墙钟兜底：跑了 M 分钟还没到目标天也暂停。0=关，默认 0
