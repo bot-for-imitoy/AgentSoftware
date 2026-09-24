@@ -1057,7 +1057,12 @@ public class AgentSystem {
   没有这样的事件就什么都不加（"这个参数"不存在）。要点：
   - **每条事件只附一次**：按 uuid 去重（`announcedEventIds`，每条任务开头 `clear()`），否则每轮工具调用
     都会重复塞同一段文字；同一条任务里后到的**新事件**会再附一次。
-  - **不消费事件**：它们仍然留在队列里，等当前任务结束后照常按顺序被处理 —— 提醒 ≠ 插队执行。
+  - **列出来就真的消费掉**（`Role.consumeEvent`）：内容进了工具结果之后，事件会被**从队列里摘掉**，
+    不会再单独派一条任务 —— 同一件事不会既进 prompt 又跑一条任务（省一次 LLM 调用，也避免重复劳动）。
+    模型得在这条任务里处理它们（快的当场做掉，其余写进笔记或 `create_task`）。
+    - 唯一特例是 `SHIFT_END`：摘掉之前先做 housekeeping（打断等待、关闭客户会话），
+      并让当前任务跑完时把这一天翻篇（`closeDayAfterTask` → `finishDay()`）；
+      空闲角色那条事件没人消费，仍然照走"收工任务"（见上一节）。
   - 附的是"给模型看的文本"，所以工具成功/失败的判定不受影响（`isToolFailure` 在附加之前就已判完）。
   - **`SHIFT_END` = EMERGENCY（最高优先级）、`SHIFT_START` = HIGH**（`AgentSystem.shiftEvent`，
     包内可见以便单测直接断言）：下班必须能插进模型正跑着的工具循环里提醒"今天到此为止"——
@@ -1066,9 +1071,19 @@ public class AgentSystem {
     ⚠️ 它只是**提醒**（附着在工具结果文本里），不是硬中断：模型仍可以先做完手头这一步。
   - EMERGENCY 的现实来源：`SHIFT_END`、`talk(urgency=EMERGENCY)`、`create_task(priority=EMERGENCY)`；
     NORMAL 的来源就多了：邮件通知、`talk`、`create_task` 默认值。
-  - ⚠️ **LOW 事件的"空闲/下班后依次通知"通道还没做**（需求 2）：目前全代码里没有任何地方产生
-    `Priority.LOW` 事件，这段机制暂时是空转的，等确认语义（什么算 LOW、按什么顺序、什么时候放行）
-    之后再实现。
+  - **下班后一律留到次日 08:00（已确认的决策）**：`EventBus.post` 的暂存规则保持不变 ——
+    非控制事件（`NEW_MAIL`/`TALK`/`CUSTOM`…，**不论优先级高低，含 LOW**）在下班时段全部 `hold`，
+    次日 `SHIFT_START` 时 `releaseHeld()`。所以"下班后还有没有待处理事件"这个问题的答案是：
+    新来的（含甲方发的）都要等明早；**已经投递进队列**的仍会被当前任务消费或继续按序处理，
+    除非以后再加"队列也整体推到明早"。
+    - LOW 事件因此不再需要单独的通道：它和 NORMAL 一样下班暂存、一样排最后；区别只是它不会出现在
+      工具结果的"额外选项"里（那是 NORMAL 及以上）。
+
+- ⚠️ **已知缺口：`talk` / `list_roles` 有代码但没接线**。`tools/toolkits/talk/Talk.java`
+  （`talk` + `list_roles`）在 `Toolkits.defaults` 和 `toolkits.default.json` 里都没有对应条目，
+  也没有任何地方 `new Talk(...)`，所以**角色实际上没有 `talk` 工具**（只有 `send_email` 和
+  管理组的 `talk_to_client`）。系统提示词却在描述"talk 只能找同组同事"的规则 —— 模型真去调只会
+  拿到 `unknown tool: talk`。要恢复就加一个 `case "talk"` 并把它写进默认清单。
 
 
 - **下班 = 一条给每个角色的"收工"LLM 任务**（`Role.dispatch(SHIFT_END)`）。只把提醒附在工具结果上

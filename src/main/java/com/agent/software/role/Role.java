@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +99,13 @@ public final class Role extends UUIDObject implements Data {
      * 每条任务开头清空。
      */
     private final Set<String> announcedEventIds = ConcurrentHashMap.newKeySet();
+    /**
+     * "这条任务跑完就把这一天从 prompt 里翻篇"。
+     *
+     * <p>两种来源：下班广播被派发成收工任务，或者 SHIFT_END 在工具结果里被**消费**掉
+     * （见 {@link #pendingEventNotice()}）。
+     */
+    private volatile boolean closeDayAfterTask;
 
     // 优先级队列：同优先级按入队序号 FIFO
     private record Slot(long seq, Event event) {
@@ -809,8 +817,9 @@ public final class Role extends UUIDObject implements Data {
             // 这条任务把那个洞补上。任务跑完才把这一天从 prompt 里翻篇（见 finishDay），
             // 否则模型没有上下文可总结。
             String end = e.content == null || e.content.isBlank() ? "Shift end" : e.content;
+            closeDayAfterTask = true;
             runTask(new Task(e.fromRoleId, roleId, System.currentTimeMillis(),
-                    "[time] " + end + "\n\n" + endOfDayInstructions(), e.priority), true);
+                    "[time] " + end + "\n\n" + endOfDayInstructions(), e.priority));
             return;
         }
         if (e instanceof Task task) {
@@ -850,13 +859,6 @@ public final class Role extends UUIDObject implements Data {
     }
 
     private void runTask(Task task) {
-        runTask(task, false);
-    }
-
-    /**
-     * @param closesDay true = 这是下班"收工"任务，跑完就把这一天从 prompt 里翻篇
-     */
-    private void runTask(Task task, boolean closesDay) {
         if (state == RoleState.WAIT) {
             // 正在等回复，不接新任务；退回队列下轮再处理
             enqueue(task);
@@ -940,7 +942,8 @@ public final class Role extends UUIDObject implements Data {
         } finally {
             rememberTask(task);
             setState(RoleState.IDLE);
-            if (closesDay) {
+            if (closeDayAfterTask) {
+                closeDayAfterTask = false;
                 finishDay();
             }
         }
@@ -968,12 +971,13 @@ public final class Role extends UUIDObject implements Data {
      * 没有就返回空串（也就是不给结果加这个参数）。
      *
      * <p>每个事件只附一次（{@link #announcedEventIds}，每条任务开头重置），否则每一轮工具调用都会
-     * 重复塞同一段文字。提醒归提醒，**不消费事件** —— 它们仍然留在队列里，等当前任务结束后照常被处理。
+     * 重复塞同一段文字。**列出来的事件会被真的消费掉** —— 内容交给模型之后就把它从队列里摘掉，
+     * 不会再单独派一条任务，避免同一件事既进 prompt 又占一条任务。
      */
     private String pendingEventNotice() {
         List<Event> fresh = new ArrayList<>();
         for (Event e : pendingVisibleEvents()) {
-            if (announcedEventIds.add(e.uuid)) {
+            if (announcedEventIds.add(e.uuid) && consumeEvent(e)) {
                 fresh.add(e);
             }
         }
@@ -998,6 +1002,39 @@ public final class Role extends UUIDObject implements Data {
     }
 
     /**
+     * 消费一条事件：它的正文已经进了工具结果，就从队列里摘掉。
+     *
+     * <p>SHIFT_END 是特例 —— 摘掉之前要把它该做的 housekeeping（打断等待、关闭客户会话）做掉，
+     * 并让当前任务跑完时把这一天翻篇（{@link #closeDayAfterTask}）；否则"下班"就没人收尾了。
+     */
+    private boolean consumeEvent(Event e) {
+        if (e == null) {
+            return false;
+        }
+        if (e.type == EventType.SHIFT_END) {
+            onShiftEnd();
+            closeDayAfterTask = true;
+        }
+        return removeQueuedEvent(e.uuid);
+    }
+
+    /** 从优先级队列里按 uuid 摘掉一条事件。 */
+    private boolean removeQueuedEvent(String uuid) {
+        queueLock.lock();
+        try {
+            for (Iterator<Slot> it = queue.iterator(); it.hasNext(); ) {
+                if (it.next().event().uuid.equals(uuid)) {
+                    it.remove();
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            queueLock.unlock();
+        }
+    }
+
+    /**
      * 附在待处理事件后面的"该怎么做"。
      *
      * <p>三档：下班自带收尾流程；EMERGENCY 要求先收尾再优先处理；NORMAL/HIGH 只是**告知**——
@@ -1008,10 +1045,12 @@ public final class Role extends UUIDObject implements Data {
             return endOfDayInstructions();
         }
         if (events.stream().anyMatch(e -> e.priority != null && e.priority.value > Priority.HIGH.value)) {
-            return "Wrap up the current step, then deal with the EMERGENCY event above.";
+            return "These are handed to you here and taken off your queue: wrap up the current step, "
+                    + "then deal with the EMERGENCY one.";
         }
-        return "These are already queued and will run in order after the current step — keep them in mind, "
-                + "but there is no need to abandon what you are doing.";
+        return "These are handed to you here and taken off your queue — handle them as part of this task "
+                + "(do the quick ones now; put the rest into a note or create_task so they are not lost). "
+                + "There is no need to abandon what you are doing.";
     }
 
     /**

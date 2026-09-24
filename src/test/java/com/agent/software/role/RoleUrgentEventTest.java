@@ -42,7 +42,10 @@ class RoleUrgentEventTest {
             assertTrue(first.contains(MARKER), first);
             assertTrue(first.contains("NORMAL / NEW_MAIL"), first);
             assertTrue(first.contains("policy"), first);
-            assertTrue(first.contains("already queued"), "NORMAL 只是告知，不该让人丢下手上的事: " + first);
+            assertTrue(first.contains("taken off your queue"),
+                    "NORMAL 的事件交给模型后要从队列里摘掉: " + first);
+            assertTrue(first.contains("no need to abandon what you are doing"),
+                    "不该让人为此丢下手上的事: " + first);
             assertFalse(first.contains("workday is over"), first);
         } finally {
             system.stop();
@@ -122,6 +125,44 @@ class RoleUrgentEventTest {
             String second = llm.toolResults.get(1);
             assertFalse(second.contains("mail A"), "同一条事件不该重复附: " + second);
             assertTrue(second.contains("talk C"), "下一轮新到的事件要能看见: " + second);
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 列进工具结果的事件会被真的消费掉：不再单独派一条任务，也不会重复出现。 */
+    @Test
+    void surfacedEventsAreTakenOffTheQueue(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            ScriptedLlm llm = run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.NEW_MAIL, Priority.NORMAL, "hr@agentsoftware.local", "mail A"),
+                    event(EventType.TASK, Priority.HIGH, "COO", "task B"))));
+
+            assertTrue(llm.toolResults.get(0).contains("mail A"), llm.toolResults.get(0));
+            assertEquals(0, ceo.queueDepth(), "消费掉的事件不该还留在队列里");
+            Thread.sleep(300);   // 给"如果没被消费就会派任务"留出反应时间
+            assertEquals(1, ceo.taskHistory(5).size(),
+                    "只剩那条 routine work；被消费的事件不该再各自跑一条任务: " + ceo.readJournal());
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 下班事件被消费掉时，housekeeping 照做、任务跑完照样翻篇。 */
+    @Test
+    void aConsumedShiftEndStillClosesTheDay(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            run(ceo, 1, Map.of(1, List.of(
+                    event(EventType.SHIFT_END, Priority.EMERGENCY, "system",
+                            "Shift end at 2026-09-24 18:00"))));
+
+            assertEquals(0, ceo.queueDepth(), "被消费的下班事件不在队列里");
+            assertEquals(2, ceo.getContext().getDay(), "被消费也要把这一天翻篇");
+            assertTrue(ceo.getContext().messages().isEmpty(), "翻篇后 prompt 应为空");
         } finally {
             system.stop();
         }
