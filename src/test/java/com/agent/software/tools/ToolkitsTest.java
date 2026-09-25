@@ -84,5 +84,11 @@ class ToolkitsTest {
         assertTrue(toolNames.contains("take_rest"));
         assertTrue(time.size() >= 2);
         assertFalse(time.trigger("no_such_tool", java.util.Map.of()) != null);
+
+        // 角色实际拿到的 task 工具包里必须有 complete_task（不然只有手搭的 toolkit 才有）
+        Toolkit task = Toolkits.defaults(r, null, null, new MCPManager(), new SkillManager())
+                .stream().filter(t -> t.getName().equals("task")).findFirst().orElseThrow();
+        assertTrue(task.getTools().stream().map(Tool::getToolName).toList().contains("complete_task"),
+                "task 工具包缺 complete_task");
     }
 }

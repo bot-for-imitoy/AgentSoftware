@@ -38,7 +38,7 @@ class TaskToolsTest {
         try {
             Role ceo = system.getRolePool().find("CEO");
             List<String> names = toolkit(ceo).getTools().stream().map(Tool::getToolName).sorted().toList();
-            assertEquals(List.of("create_task", "delete_task", "list_tasks", "my_tasks",
+            assertEquals(List.of("complete_task", "create_task", "delete_task", "list_tasks", "my_tasks",
                     "task_group_list", "task_group_switch", "update_task"), names);
         } finally {
             system.stop();
@@ -149,6 +149,52 @@ class TaskToolsTest {
         }
     }
 
+    /**
+     * complete_task：把看板上一条还挂着 pending 的记录收口。
+     *
+     * <p>这就是"到点时人正忙、事件被当待处理事件消费掉"的那种任务的出口 ——
+     * update_task / delete_task 都只认"还没到点"的排期任务，对它们无能为力。
+     */
+    @Test
+    void completeTaskClosesABoardRecord(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            Toolkit task = toolkit(ceo);
+            assertTrue(task.trigger("create_task",
+                    Map.of("content", "chase the client", "in_minutes", "30")).contains("scheduled task"));
+            String id = shortIdOf(task.trigger("list_tasks", Map.of()));
+
+            String done = task.trigger("complete_task",
+                    Map.of("task_id", id, "note", "answered by mail, nothing left to do"));
+            assertTrue(done.contains("marked done"), done);
+            assertTrue(done.contains("cancelled its pending schedule"), done);
+            assertTrue(system.getEventBus().scheduled().isEmpty(), "还没到点的任务要连排期一起撤掉");
+
+            String listed = task.trigger("list_tasks", Map.of());
+            assertTrue(listed.contains("done"), listed);
+            assertFalse(listed.contains("pending"), listed);
+            assertTrue(task.trigger("list_tasks", Map.of("status", "pending")).contains("(empty)"));
+
+            // 幂等：再收一次不报错
+            assertTrue(task.trigger("complete_task", Map.of("task_id", id)).contains("already was"),
+                    "重复标记应该是幂等的");
+
+            // note 要落进 detail 并实时存盘
+            var reread = new com.agent.software.store.TaskBoard(dir.resolve("task_groups"), "CEO");
+            assertTrue(reread.items("default").get(0).detail.contains("answered by mail"),
+                    reread.items("default").get(0).detail);
+
+            assertTrue(task.trigger("complete_task", Map.of("task_id", "deadbeef"))
+                    .contains("no task matching"), "找不到的 id 要明确报错");
+            assertTrue(task.trigger("complete_task", Map.of()).contains("needs a task_id"));
+        } finally {
+            system.stop();
+        }
+    }
+
+    /** 参数校验：坏参数必须是"工具报错文本"，不能抛异常、不能悄悄当成合法。 */
+    @Test
     void rejectsBadArguments(@TempDir Path dir) {
         AgentSystem system = new AgentSystem(dir, new WebInput());
         try {

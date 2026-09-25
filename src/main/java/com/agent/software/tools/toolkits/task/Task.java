@@ -22,6 +22,7 @@ public class Task extends Toolkit {
         addTool(new ListTasks(role));
         addTool(new UpdateTask(role));
         addTool(new DeleteTask(role));
+        addTool(new CompleteTask(role));
         addTool(new TaskGroupList(role));
         addTool(new TaskGroupSwitch(role));
     }
@@ -29,7 +30,8 @@ public class Task extends Toolkit {
     @Override
     public String getDescription() {
         return "Tasks: my_tasks (my queue + recent history), create_task / list_tasks / update_task / "
-                + "delete_task (schedule and manage future tasks in groups; scheduled tasks wake the "
-                + "assignee when due) + task_group_list / task_group_switch (pick the baseline group)";
+                + "delete_task / complete_task (schedule and manage future tasks in groups; scheduled "
+                + "tasks wake the assignee when due) + task_group_list / task_group_switch (pick the "
+                + "baseline group)";
     }
 }

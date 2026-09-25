@@ -1,14 +1,20 @@
 package com.agent.software.role;
 
 import com.agent.software.AgentSystem;
+import com.agent.software.event.Priority;
+import com.agent.software.event.Task;
 import com.agent.software.io.WebInput;
+import com.agent.software.llm.LLM;
+import com.agent.software.llm.Response;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +102,69 @@ class SystemPromptTest {
             }
         } finally {
             system.stop();
+        }
+    }
+
+    /**
+     * 提示词里的"今天是几号/第几天"必须跟着模拟日走，而且**一天只换一次**。
+     *
+     * <p>提示词只在 setup 组装一次，而 clockLine 带着日期 —— 实测跑了一周，角色到第 7 天
+     * 还在按"今天是第 2 天"做计划，自己发现矛盾后反复调 get_time 校时。
+     */
+    @Test
+    void promptClockFollowsTheSimulatedDay(@TempDir Path dir) throws Exception {
+        AgentSystem system = new AgentSystem(dir, new WebInput());
+        try {
+            Role ceo = system.getRolePool().find("CEO");
+            String day1 = ceo.getLlm().getSystemPrompt();
+            assertTrue(day1.contains("(day 1)"), day1);
+
+            // 换成立即返回的假 LLM（真实场景里它手上的提示词就是刚组装的那份）
+            ScriptedLlm llm = new ScriptedLlm();
+            llm.setSystemPrompt(day1);
+            ceo.setLlm(llm);
+
+            system.getTimeBus().setNow(600);                 // 同一天 · 08:10
+            runOneTask(ceo, "same day work");
+            assertEquals(day1, llm.getSystemPrompt(), "同一天之内不该重建提示词");
+
+            system.getTimeBus().setNow(system.getTimeBus().ticksPerDay() * 3 + 600);   // 第 4 天
+            String newDate = system.getTimeBus().currentDate().toString();
+            runOneTask(ceo, "next day work");
+            String newer = llm.getSystemPrompt();
+            assertNotEquals(day1, newer, "跨天了提示词必须刷新");
+            assertTrue(newer.contains("Today is " + newDate + " (day 4)"), newer);
+            assertTrue(newer.contains("Current simulated time: " + newDate), newer);
+        } finally {
+            system.stop();
+        }
+    }
+
+    private static void runOneTask(Role role, String content) throws Exception {
+        int before = role.taskHistory(100).size();
+        role.enqueue(new Task("system", role.roleId, 0, content, Priority.NORMAL));
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (System.currentTimeMillis() < deadline && role.taskHistory(100).size() == before) {
+            Thread.sleep(20);
+        }
+        assertTrue(role.taskHistory(100).size() > before, "任务没跑完: " + role.readJournal());
+    }
+
+    /** 立即返回的假 LLM：不调工具、直接给答复，任务一轮就结束。 */
+    private static final class ScriptedLlm extends LLM {
+        @Override
+        public String getModel() {
+            return "scripted";
+        }
+
+        @Override
+        public String getEndpoint() {
+            return "scripted://";
+        }
+
+        @Override
+        public Response request() {
+            return new Response("done", "", List.of(), 0);
         }
     }
 }

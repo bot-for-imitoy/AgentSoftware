@@ -909,8 +909,24 @@ public class AgentSystem {
   否则 COO 每抽调/移出一次，别人的 uid 就漂一次，容器内的文件归属跟着变。
 
 - **`take_rest` 结束当前任务**：`take_rest` 的语义是"这件事到此为止，我去休息"。工具循环必须就此收尾，
-  否则模型会被反复追问同一件事，继续 `take_rest`/`read_mail` 空转到 `MAX_TOOL_ROUNDS`（实测 20 轮、
-  18 万 token 仍无产出）。
+  否则模型会被反复追问同一件事，继续 `take_rest`/`read_mail` 空转烧 token。
+
+- **工具调用轮数没有上限**（2026-09-24 起）。`Role.runTask` 的循环删掉了 `MAX_TOOL_ROUNDS = 20`，
+  现在只在这三种情况下收尾：模型给出**不带 `tool_calls` 的答复**、调用 `take_rest`、
+  或者**连续 3 轮工具失败**（`MAX_FAILING_ROUNDS`，错误已回喂给模型让它自己纠正）。
+  起因：旧实现跑到第 20 轮就截断，任务以 `status=done` + 答复 `(no answer)` 收场 ——
+  一周的真跑日志里 **26 个任务这样"假完成"，烧掉 4944 万 token（占全部任务 token 的 13.3%）却零产出**，
+  看板上还都记成 done；而且越到后期越多（D4=9 个、D5=12 个，上下文越重、20 轮越不够）。
+  ⚠️ 代价：模型若一直调工具，轮数上不再有兜底，只剩"连续失败 3 轮"和 `take_rest` 两道闸。
+  真跑时值得盯一下**单位任务的 token**；"轮数上限"换成"token/墙钟预算"是另一个议题。
+
+- **system prompt 里的"当前时间"一天一换**。提示词只在 `Role.setup()` 组装一次，而 `clockLine()`
+  里带着"今天是几号、第几天" —— 于是从入队第二天起模型看到的就是**过期日期**：真跑日志里
+  角色到第 7 天还在按"今天是 9/25 第 2 天"排计划，自己发现矛盾后反复调 `get_time` 校时
+  （至少 11 处），有角色把同事 10:00 发出的邮件当成"未来的事"。
+  现在 `Role.refreshSystemPromptIfNewDay()` 在**每条任务开始时**（worker 线程，避免和时线程抢写）
+  比较 `TimeBus.getDay()` 与上次组装时的 `promptDay`，变了才重建 —— 同一天之内提示词一个字节都不变。
+  单测：`SystemPromptTest.promptClockFollowsTheSimulatedDay`（同日不重建 + 跨日换日期）。
 
 - **需求 B：甲方可以主动找任意大组成员（口头 / 邮件）**。两条通路都要**真的唤醒角色**：
   - 口头：`ClientChannel.talk(roleId, msg, false)` 记一条客户消息（进活动流）**并投一条 `TALK` 事件**，
@@ -958,6 +974,10 @@ public class AgentSystem {
   - `list_tasks(scope)`：`mine`（默认，派给我的）/ `created`（我建的）/ `all` —— 只看**还没到点**的排期表。
   - `update_task(task_id, content?/priority?/target?/时间?)`、`delete_task(task_id)`：只对"还没到点"的任务生效，
     权限是创建者 / 被指派者 / 管理组。改时间用 `cancel(id)` + `schedule(e)` 重新挂键。
+  - `complete_task(task_id, note?)`：把**看板**上的一条任务标记为 done —— 专门给"已经处理完、
+    却没人回写"的条目收口（`update_task` / `delete_task` 只认还没到点的排期任务，对它们无能为力）。
+    还没到点的会**连排期一起 `cancel`**（否则到点再派一次、白跑一遍），`note` 追加进记录 detail
+    （留一行"谁在什么时候为什么收的口"），对已经 done 的记录幂等。只作用于自己的看板。
   - `my_tasks(scope)`：队列里已投递的（`Role.pendingEvents()`）+ 最近完成/失败历史
     （`Role.taskHistory(int)`，含状态与 token）。
   - **任务按"组"存放（任务看板）**：`store/TaskBoard` 把"我派出去的排期任务"落成
@@ -978,6 +998,12 @@ public class AgentSystem {
     - **完成情况实时保存**：任务跑完时 `Role.rememberTask` 会回调 `recordOnTaskBoard`，把状态
       （done/failed）与 token 写回**派活人**的看板并立刻落盘；看板上没有这条记录（系统派活、
       人已出组）就静默跳过，不会凭空建文件。
+      ⚠️ **已知缺口**：如果任务**不是**作为一条独立任务跑完的（到点时人正忙，事件被
+      `pendingEventNotice()` 当"待处理事件"消费掉了），`recordOnTaskBoard` 根本不会被调用，
+      那一行就永远停在 `pending` —— 真跑日志里 CTO 的 `c5306829`（D2 17:30 日终）到 D5 还挂在
+      看板上（`task input` 出现 0 次），角色为此反复推理"它怎么还 pending、过了期又删不掉"，
+      同类抱怨有 540 处。现在由 `complete_task` 让角色自己收口；**自动回写**（消费事件时同时写看板）
+      是另一个待办。
     - 分工：`my_tasks` = "现在要我干什么"（队列 + 最近历史），`list_tasks` = "我派出去的活排在哪、
       做到哪一步了"（按组）。
   跨组派活沿用 talk 规则（同组可以，跨组只有管理组可以），未进组的"假死"员工不能派活。

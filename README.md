@@ -364,7 +364,7 @@ OpenAI-style function schemas. `Toolkits.defaultToolkits(role)` auto-assembles f
 | `note.Note` | `write_note` `read_note` `edit_note` `delete_note` `list_notes` | the role's own markdown notes, kept across days (refactor3: no reminder — scheduling is `task`) |
 | `time.Time` | `get_time` `take_rest` | work-rest schedule |
 | `todo.Todo` | `todo_add` `todo_list` `todo_update` `todo_delete` | personal todo list, saved immediately (no groups) |
-| `task.Task` | `my_tasks` `create_task` `list_tasks` `update_task` `delete_task` + `task_group_list` `task_group_switch` | the role's task queue + history, CRUD over future scheduled tasks, and a **task board bucketed by group** (completion is written back and saved) |
+| `task.Task` | `my_tasks` `create_task` `list_tasks` `update_task` `delete_task` `complete_task` + `task_group_list` `task_group_switch` | the role's task queue + history, CRUD over future scheduled tasks, a **task board bucketed by group** (completion is written back and saved), and `complete_task` to close a board row that is finished but still shows pending |
 | `pc.Pc` | `run_command` `computer_status` `lan_devices` `reboot` | operations on its own computer |
 | `mcp.McpManager` | `mcp_search` `mcp_list` `mcp_add` `mcp_remove` `mcp_my_tools` | self-service MCP tool management |
 | `skill.Skill` | `skill_search` `skill_list` `skill_add` `skill_remove` `skill_my_skills` | SKILL.md skill library |
@@ -514,33 +514,6 @@ structured `extra` metadata (`tool`: `{tool, args, result, round, taskId}`; `ans
 `{status: done|failed, tokens, taskId}`). Implementation: `web/ChatStore.java` (storage +
 Client A coordination) + `web/ChatWebServer.java`; tests in `ChatStoreTest` /
 `ChatWebServerTest` / `TalkToClientWebTest` / `RoleTraceTest`.
-
-**Auto-pause at a given day** — `tools/pause-at-day.sh` polls `GET /api/state` (read-only) and,
-as soon as the simulated day reaches the target (default day 8), calls `POST /api/pause`, so a run
-left overnight stops instead of burning quota:
-
-```bash
-nohup tools/pause-at-day.sh --day 8 > /tmp/pause-at-day.log 2>&1 &   # 到第 8 天自动暂停
-tools/pause-at-day.sh --day 8 --at 18:00                             # 第 7 天 18:00 停（下班时段才真正静音）
-tools/pause-at-day.sh --day 8 --max-minutes 480                      # 兜底：墙钟跑满 8h 也暂停
-tools/pause-at-day.sh --once --dry-run                               # 只看一眼当前进度，什么都不做
-```
-
-Options: `--day N`, `--at HH:MM` (pause after that time on day `N-1`), `--url`
-(default `http://localhost:8787`), `--interval SECONDS`, `--max-minutes M`, `--max-failures N`,
-`--dry-run`, `--once`, `--guard` (keep watching and re-pause if a Client A interaction resumes
-the run).
-
-**Where you pause matters.** `pause()` only freezes the clock: the task already running and
-anything already queued still finish, and — because `EventBus.post` holds non-control events
-only *off hours* — a pause **during working hours does not silence the company**: role-to-role
-mail is still delivered, which wakes the recipient, which replies, and the chain keeps the LLM
-busy (measured: 24 tasks / 30.1M tokens in 5.6 minutes while "paused" at 17:31). Pausing at or
-after 18:00 (off hours) holds that mail until the next shift start and the run goes to **0
-tokens/minute** within a couple of minutes. So use `--at 18:00`, or wait for the day boundary.
-Making a pause silent at *any* time needs the framework side (`EventBus` holding while paused) —
-see the note in §11. Resume from the Web UI or `POST /api/resume`. Exit codes: `0`
-paused/finished, `2` UI unreachable, `130` interrupted (never pauses).
 
 ### 12. Tool & MCP management
 

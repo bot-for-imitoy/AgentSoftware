@@ -59,9 +59,13 @@ public final class Role extends UUIDObject implements Data {
 
     private static final Logger logger = LoggerFactory.getLogger(Role.class);
 
-    /** 一次任务内最多几轮工具调用。 */
-    private static final int MAX_TOOL_ROUNDS = 20;
-    /** 连续多少轮工具失败就放弃（错误已回喂，给模型几次自我纠正的机会，避免无限烧 token）。 */
+    /**
+     * 连续多少轮工具失败就放弃（错误已回喂，给模型几次自我纠正的机会，避免无限烧 token）。
+     *
+     * <p>工具调用轮数本身**没有上限**（2026-09-24 起）：模型什么时候给出不带 tool_calls 的答复、
+     * 或者调用 {@code take_rest}，任务就什么时候结束。这里只按"连续失败"兜底 —— 那是模型明显
+     * 卡住的状态，不是"轮数多"。
+     */
     private static final int MAX_FAILING_ROUNDS = 3;
     /** 最近任务历史保留条数（供 my_tasks 查看）。 */
     private static final int TASK_HISTORY_LIMIT = 100;
@@ -89,6 +93,15 @@ public final class Role extends UUIDObject implements Data {
     private TodoStore todoStore;
     private TaskBoard taskBoard;
     private boolean setupDone = false;
+    /**
+     * system prompt 里写的是"哪一天"（{@link com.agent.software.event.TimeBus#getDay()}）。
+     *
+     * <p>提示词只在 {@link #setup()} 组装一次，而 {@code clockLine()} 里带着"今天是几号/第几天"，
+     * 于是从入队第二天起模型看到的就是**过期的日期**（实测第 7 天还在说"今天是 9/25 第 2 天"，
+     * 模型自己发现矛盾后反复调 get_time 校时）。现在按"一天一换"刷新：每条任务开始时如果
+     * 模拟日变了就重新组装一次，同一天内不再重建（{@link #refreshSystemPromptIfNewDay()}）。
+     */
+    private volatile int promptDay = -1;
     private volatile boolean running = false;
     private Thread worker;
 
@@ -324,6 +337,7 @@ public final class Role extends UUIDObject implements Data {
         }
         this.llm.setContext(this.context);
         this.llm.setSystemPrompt(buildSystemPrompt());
+        this.promptDay = system.getTimeBus() == null ? -1 : system.getTimeBus().getDay();
         this.computer = system.getComputerManager().create(computerKind(), this);
         try {
             this.computer.powerOn();   // 未指定电脑时默认 podman：创建即上电（容器随之创建/启动）
@@ -912,8 +926,10 @@ public final class Role extends UUIDObject implements Data {
         int failingRounds = 0;
         try {
             logger.info("Role[{}] task input ({}):\n{}", roleId, task.uuid, task.content);
+            refreshSystemPromptIfNewDay();   // 跨天了就先把"今天几号"换掉再开口
             getLlm().appendUserMessage(task.content);
-            for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            // 轮数无上限：直到模型给出不带 tool_calls 的答复、或调 take_rest、或连续失败 3 轮为止
+            for (int round = 0; ; round++) {
                 Response r = getLlm().request();
                 tokens += r.getTotalTokens();
                 if (r.reasoning != null && !r.reasoning.isBlank()) {
@@ -952,8 +968,8 @@ public final class Role extends UUIDObject implements Data {
                     }
                     if ("take_rest".equals(toolName)) {
                         // take_rest 的语义是"这件事到此为止，我去休息"。必须结束当前任务：
-                        // 否则模型会被反复追问同一件事，继续 take_rest / read_mail 空转
-                        // 到 MAX_TOOL_ROUNDS（实测 20 轮、18 万 token 仍无产出）。
+                        // 否则模型会被反复追问同一件事，继续 take_rest / read_mail 空转到烧完 token
+                        // （轮数现在没有上限，这个 break 就是主要的收尾闸门之一）。
                         answer = res.text;
                         restRequested = true;
                     }
@@ -1228,13 +1244,15 @@ public final class Role extends UUIDObject implements Data {
                 + "long-term memory, stored as files that survive across days. Your conversation context "
                 + "is cleared every night, so anything you must still remember tomorrow (decisions, file "
                 + "paths, who owes what, progress made) has to be written into a note.\n"
-                + "  - Tasks (create_task / list_tasks / update_task / delete_task / my_tasks) let you "
+                + "  - Tasks (create_task / list_tasks / update_task / delete_task / complete_task / "
+                + "my_tasks) let you "
                 + "schedule work for a later simulated time (in_minutes, or day + tick where tick 0 = "
                 + "08:00 and 36000 = 18:00). When something must happen later — a follow-up, a deadline "
                 + "reminder, handing work to the next shift — schedule a task instead of resting and "
                 + "waiting in a loop: the task wakes the assignee when it is due. list_tasks shows what "
                 + "is scheduled but not due yet; my_tasks shows what is already in your queue plus how "
-                + "your recent tasks ended.");
+                + "your recent tasks ended. complete_task marks a board task as done — use it for a task "
+                + "you already handled but that still shows as pending, so the board reflects reality.");
         if (context != null && context.memory() != null && context.memory().enabled()) {
             parts.add("Memory search: search_memory(query, limit?) finds the most semantically similar "
                     + "messages from everything you have read, said or done before — including older "
@@ -1275,7 +1293,29 @@ public final class Role extends UUIDObject implements Data {
                 + "the CTO or HR leaves the work unassigned: no other role has draft_in.";
     }
 
-    /** 当前日期 / 班次 / 时钟语义：让角色知道今天是第几天、几点、工期多长。 */
+    /**
+     * "一天一换"：模拟日变了就重新组装 system prompt（里面带着"今天是几号、第几天"）。
+     *
+     * <p>只在**任务开始时**（worker 线程）检查，不做每轮请求的刷新 —— 一天之内提示词保持不变，
+     * 免得模型在同一件活的中间看到 system 消息变来变去。角色是空闲还是忙都无所谓：任何一次
+     * 干活都会走到这里，所以跨天的第一条任务一定能看到正确的日期。
+     */
+    private void refreshSystemPromptIfNewDay() {
+        if (llm == null || system == null || system.getTimeBus() == null) {
+            return;
+        }
+        int day = system.getTimeBus().getDay();
+        if (day == promptDay) {
+            return;
+        }
+        promptDay = day;
+        llm.setSystemPrompt(buildSystemPrompt());
+        logger.info("Role[{}] system prompt refreshed for day {}", roleId, day);
+    }
+
+    /**
+     * 当前日期 / 班次 / 时钟语义：让角色知道今天是第几天、几点、工期多长。
+     */
     private String clockLine() {
         if (system == null || system.getTimeBus() == null) {
             return "The simulated clock is not available yet.";
